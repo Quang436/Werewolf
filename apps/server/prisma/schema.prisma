@@ -1,0 +1,112 @@
+// Prisma Schema cho Dự án Game Ma Sói (Werewolf)
+// Cơ sở dữ liệu: PostgreSQL
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum RoleType {
+  WEREWOLF
+  VILLAGER
+  SEER
+  BODYGUARD
+  WITCH
+  HUNTER
+  CUPID
+}
+
+enum TeamType {
+  WEREWOLF
+  VILLAGE
+  LOVERS
+}
+
+enum DeathCauseType {
+  WOLF
+  POISON
+  EXECUTION
+  HUNTER
+  HEARTBREAK
+  LEFT
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String?  @unique
+  username     String   @unique
+  passwordHash String?
+  nickname     String
+  avatarUrl    String?
+  elo          Int      @default(1000)
+  
+  // Thống kê thành tích (Game Stats)
+  gamesPlayed  Int      @default(0)
+  totalWins    Int      @default(0)
+  totalLosses  Int      @default(0)
+  wolfWins     Int      @default(0)
+  villageWins  Int      @default(0)
+  loversWins   Int      @default(0)
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  matchStats   PlayerMatchStat[]
+  hostedRooms  MatchHistory[]
+
+  @@map("users")
+}
+
+model MatchHistory {
+  id          String   @id @default(uuid())
+  roomId      String
+  roomCode    String
+  hostId      String?
+  host        User?    @relation(fields: [hostId], references: [id], onDelete: SetNull)
+  
+  winnerTeam  TeamType
+  roundsCount Int      @default(1)
+  playerCount Int
+  
+  // JSON Snapshot chi tiết toàn bộ ván đấu (Log bảo mật sau khi reveal)
+  gameConfig  Json     // Cấu hình luật phòng đã chơi
+  historyLog  Json     // Toàn bộ diễn biến đêm & ngày
+  playerReveals Json   // Danh sách danh tính thật và kết quả của tất cả người chơi
+
+  startedAt   DateTime
+  endedAt     DateTime @default(now())
+
+  playerStats PlayerMatchStat[]
+
+  @@map("match_histories")
+}
+
+model PlayerMatchStat {
+  id          String         @id @default(uuid())
+  matchId     String
+  match       MatchHistory   @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  
+  userId      String?
+  user        User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
+  
+  nickname    String
+  role        RoleType
+  team        TeamType
+  isAlive     Boolean
+  deathCause  DeathCauseType?
+  deathRound  Int?
+
+  // Chỉ số trong trận
+  eloChange   Int            @default(0)
+  scorePoints Int            @default(0)
+
+  createdAt   DateTime       @default(now())
+
+  @@index([matchId])
+  @@index([userId])
+  @@map("player_match_stats")
+}

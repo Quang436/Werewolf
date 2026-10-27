@@ -25,25 +25,58 @@ export interface WerewolfGameAppProps {
   onSendChat: (channel: ChatChannel, text: string) => void;
 }
 
+import { ALL_ROLES_FROM_PDF } from '@werewolf/shared';
+
 const ROLE_EMOJIS: Record<Role, string> = {
-  WEREWOLF: '🐺',
+  // 1. Phe Dân Làng (21)
   VILLAGER: '🧑‍🌾',
   SEER: '🔮',
+  APPRENTICE_SEER: '🔭',
+  AURA_SEER: '✨',
   BODYGUARD: '🛡️',
-  WITCH: '🧙‍♀️',
-  HUNTER: '🏹',
   CUPID: '💘',
+  DISEASED: '🤢',
+  HUNTER: '🏹',
+  IDIOT: '🤪',
+  LYCAN: '🐺🐾',
+  MASON: '👬',
+  MAYOR: '🎖️',
+  OLD_HAG: '👵',
+  PACIFIST: '🕊️',
+  PI: '🕵️',
+  PRIEST: '✝️',
+  PRINCE: '👑',
+  SPELLCASTER: '🤐',
+  TOUGH_GUY: '💪',
+  TROUBLE_MAKER: '🧨',
+  WITCH: '🧙‍♀️',
+  // 2. Phe Ma Sói (5)
+  WEREWOLF: '🐺',
+  MINION: '😈',
+  SORCERESS: '🔮🐺',
+  LONE_WOLF: '🌑🐺',
+  WOLF_CUB: '🐾',
+  // 3. Đổi phe & Trung lập (3)
+  CURSED: '💀',
+  DOPPELGANGER: '🎭',
+  DRUNK: '🍺',
+  // 4. Phe Biệt Lập / Thứ Ba (4)
+  CULT_LEADER: '🕯️',
+  HOODLUM: '🗡️',
+  TANNER: '🪢',
+  VAMPIRE: '🧛',
+  // 5. Bản Mở Rộng Wolfpack (6)
+  BIG_BAD_WOLF: '👹🐺',
+  DIRE_WOLF: '❄️🐺',
+  FRUIT_WOLF: '🍏🐺',
+  FANG_FACE: '🦷🐺',
+  WOLVERINE: '⚔️🐺',
+  VIRGINIA_WOOLF: '💃',
 };
 
-const ROLE_NAMES: Record<Role, string> = {
-  WEREWOLF: 'Ma Sói',
-  VILLAGER: 'Dân Làng',
-  SEER: 'Tiên Tri',
-  BODYGUARD: 'Bảo Vệ',
-  WITCH: 'Phù Thủy',
-  HUNTER: 'Thợ Săn',
-  CUPID: 'Thần Tình Yêu',
-};
+const ROLE_NAMES: Record<Role, string> = Object.fromEntries(
+  Object.entries(ALL_ROLES_FROM_PDF).map(([id, info]) => [id, info.nameVi])
+) as Record<Role, string>;
 
 export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
   store,
@@ -317,18 +350,20 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
               border: me.team === 'WEREWOLF' ? '1px solid var(--wolf-red)' : '1px solid var(--village-blue)',
             }}
           >
-            <div style={{ fontSize: 36, textAlign: 'center' }}>{ROLE_EMOJIS[me.role]}</div>
+            <div style={{ fontSize: 40, textAlign: 'center' }}>{ROLE_EMOJIS[me.role]}</div>
             <h3 style={{ textAlign: 'center', marginTop: 6, color: me.team === 'WEREWOLF' ? 'var(--wolf-red)' : 'var(--village-blue)' }}>
-              {ROLE_NAMES[me.role]}
+              {ROLE_NAMES[me.role]} ({ALL_ROLES_FROM_PDF[me.role]?.nameEn})
             </h3>
-            <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 8, textAlign: 'center', lineHeight: 1.5 }}>
-              {me.role === 'WEREWOLF' && 'Ban đêm thức dậy cùng bầy sói để cắn người. Ban ngày ẩn mình giữa dân làng.'}
-              {me.role === 'SEER' && 'Mỗi đêm soi danh tính một người xem có phải là Ma Sói hay không.'}
-              {me.role === 'BODYGUARD' && 'Mỗi đêm chọn một người để bảo vệ khỏi nanh vuốt của Ma Sói.'}
-              {me.role === 'WITCH' && 'Sở hữu 1 bình thuốc cứu và 1 bình thuốc độc.'}
-              {me.role === 'HUNTER' && 'Nếu bị giết, bạn có quyền bắn chết một người khác cùng chết theo.'}
-              {me.role === 'CUPID' && 'Đêm đầu tiên ghép đôi 2 người yêu nhau.'}
-              {me.role === 'VILLAGER' && 'Dùng suy luận và tài quan sát để tìm ra Ma Sói vào ban ngày.'}
+            <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 6 }}>
+              <span className="badge" style={{ fontSize: 11, background: 'rgba(255,255,255,0.08)', padding: '2px 8px', borderRadius: 4 }}>
+                Phe: {me.team}
+              </span>
+              <span className="badge" style={{ fontSize: 11, background: 'rgba(255,255,255,0.08)', padding: '2px 8px', borderRadius: 4 }}>
+                Nhóm: {ALL_ROLES_FROM_PDF[me.role]?.category}
+              </span>
+            </div>
+            <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 10, textAlign: 'center', lineHeight: 1.5 }}>
+              {ALL_ROLES_FROM_PDF[me.role]?.description || 'Dùng suy luận để giành chiến thắng.'}
             </p>
           </div>
         )}

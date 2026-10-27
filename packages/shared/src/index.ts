@@ -6,21 +6,112 @@ import { z } from 'zod';
 
 /* ============================== ENUMS ============================== */
 
-export const Role = z.enum(['WEREWOLF', 'VILLAGER', 'SEER', 'BODYGUARD', 'WITCH', 'HUNTER', 'CUPID']);
+export const Role = z.enum([
+  // 1. Phe Dân Làng (21 vai trò)
+  'VILLAGER',
+  'SEER',
+  'APPRENTICE_SEER',
+  'AURA_SEER',
+  'BODYGUARD',
+  'CUPID',
+  'DISEASED',
+  'HUNTER',
+  'IDIOT',
+  'LYCAN',
+  'MASON',
+  'MAYOR',
+  'OLD_HAG',
+  'PACIFIST',
+  'PI',
+  'PRIEST',
+  'PRINCE',
+  'SPELLCASTER',
+  'TOUGH_GUY',
+  'TROUBLE_MAKER',
+  'WITCH',
+  // 2. Phe Ma Sói (5 vai trò)
+  'WEREWOLF',
+  'MINION',
+  'SORCERESS',
+  'LONE_WOLF',
+  'WOLF_CUB',
+  // 3. Đổi phe & Trung lập (3 vai trò)
+  'CURSED',
+  'DOPPELGANGER',
+  'DRUNK',
+  // 4. Phe Biệt Lập / Thứ Ba (4 vai trò)
+  'CULT_LEADER',
+  'HOODLUM',
+  'TANNER',
+  'VAMPIRE',
+  // 5. Bản Mở Rộng Wolfpack (6 vai trò)
+  'BIG_BAD_WOLF',
+  'DIRE_WOLF',
+  'FRUIT_WOLF',
+  'FANG_FACE',
+  'WOLVERINE',
+  'VIRGINIA_WOOLF',
+]);
 export type Role = z.infer<typeof Role>;
 
-export const Team = z.enum(['WEREWOLF', 'VILLAGE', 'LOVERS']);
+export const Team = z.enum([
+  'WEREWOLF',
+  'VILLAGE',
+  'LOVERS',
+  'VAMPIRE',
+  'TANNER',
+  'CULT_LEADER',
+  'HOODLUM',
+  'LONE_WOLF',
+]);
 export type Team = z.infer<typeof Team>;
 
-/** Phe gốc của vai (LOVERS chỉ xuất hiện khi Cupid ghép cặp khác phe). */
+/** Phe gốc của vai trò (LOVERS chỉ xuất hiện khi Cupid ghép đôi khác phe). */
 export const ROLE_TEAM: Record<Role, Exclude<Team, 'LOVERS'>> = {
-  WEREWOLF: 'WEREWOLF',
+  // 1. Dân làng
   VILLAGER: 'VILLAGE',
   SEER: 'VILLAGE',
+  APPRENTICE_SEER: 'VILLAGE',
+  AURA_SEER: 'VILLAGE',
   BODYGUARD: 'VILLAGE',
-  WITCH: 'VILLAGE',
-  HUNTER: 'VILLAGE',
   CUPID: 'VILLAGE',
+  DISEASED: 'VILLAGE',
+  HUNTER: 'VILLAGE',
+  IDIOT: 'VILLAGE',
+  LYCAN: 'VILLAGE',
+  MASON: 'VILLAGE',
+  MAYOR: 'VILLAGE',
+  OLD_HAG: 'VILLAGE',
+  PACIFIST: 'VILLAGE',
+  PI: 'VILLAGE',
+  PRIEST: 'VILLAGE',
+  PRINCE: 'VILLAGE',
+  SPELLCASTER: 'VILLAGE',
+  TOUGH_GUY: 'VILLAGE',
+  TROUBLE_MAKER: 'VILLAGE',
+  WITCH: 'VILLAGE',
+  // 2. Ma Sói
+  WEREWOLF: 'WEREWOLF',
+  MINION: 'WEREWOLF',
+  SORCERESS: 'WEREWOLF',
+  LONE_WOLF: 'WEREWOLF',
+  WOLF_CUB: 'WEREWOLF',
+  // 3. Đổi phe
+  CURSED: 'VILLAGE',
+  DOPPELGANGER: 'VILLAGE',
+  DRUNK: 'VILLAGE',
+  // 4. Phe thứ 3 / Biệt lập
+  CULT_LEADER: 'CULT_LEADER',
+  HOODLUM: 'HOODLUM',
+  TANNER: 'TANNER',
+  VAMPIRE: 'VAMPIRE',
+  // 5. Wolfpack
+  BIG_BAD_WOLF: 'WEREWOLF',
+  DIRE_WOLF: 'WEREWOLF',
+  FRUIT_WOLF: 'WEREWOLF',
+  FANG_FACE: 'WEREWOLF',
+  WOLVERINE: 'WEREWOLF',
+  VIRGINIA_WOOLF: 'VILLAGE',
 };
 
 /** Kết quả khi Tiên tri soi — tách khỏi phe để hỗ trợ Lycan/Minion/Cursed ở V1.1. */
@@ -348,5 +439,6 @@ export * from './engine/win-checker';
 export * from './engine/timer-sync';
 export * from './engine/disconnect-handler';
 export * from './engine/room-projector';
+export * from './engine/role-registry';
 
 

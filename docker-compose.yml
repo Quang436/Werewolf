@@ -1,0 +1,73 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: werewolf-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-werewolf}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-werewolf_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-werewolf_db}
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-werewolf} -d ${POSTGRES_DB:-werewolf_db}']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: werewolf-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-werewolf_redis_pass}
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', '-a', '${REDIS_PASSWORD:-werewolf_redis_pass}', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  server:
+    build:
+      context: .
+      dockerfile: apps/server/Dockerfile
+    container_name: werewolf-server
+    restart: unless-stopped
+    environment:
+      PORT: 3001
+      DATABASE_URL: postgresql://${POSTGRES_USER:-werewolf}:${POSTGRES_PASSWORD:-werewolf_secret}@postgres:5432/${POSTGRES_DB:-werewolf_db}?schema=public
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-werewolf_redis_pass}
+      JWT_SECRET: ${JWT_SECRET:-werewolf_super_jwt_secret_key_change_in_production}
+      CORS_ORIGIN: http://localhost:3000
+    ports:
+      - '3001:3001'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    container_name: werewolf-web
+    restart: unless-stopped
+    environment:
+      PORT: 3000
+      NEXT_PUBLIC_SOCKET_URL: http://localhost:3001
+    ports:
+      - '3000:3000'
+    depends_on:
+      - server
+
+volumes:
+  postgres_data:
+  redis_data:

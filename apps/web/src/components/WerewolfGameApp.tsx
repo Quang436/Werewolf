@@ -170,8 +170,48 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
           </div>
         </div>
 
-        {/* Right Tools */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        {/* Right Tools & Nav */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <a
+            href="/"
+            style={{
+              padding: '6px 12px',
+              borderRadius: 'var(--radius-sm)',
+              backgroundColor: 'rgba(255, 255, 255, 0.05)',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              color: 'var(--on-surface-variant)',
+              textDecoration: 'none',
+              fontFamily: 'var(--font-label)',
+              fontSize: 11,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+            }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: 14 }}>home</span>
+            Sảnh Chờ
+          </a>
+          <a
+            href="/cards"
+            target="_blank"
+            rel="noreferrer"
+            style={{
+              padding: '6px 12px',
+              borderRadius: 'var(--radius-sm)',
+              backgroundColor: 'rgba(255, 255, 255, 0.05)',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              color: 'var(--on-surface-variant)',
+              textDecoration: 'none',
+              fontFamily: 'var(--font-label)',
+              fontSize: 11,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+            }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: 14 }}>style</span>
+            Bách Khoa
+          </a>
           <button
             onClick={() => setMicActive(!micActive)}
             style={{

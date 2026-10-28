@@ -115,8 +115,10 @@ export default function HomePage() {
         </div>
 
         {/* Center Nav */}
+        {/* Center Nav - 4 Giao Diện Từ Thư Mục Design */}
         <div style={{ display: 'flex', gap: 8 }}>
           <button
+            onClick={() => router.push('/')}
             style={{
               padding: '8px 16px',
               borderRadius: 'var(--radius-sm)',
@@ -132,7 +134,7 @@ export default function HomePage() {
             SẢNH CHỜ
           </button>
           <button
-            onClick={() => setShowRoleModal(true)}
+            onClick={() => router.push('/cards')}
             style={{
               padding: '8px 16px',
               borderRadius: 'var(--radius-sm)',
@@ -149,7 +151,27 @@ export default function HomePage() {
             }}
           >
             <span className="material-symbols-outlined" style={{ fontSize: 16 }}>style</span>
-            BÁCH KHOA 39 VAI TRÒ
+            BÁCH KHOA THẺ BÀI
+          </button>
+          <button
+            onClick={() => router.push('/auth')}
+            style={{
+              padding: '8px 16px',
+              borderRadius: 'var(--radius-sm)',
+              backgroundColor: 'transparent',
+              color: 'var(--on-surface-variant)',
+              border: '1px solid transparent',
+              fontFamily: 'var(--font-label)',
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+            }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>lock</span>
+            ĐĂNG NHẬP / ĐĂNG KÝ
           </button>
         </div>
 

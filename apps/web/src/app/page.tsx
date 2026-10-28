@@ -2,642 +2,685 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ALL_ROLES_FROM_PDF, Role } from '@werewolf/shared';
 
 export default function HomePage() {
   const router = useRouter();
-  const [code, setCode] = useState('');
+  const [selectedMode, setSelectedMode] = useState<'ranked' | 'casual' | 'custom'>('ranked');
+  const [chatChannel, setChatChannel] = useState<'world' | 'friends'>('world');
+  const [chatInput, setChatInput] = useState('');
+  const [chatMessages, setChatMessages] = useState([
+    { id: 1, user: 'ThầyBói_HàĐông', time: '19:42', text: 'Cần tìm 2 pro vào bàn xếp hạng đánh nghiêm túc, mic rõ không vang nhé!', color: 'text-purple-400' },
+    { id: 2, user: 'CHIÊU MỘ QUÂN ĐOÀN', time: '19:43', text: "Bang 'Huyết Sát Tộc' tuyển thành viên elo 2000+. Thưởng quà tuần!", isSystem: true },
+    { id: 3, user: 'SóiGiàCôĐơn', time: '19:44', text: 'Ván vừa rồi Tiên Tri đỉnh thật, soi 2 đêm ra 2 sói luôn haha!', color: 'text-sky-400' },
+  ]);
+  const [roomFilter, setRoomFilter] = useState<'all' | 'ranked' | 'casual' | 'locked'>('all');
+  const [quickCodeInput, setQuickCodeInput] = useState('');
   const [nickname, setNickname] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [selectedMode, setSelectedMode] = useState<'RANKED' | 'CASUAL'>('RANKED');
-  const [showRoleModal, setShowRoleModal] = useState(false);
-  const [roleFilter, setRoleFilter] = useState<'ALL' | 'VILLAGE' | 'WEREWOLF' | 'OTHER'>('ALL');
+  const [showJoinModal, setShowJoinModal] = useState(false);
 
-  const handleJoin = (e: React.FormEvent) => {
+  const roomsList = [
+    { code: 'ROOM-1', name: 'Làng Ma Sói #1842', mode: 'Xếp Hạng', players: '6/8', host: 'Dạ Thần', ping: '18ms', type: 'ranked' },
+    { code: 'ROOM-2', name: 'Rừng Sương Mù #1843', mode: 'Giải Trí', players: '9/12', host: 'Sói Đỏ', ping: '24ms', type: 'casual' },
+    { code: 'ROOM-3', name: 'Bàn Cược Liar\'s Bar #1844', mode: 'Xếp Hạng Cực Căng', players: '4/8', host: 'LordVader', ping: '22ms', type: 'ranked' },
+    { code: 'ROOM-4', name: 'Hội Đồng Tối Mật #1845', mode: 'Có Mật Khẩu', players: '7/10', host: 'Xemesis', ping: '31ms', type: 'locked' },
+  ];
+
+  const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
-
-    const cleanCode = code.trim().toUpperCase();
-    if (cleanCode.length !== 6) {
-      setError('Mã phòng phải gồm đúng 6 ký tự!');
-      return;
-    }
-    if (!nickname.trim()) {
-      setError('Vui lòng nhập biệt danh của bạn!');
-      return;
-    }
-
-    sessionStorage.setItem('werewolf_nickname', nickname.trim());
-    router.push(`/game/${cleanCode}`);
+    if (!chatInput.trim()) return;
+    const nick = sessionStorage.getItem('werewolf_nickname') || 'Thợ Săn Bạn';
+    setChatMessages((prev) => [
+      ...prev,
+      {
+        id: Date.now(),
+        user: nick,
+        time: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
+        text: chatInput.trim(),
+        color: 'text-emerald-400',
+      },
+    ]);
+    setChatInput('');
   };
 
-  const handleCreateRoom = () => {
-    setError(null);
-    if (!nickname.trim()) {
-      setError('Vui lòng nhập biệt danh của bạn trước khi tạo phòng!');
-      return;
-    }
-
-    sessionStorage.setItem('werewolf_nickname', nickname.trim());
-    router.push(`/game/new`);
+  const handleJoinRoom = (roomCode: string) => {
+    const finalNick = nickname.trim() || sessionStorage.getItem('werewolf_nickname') || 'Thợ Săn Mới';
+    sessionStorage.setItem('werewolf_nickname', finalNick);
+    router.push(`/game/${roomCode}`);
   };
 
-  const allRolesList = Object.values(ALL_ROLES_FROM_PDF);
-  const filteredRoles = allRolesList.filter((r) => {
-    if (roleFilter === 'ALL') return true;
-    if (roleFilter === 'VILLAGE') return r.category === 'VILLAGE';
-    if (roleFilter === 'WEREWOLF') return r.category === 'WEREWOLF' || r.category === 'WOLFPACK';
-    return r.category === 'FACTION_CHANGER' || r.category === 'INDEPENDENT';
+  const filteredRooms = roomsList.filter((r) => {
+    if (roomFilter === 'all') return true;
+    return r.type === roomFilter;
   });
 
   return (
-    <div style={{ minHeight: '100vh', backgroundColor: 'var(--surface)', color: 'var(--on-surface)' }}>
-      {/* 1. HEADER COCKPIT (Gothic Nightfall HUD) */}
-      <header
-        style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          height: 72,
-          zIndex: 50,
-          backgroundColor: 'rgba(6, 9, 16, 0.85)',
-          backdropFilter: 'blur(16px)',
-          borderBottom: '1px solid var(--outline-variant)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '0 28px',
-        }}
-      >
-        {/* Brand Logo */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <div
-            style={{
-              width: 42,
-              height: 42,
-              borderRadius: 'var(--radius-md)',
-              backgroundColor: 'rgba(147, 0, 10, 0.4)',
-              border: '1px solid rgba(239, 68, 68, 0.5)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'var(--tertiary-container)',
-              boxShadow: '0 0 16px rgba(147, 0, 10, 0.6)',
-            }}
-          >
-            <span className="material-symbols-outlined" style={{ fontSize: 26 }}>nightlight</span>
-          </div>
-          <div>
-            <div style={{ fontFamily: 'var(--font-headline)', fontSize: 18, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-              MA SÓI ONLINE
+    <div className="bg-[#0f131d] text-[#dfe2f1] font-geist antialiased selection:bg-red-900 selection:text-white min-h-screen">
+      {/* 1. FIXED TOP COCKPIT HEADER */}
+      <header className="fixed top-0 w-full z-50 bg-[#060910]/85 backdrop-blur-xl border-b border-[#334155]/40 shadow-[0_4px_24px_rgba(0,0,0,0.6)]">
+        <div className="h-16 w-full px-6 flex items-center justify-between gap-4">
+          {/* Logo Brand */}
+          <div className="flex items-center gap-6 shrink-0">
+            <div onClick={() => router.push('/')} className="flex items-center gap-3 cursor-pointer">
+              <div className="w-9 h-9 rounded bg-red-950/60 border border-red-500/40 flex items-center justify-center text-red-400 shadow-[0_0_16px_rgba(147,0,10,0.5)]">
+                <span className="material-symbols-outlined text-[24px]">nightlight</span>
+              </div>
+              <div className="flex flex-col">
+                <span className="font-syne font-bold text-base uppercase tracking-wider text-white">MA SÓI</span>
+                <span className="font-space text-[10px] uppercase tracking-widest text-red-400 -mt-1 font-semibold">
+                  Huyết Nguyệt
+                </span>
+              </div>
             </div>
-            <div style={{ fontFamily: 'var(--font-label)', fontSize: 10, letterSpacing: '0.15em', color: 'var(--tertiary-container)', textTransform: 'uppercase' }}>
-              Huyết Nguyệt Trỗi Dậy
-            </div>
-          </div>
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              padding: '4px 10px',
-              borderRadius: 'var(--radius-sm)',
-              backgroundColor: 'rgba(34, 42, 61, 0.6)',
-              marginLeft: 16,
-            }}
-          >
-            <span style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: 'var(--primary)', boxShadow: '0 0 8px var(--primary)' }}></span>
-            <span style={{ fontFamily: 'var(--font-label)', fontSize: 11, color: 'var(--on-surface-variant)', textTransform: 'uppercase' }}>
-              Máy Chủ: Vực Thẳm I
-            </span>
-          </div>
-        </div>
 
-        {/* Center Nav */}
-        {/* Center Nav - 4 Giao Diện Từ Thư Mục Design */}
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button
-            onClick={() => router.push('/')}
-            style={{
-              padding: '8px 16px',
-              borderRadius: 'var(--radius-sm)',
-              backgroundColor: 'var(--surface-container-high)',
-              color: 'var(--primary)',
-              border: '1px solid rgba(56, 189, 248, 0.3)',
-              fontFamily: 'var(--font-label)',
-              fontSize: 12,
-              fontWeight: 700,
-              cursor: 'pointer',
-            }}
-          >
-            SẢNH CHỜ
-          </button>
-          <button
-            onClick={() => router.push('/cards')}
-            style={{
-              padding: '8px 16px',
-              borderRadius: 'var(--radius-sm)',
-              backgroundColor: 'transparent',
-              color: 'var(--on-surface-variant)',
-              border: '1px solid transparent',
-              fontFamily: 'var(--font-label)',
-              fontSize: 12,
-              fontWeight: 600,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-            }}
-          >
-            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>style</span>
-            BÁCH KHOA THẺ BÀI
-          </button>
-          <button
-            onClick={() => router.push('/auth')}
-            style={{
-              padding: '8px 16px',
-              borderRadius: 'var(--radius-sm)',
-              backgroundColor: 'transparent',
-              color: 'var(--on-surface-variant)',
-              border: '1px solid transparent',
-              fontFamily: 'var(--font-label)',
-              fontSize: 12,
-              fontWeight: 600,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-            }}
-          >
-            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>lock</span>
-            ĐĂNG NHẬP / ĐĂNG KÝ
-          </button>
-        </div>
-
-        {/* Right Status */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 12px', borderRadius: 'var(--radius-sm)', backgroundColor: 'var(--surface-container-low)' }}>
-            <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'var(--amber-glow)' }}>stars</span>
-            <span style={{ fontFamily: 'var(--font-label)', fontSize: 12, fontWeight: 700 }}>3,240</span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{ width: 34, height: 34, borderRadius: '50%', backgroundColor: 'var(--primary-container)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 20, color: '#000' }}>person</span>
+            <div className="hidden xl:flex items-center gap-2 px-3 py-1 rounded bg-[#262a35]/60 border border-[#334155]/30">
+              <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+              <span className="font-space text-[11px] uppercase text-slate-300">Máy Chủ: Vực Thẳm I</span>
             </div>
-            <div style={{ textAlign: 'left' }}>
-              <div style={{ fontFamily: 'var(--font-label)', fontSize: 12, fontWeight: 700 }}>Thợ Săn</div>
-              <div style={{ fontFamily: 'var(--font-label)', fontSize: 10, color: 'var(--on-surface-variant)' }}>Cấp 38</div>
+          </div>
+
+          {/* Center Nav Links */}
+          <nav className="hidden lg:flex items-center gap-1 px-1.5 py-1 rounded bg-[#171b26]/90 border border-[#334155]/30">
+            <button
+              onClick={() => router.push('/')}
+              className="px-4 py-1.5 uppercase tracking-wider transition-all bg-[#262a35] text-primary font-space font-bold text-xs rounded shadow-[inset_0_1px_0_rgba(255,255,255,0.15)]"
+            >
+              Sảnh Chờ
+            </button>
+            <button
+              onClick={() => router.push('/cards')}
+              className="px-4 py-1.5 rounded font-space text-xs uppercase tracking-wider text-slate-300 hover:text-white hover:bg-[#1c1f2a] transition-all"
+            >
+              Bách Khoa Thẻ Bài (40 Lá)
+            </button>
+            <button
+              onClick={() => router.push('/auth')}
+              className="px-4 py-1.5 rounded font-space text-xs uppercase tracking-wider text-slate-300 hover:text-white hover:bg-[#1c1f2a] transition-all"
+            >
+              Quán Rượu (Đăng Nhập)
+            </button>
+            <button
+              onClick={() => router.push('/game/ROOM-1')}
+              className="px-4 py-1.5 rounded font-space text-xs uppercase tracking-wider text-slate-300 hover:text-white hover:bg-[#1c1f2a] transition-all"
+            >
+              Bàn Chơi 3D POV
+            </button>
+          </nav>
+
+          {/* Right Metrics & Profile */}
+          <div className="flex items-center gap-4 shrink-0">
+            {/* Currencies */}
+            <div className="hidden 2xl:flex items-center gap-3 px-3 py-1 rounded bg-[#171b26] border border-[#334155]/30">
+              <div className="flex items-center gap-1.5" title="Bạc">
+                <span className="material-symbols-outlined text-[18px] text-slate-400">monetization_on</span>
+                <span className="font-space text-xs text-white">142,850</span>
+              </div>
+              <div className="w-px h-3.5 bg-slate-600/40" />
+              <div className="flex items-center gap-1.5" title="Vàng">
+                <span className="material-symbols-outlined text-[18px] text-amber-400">stars</span>
+                <span className="font-space text-xs text-white">3,240</span>
+              </div>
+              <div className="w-px h-3.5 bg-slate-600/40" />
+              <div className="flex items-center gap-1.5" title="Huyết Tinh">
+                <span className="material-symbols-outlined text-[18px] text-red-500 animate-pulse">bloodtype</span>
+                <span className="font-space text-xs text-red-400 font-bold">850</span>
+              </div>
+            </div>
+
+            {/* Profile Avatar */}
+            <div className="flex items-center gap-3 pl-1">
+              <div className="hidden md:flex flex-col text-right">
+                <div className="flex items-center justify-end gap-1.5">
+                  <span className="px-1.5 py-0.2 rounded bg-purple-950 text-purple-300 font-space text-[10px] font-bold">
+                    CẤP 38
+                  </span>
+                  <span className="font-space text-xs text-white tracking-wide font-bold">Huyết Ảnh</span>
+                </div>
+                <span className="font-geist text-[11px] text-slate-400">Thợ Săn Huyền Thoại</span>
+              </div>
+              <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-[#00354a] font-bold shadow">
+                <span className="material-symbols-outlined text-[18px]">person</span>
+              </div>
+              <button
+                onClick={() => router.push('/auth')}
+                className="w-8 h-8 rounded bg-[#262a35] hover:bg-[#353944] flex items-center justify-center text-slate-300 hover:text-white transition-colors"
+                title="Tài khoản / Đăng xuất"
+              >
+                <span className="material-symbols-outlined text-[18px]">settings</span>
+              </button>
             </div>
           </div>
         </div>
       </header>
 
       {/* 2. MAIN COCKPIT VIEWPORT */}
-      <main style={{ paddingTop: 96, paddingBottom: 40, maxWidth: 1400, margin: '0 auto', paddingLeft: 24, paddingRight: 24 }}>
-        {/* SUB-HEADER METRICS BAR */}
-        <div
-          style={{
-            marginBottom: 24,
-            padding: '10px 20px',
-            borderRadius: 'var(--radius-md)',
-            backgroundColor: 'rgba(10, 14, 24, 0.75)',
-            border: '1px solid var(--outline-variant)',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: 'var(--error)', boxShadow: '0 0 10px var(--error)' }}></span>
-              <span style={{ fontFamily: 'var(--font-label)', fontSize: 12, color: 'var(--text-dim)', textTransform: 'uppercase' }}>Trực Tuyến:</span>
-              <span style={{ fontFamily: 'var(--font-label)', fontSize: 13, fontWeight: 700, color: 'var(--tertiary-container)' }}>14,820 Thợ Săn</span>
+      <main className="w-full pt-20 px-6 max-w-[1680px] mx-auto min-h-screen flex flex-col gap-6">
+        {/* SUB-HEADER BAR: SERVER METRICS & LIVE TICKER */}
+        <section className="w-full mt-2 flex flex-wrap items-center justify-between gap-4 bg-[#0a0e18]/80 backdrop-blur-md px-4 py-2.5 rounded-xl border border-[#334155]/30 shadow-lg">
+          <div className="flex items-center gap-6">
+            <div className="flex items-center gap-2">
+              <span className="relative flex h-2.5 w-2.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500" />
+              </span>
+              <span className="font-space text-[11px] uppercase tracking-wider text-slate-400">Trực Tuyến:</span>
+              <span className="font-space text-xs text-red-400 font-bold">14,820 Thợ Săn</span>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text-dim)', fontSize: 13 }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'var(--primary)' }}>timer</span>
-              <span>Ước tính tìm trận:</span>
-              <strong style={{ color: 'var(--primary)' }}>~14s</strong>
+
+            <div className="hidden sm:flex items-center gap-1.5 text-slate-300">
+              <span className="material-symbols-outlined text-[16px] text-primary">timer</span>
+              <span className="font-geist text-xs text-slate-400">Ước tính tìm trận:</span>
+              <span className="font-space text-xs text-primary font-bold">~14s</span>
             </div>
-            <div style={{ padding: '2px 8px', borderRadius: 4, backgroundColor: 'var(--surface-container-high)', fontSize: 11, color: 'var(--on-surface-variant)' }}>
-              🛡️ Mùa 4: Trăng Máu Trỗi Dậy
+
+            <div className="hidden md:flex items-center gap-1 px-2.5 py-0.5 rounded bg-[#262a35] text-slate-300 border border-[#334155]/30">
+              <span className="material-symbols-outlined text-[14px] text-red-400">shield_moon</span>
+              <span className="font-space text-[10px] uppercase font-bold text-red-300">Mùa 4: Trăng Máu Trỗi Dậy</span>
             </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 'var(--radius-sm)', backgroundColor: 'var(--surface-container)' }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'var(--primary)' }}>mic</span>
-              <span style={{ fontFamily: 'var(--font-label)', fontSize: 11 }}>Micro: Khử Ồn AI</span>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 2, marginLeft: 4 }}>
-                <span className="eq-bar-1" style={{ width: 2, background: 'var(--primary)', borderRadius: 2 }}></span>
-                <span className="eq-bar-2" style={{ width: 2, background: 'var(--primary)', borderRadius: 2 }}></span>
-                <span className="eq-bar-3" style={{ width: 2, background: 'var(--primary)', borderRadius: 2 }}></span>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 px-3 py-1 rounded bg-[#1c1f2a] border border-[#334155]/30">
+              <span className="material-symbols-outlined text-[16px] text-primary animate-pulse">mic</span>
+              <span className="font-space text-[11px] text-white">Micro: Khử Ồn AI</span>
+              <div className="flex items-center gap-0.5 ml-1">
+                <span className="w-0.5 h-2.5 bg-primary rounded-full" />
+                <span className="w-0.5 h-3 bg-primary rounded-full" />
+                <span className="w-0.5 h-1.5 bg-primary/40 rounded-full" />
               </div>
             </div>
-          </div>
-        </div>
 
-        {/* 3-COLUMN PRIMARY GRID */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.3fr 1fr', gap: 24 }}>
-          {/* COLUMN 1: TÌM TRẬN & VÀO PHÒNG */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-            {/* Matchmaking Card */}
-            <div
-              className="glass-panel"
-              style={{
-                padding: 24,
-                position: 'relative',
-                overflow: 'hidden',
-                border: '1px solid rgba(239, 68, 68, 0.3)',
-              }}
+            <button
+              onClick={() => router.push('/cards')}
+              className="px-3 py-1 rounded bg-[#262a35] hover:bg-[#353944] text-white font-space text-[11px] uppercase font-bold tracking-wider transition-colors flex items-center gap-1"
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                <span style={{ fontFamily: 'var(--font-label)', fontSize: 11, color: 'var(--tertiary-container)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
-                  🔥 SẢNH TỬ QUYẾT
-                </span>
-                <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, backgroundColor: 'var(--surface-container)', color: 'var(--text-dim)' }}>
-                  BÀN CƯỢC NGẦM
-                </span>
-              </div>
-              <h2 style={{ fontFamily: 'var(--font-headline)', fontSize: 24, fontWeight: 800, textTransform: 'uppercase', marginBottom: 6 }}>
-                BƯỚC VÀO TRẬN ĐẤU
-              </h2>
-              <p style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.5, marginBottom: 20 }}>
-                Quán rượu ngầm đang đỏ đèn. Chọn chế độ hoặc tạo phòng riêng để đối đầu cùng bạn bè.
-              </p>
-
-              {/* Mode Selectors */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
-                <div
-                  onClick={() => setSelectedMode('RANKED')}
-                  style={{
-                    padding: '12px 16px',
-                    borderRadius: 'var(--radius-md)',
-                    backgroundColor: selectedMode === 'RANKED' ? 'var(--surface-container-high)' : 'var(--surface-container-low)',
-                    border: selectedMode === 'RANKED' ? '1px solid var(--amber-glow)' : '1px solid transparent',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                    <div style={{ width: 36, height: 36, borderRadius: 'var(--radius-sm)', backgroundColor: 'rgba(245, 158, 11, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--amber-glow)' }}>
-                      <span className="material-symbols-outlined">swords</span>
-                    </div>
-                    <div>
-                      <div style={{ fontFamily: 'var(--font-headline)', fontSize: 14, fontWeight: 700 }}>Đấu Xếp Hạng Huyết Nguyệt</div>
-                      <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>12 người • Xếp hạng tính điểm ELO</div>
-                    </div>
-                  </div>
-                  {selectedMode === 'RANKED' && <span style={{ color: 'var(--amber-glow)', fontSize: 18 }}>✓</span>}
-                </div>
-
-                <div
-                  onClick={() => setSelectedMode('CASUAL')}
-                  style={{
-                    padding: '12px 16px',
-                    borderRadius: 'var(--radius-md)',
-                    backgroundColor: selectedMode === 'CASUAL' ? 'var(--surface-container-high)' : 'var(--surface-container-low)',
-                    border: selectedMode === 'CASUAL' ? '1px solid var(--primary)' : '1px solid transparent',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                    <div style={{ width: 36, height: 36, borderRadius: 'var(--radius-sm)', backgroundColor: 'rgba(56, 189, 248, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--primary)' }}>
-                      <span className="material-symbols-outlined">casino</span>
-                    </div>
-                    <div>
-                      <div style={{ fontFamily: 'var(--font-headline)', fontSize: 14, fontWeight: 700 }}>Đấu Thường Quán Rượu</div>
-                      <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>6 - 16 người • Giải trí tự do</div>
-                    </div>
-                  </div>
-                  {selectedMode === 'CASUAL' && <span style={{ color: 'var(--primary)', fontSize: 18 }}>✓</span>}
-                </div>
-              </div>
-
-              {/* Form Input */}
-              {error && (
-                <div style={{ padding: '8px 12px', borderRadius: 'var(--radius-sm)', backgroundColor: 'rgba(239, 68, 68, 0.15)', border: '1px solid var(--wolf-red)', color: 'var(--error)', fontSize: 12, marginBottom: 16 }}>
-                  ⚠️ {error}
-                </div>
-              )}
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: 11, fontFamily: 'var(--font-label)', color: 'var(--text-dim)', marginBottom: 6, textTransform: 'uppercase' }}>
-                    Biệt danh của bạn
-                  </label>
-                  <input
-                    type="text"
-                    value={nickname}
-                    onChange={(e) => setNickname(e.target.value)}
-                    placeholder="Ví dụ: VanHelsing, ThầnThám..."
-                    maxLength={20}
-                    style={{
-                      width: '100%',
-                      padding: '10px 14px',
-                      borderRadius: 'var(--radius-sm)',
-                      backgroundColor: 'var(--surface-container-low)',
-                      border: '1px solid var(--outline-variant)',
-                      color: '#fff',
-                      fontSize: 14,
-                      outline: 'none',
-                    }}
-                  />
-                </div>
-
-                {/* Nút Tạo Phòng Nhanh */}
-                <button
-                  type="button"
-                  onClick={handleCreateRoom}
-                  style={{
-                    width: '100%',
-                    padding: '12px 18px',
-                    borderRadius: 'var(--radius-sm)',
-                    backgroundColor: 'var(--blood-red)',
-                    color: '#fff',
-                    border: 'none',
-                    fontFamily: 'var(--font-headline)',
-                    fontSize: 14,
-                    fontWeight: 800,
-                    letterSpacing: '0.05em',
-                    textTransform: 'uppercase',
-                    cursor: 'pointer',
-                    boxShadow: 'var(--shadow-glow-red)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: 8,
-                    marginTop: 6,
-                  }}
-                >
-                  <span className="material-symbols-outlined" style={{ fontSize: 20 }}>add_circle</span>
-                  Tạo Phòng Mới (Làm Host)
-                </button>
-
-                {/* Hoặc Nhập Mã Phòng */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '8px 0' }}>
-                  <div style={{ flex: 1, height: 1, backgroundColor: 'var(--outline-variant)' }}></div>
-                  <span style={{ fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-label)' }}>HOẶC NHẬP MÃ PHÒNG</span>
-                  <div style={{ flex: 1, height: 1, backgroundColor: 'var(--outline-variant)' }}></div>
-                </div>
-
-                <form onSubmit={handleJoin} style={{ display: 'flex', gap: 8 }}>
-                  <input
-                    type="text"
-                    value={code}
-                    onChange={(e) => setCode(e.target.value.toUpperCase())}
-                    placeholder="6 KÝ TỰ..."
-                    maxLength={6}
-                    style={{
-                      flex: 1,
-                      padding: '10px 14px',
-                      borderRadius: 'var(--radius-sm)',
-                      backgroundColor: 'var(--surface-container-low)',
-                      border: '1px solid var(--outline-variant)',
-                      color: '#fff',
-                      fontSize: 14,
-                      letterSpacing: 2,
-                      textAlign: 'center',
-                      fontFamily: 'var(--font-label)',
-                      fontWeight: 700,
-                      outline: 'none',
-                    }}
-                  />
-                  <button
-                    type="submit"
-                    style={{
-                      padding: '10px 20px',
-                      borderRadius: 'var(--radius-sm)',
-                      backgroundColor: 'var(--surface-container-high)',
-                      color: 'var(--primary)',
-                      border: '1px solid rgba(56, 189, 248, 0.3)',
-                      fontFamily: 'var(--font-headline)',
-                      fontSize: 13,
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    VÀO PHÒNG
-                  </button>
-                </form>
-              </div>
-            </div>
+              <span className="material-symbols-outlined text-[16px]">style</span>
+              <span>Xem 40 Lá Bài</span>
+            </button>
           </div>
+        </section>
 
-          {/* COLUMN 2: BÁCH KHOA VAI TRÒ PREVIEW (Stitch Gothic HUD) */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-            <div className="glass-panel" style={{ padding: 24, height: '100%' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                <h3 style={{ fontFamily: 'var(--font-headline)', fontSize: 18, fontWeight: 800, textTransform: 'uppercase' }}>
-                  39 VAI TRÒ CHUẨN PDF
-                </h3>
-                <button
-                  onClick={() => setShowRoleModal(true)}
-                  style={{
-                    fontSize: 12,
-                    color: 'var(--primary)',
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    fontFamily: 'var(--font-label)',
-                    fontWeight: 600,
-                  }}
-                >
-                  Xem Toàn Bộ ➔
-                </button>
-              </div>
-              <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>
-                Hệ thống gồm đủ 39 nhân vật từ bản mở rộng Deluxe & Wolfpack. Chia theo 5 nhóm thế lực.
-              </p>
+        {/* 3. PRIMARY COMMAND GRID (3 COLUMNS: MATCHMAKER | CHARACTER SUITE | COMMS HUB) */}
+        <section className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          {/* LEFT WING: TÌM TRẬN NHANH & CHỌN CHẾ ĐỘ (5 COLS) */}
+          <div className="lg:col-span-5 flex flex-col gap-4">
+            <div className="relative bg-[#171b26]/90 backdrop-blur-xl p-6 rounded-2xl border border-[#334155]/40 shadow-xl flex flex-col justify-between overflow-hidden">
+              <div className="absolute -right-12 -top-12 w-48 h-48 bg-red-950/40 rounded-full blur-3xl pointer-events-none" />
 
-              {/* Category Badges */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 20 }}>
-                <div style={{ padding: 12, borderRadius: 'var(--radius-md)', backgroundColor: 'rgba(56, 189, 248, 0.1)', border: '1px solid rgba(56, 189, 248, 0.3)', textAlign: 'center' }}>
-                  <div style={{ fontSize: 24 }}>🛡️</div>
-                  <div style={{ fontFamily: 'var(--font-headline)', fontSize: 13, fontWeight: 700, marginTop: 4 }}>Dân Làng</div>
-                  <div style={{ fontSize: 11, color: 'var(--primary)', fontFamily: 'var(--font-label)' }}>21 Vai Trò</div>
-                </div>
-                <div style={{ padding: 12, borderRadius: 'var(--radius-md)', backgroundColor: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', textAlign: 'center' }}>
-                  <div style={{ fontSize: 24 }}>🐺</div>
-                  <div style={{ fontFamily: 'var(--font-headline)', fontSize: 13, fontWeight: 700, marginTop: 4 }}>Ma Sói</div>
-                  <div style={{ fontSize: 11, color: 'var(--error)', fontFamily: 'var(--font-label)' }}>5 + 6 Sói Mở Rộng</div>
-                </div>
-                <div style={{ padding: 12, borderRadius: 'var(--radius-md)', backgroundColor: 'rgba(192, 132, 252, 0.1)', border: '1px solid rgba(192, 132, 252, 0.3)', textAlign: 'center' }}>
-                  <div style={{ fontSize: 24 }}>🎭</div>
-                  <div style={{ fontFamily: 'var(--font-headline)', fontSize: 13, fontWeight: 700, marginTop: 4 }}>Biệt Lập / Đổi Phe</div>
-                  <div style={{ fontSize: 11, color: 'var(--secondary)', fontFamily: 'var(--font-label)' }}>7 Vai Trò</div>
-                </div>
-              </div>
-
-              {/* Sample Tarot Cards Preview */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
-                {[
-                  { name: 'Tiên Tri', role: 'SEER', icon: '🔮', desc: 'Mỗi đêm soi danh tính 1 người' },
-                  { name: 'Sói Đại Ca', role: 'BIG_BAD_WOLF', icon: '👹', desc: 'Cắn 2 người ngồi cạnh nhau' },
-                  { name: 'Chán Đời', role: 'TANNER', icon: '🪢', desc: 'Thắng khi bị làng treo cổ' },
-                ].map((item) => (
-                  <div
-                    key={item.role}
-                    style={{
-                      padding: 14,
-                      borderRadius: 'var(--radius-md)',
-                      backgroundColor: 'var(--surface-container-low)',
-                      border: '1px solid var(--outline-variant)',
-                      textAlign: 'center',
-                    }}
-                  >
-                    <div style={{ fontSize: 28, marginBottom: 6 }}>{item.icon}</div>
-                    <div style={{ fontFamily: 'var(--font-headline)', fontSize: 13, fontWeight: 700 }}>{item.name}</div>
-                    <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 4 }}>{item.desc}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* COLUMN 3: SẢNH TÁN GẪU MÁY CHỦ */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-            <div className="glass-panel" style={{ padding: 20, display: 'flex', flexDirection: 'column', height: '100%' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-                <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'var(--amber-glow)' }}>campaign</span>
-                <h3 style={{ fontFamily: 'var(--font-headline)', fontSize: 15, fontWeight: 700, textTransform: 'uppercase' }}>
-                  BẢNG TIN THỜI SỰ
-                </h3>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, flex: 1 }}>
-                <div style={{ padding: 10, borderRadius: 'var(--radius-sm)', backgroundColor: 'var(--surface-container-low)', fontSize: 12 }}>
-                  <div style={{ color: 'var(--amber-glow)', fontWeight: 600, marginBottom: 2 }}>[Hệ Thống]</div>
-                  <div>Cập nhật đầy đủ 39 vai trò từ file PDF luật chuẩn quốc tế!</div>
-                </div>
-                <div style={{ padding: 10, borderRadius: 'var(--radius-sm)', backgroundColor: 'var(--surface-container-low)', fontSize: 12 }}>
-                  <div style={{ color: 'var(--primary)', fontWeight: 600, marginBottom: 2 }}>[Mẹo Chơi]</div>
-                  <div>Người Hóa Sói (Lycan) thuộc phe Dân nhưng Tiên Tri soi sẽ ra Ma Sói. Hãy cẩn trọng lời khai!</div>
-                </div>
-                <div style={{ padding: 10, borderRadius: 'var(--radius-sm)', backgroundColor: 'var(--surface-container-low)', fontSize: 12 }}>
-                  <div style={{ color: 'var(--error)', fontWeight: 600, marginBottom: 2 }}>[Cảnh Báo]</div>
-                  <div>Nếu Sói Con chết, đêm tiếp theo bầy sói được cắn 2 nạn nhân.</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </main>
-
-      {/* 3. MODAL BÁCH KHOA 39 VAI TRÒ TỪ PDF */}
-      {showRoleModal && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 100,
-            backgroundColor: 'rgba(0, 0, 0, 0.85)',
-            backdropFilter: 'blur(16px)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: 24,
-          }}
-        >
-          <div
-            className="glass-panel"
-            style={{
-              width: '100%',
-              maxWidth: 1000,
-              maxHeight: '90vh',
-              display: 'flex',
-              flexDirection: 'column',
-              padding: 28,
-              border: '1px solid var(--outline-variant)',
-            }}
-          >
-            {/* Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
               <div>
-                <h2 style={{ fontFamily: 'var(--font-headline)', fontSize: 24, fontWeight: 800 }}>
-                  📖 BÁCH KHOA TOÀN THƯ 39 VAI TRÒ
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-space text-[10px] uppercase tracking-widest text-red-400 font-bold flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-[16px]">local_fire_department</span>
+                    Sảnh Tử Quyết
+                  </span>
+                  <span className="px-2 py-0.5 rounded bg-[#1c1f2a] text-slate-400 font-space text-[10px] uppercase font-bold">
+                    Bàn Cược Ngầm
+                  </span>
+                </div>
+                <h2 className="font-syne font-extrabold text-2xl text-white tracking-wide uppercase">
+                  TÌM TRẬN TỨC THÌ
                 </h2>
-                <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-                  Trích xuất chi tiết theo Luật Chơi Ma Sói (Ultimate Werewolf Deluxe + Wolfpack)
+                <p className="font-geist text-xs text-slate-300 mt-1 leading-relaxed">
+                  Bước vào bàn cược tử thần của Quán Rượu Vực Thẳm. Đeo mặt nạ, che giấu thân phận và tố giác kẻ nói dối trước khi bình minh ló rạng.
                 </p>
               </div>
+
+              {/* Mode Selector Cards */}
+              <div className="grid grid-cols-1 gap-2.5 my-5">
+                {/* Mode 1: Ranked */}
+                <div
+                  onClick={() => setSelectedMode('ranked')}
+                  className={`relative flex items-center justify-between p-3.5 rounded-xl cursor-pointer transition-all ${
+                    selectedMode === 'ranked'
+                      ? 'bg-[#262a35] border border-red-500/50 shadow-lg shadow-red-950/40'
+                      : 'bg-[#1c1f2a]/60 hover:bg-[#262a35] border border-[#334155]/30'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded bg-red-950/60 flex items-center justify-center text-red-400 border border-red-500/30">
+                      <span className="material-symbols-outlined text-[24px]">swords</span>
+                    </div>
+                    <div className="flex flex-col">
+                      <div className="flex items-center gap-2">
+                        <span className="font-space font-bold text-sm text-white">Đấu Xếp Hạng Huyết Nguyệt</span>
+                        <span className="px-1.5 py-0.2 rounded bg-red-950/80 text-red-400 font-space text-[10px] uppercase font-bold">
+                          Cực Căng
+                        </span>
+                      </div>
+                      <span className="font-geist text-[11px] text-slate-400">
+                        8 - 12 Người Chơi • Voice Chat Cưỡng Chế • Thăng Hạng
+                      </span>
+                    </div>
+                  </div>
+                  <div className={`w-5 h-5 rounded-full flex items-center justify-center ${selectedMode === 'ranked' ? 'bg-primary text-[#00354a]' : 'border border-slate-600'}`}>
+                    {selectedMode === 'ranked' && <span className="material-symbols-outlined text-[14px]">check</span>}
+                  </div>
+                </div>
+
+                {/* Mode 2: Casual */}
+                <div
+                  onClick={() => setSelectedMode('casual')}
+                  className={`relative flex items-center justify-between p-3.5 rounded-xl cursor-pointer transition-all ${
+                    selectedMode === 'casual'
+                      ? 'bg-[#262a35] border border-primary/50 shadow-lg'
+                      : 'bg-[#1c1f2a]/60 hover:bg-[#262a35] border border-[#334155]/30'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded bg-[#313540] flex items-center justify-center text-primary">
+                      <span className="material-symbols-outlined text-[22px]">casino</span>
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="font-space font-bold text-sm text-white">Phòng Thường Giải Trí</span>
+                      <span className="font-geist text-[11px] text-slate-400">
+                        6 - 10 Người Chơi • Không tính điểm Elo • Thoải mái
+                      </span>
+                    </div>
+                  </div>
+                  <div className={`w-5 h-5 rounded-full flex items-center justify-center ${selectedMode === 'casual' ? 'bg-primary text-[#00354a]' : 'border border-slate-600'}`}>
+                    {selectedMode === 'casual' && <span className="material-symbols-outlined text-[14px]">check</span>}
+                  </div>
+                </div>
+
+                {/* Mode 3: Custom */}
+                <div
+                  onClick={() => setShowJoinModal(true)}
+                  className="relative flex items-center justify-between p-3.5 rounded-xl bg-[#1c1f2a]/60 hover:bg-[#262a35] border border-[#334155]/30 cursor-pointer transition-all"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded bg-[#313540] flex items-center justify-center text-purple-400">
+                      <span className="material-symbols-outlined text-[22px]">tune</span>
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="font-space font-bold text-sm text-white">Tùy Chỉnh & Nhập Mã Phòng</span>
+                      <span className="font-geist text-[11px] text-slate-400">
+                        Vào phòng bạn bè qua mã 6 ký tự hoặc tạo bàn riêng
+                      </span>
+                    </div>
+                  </div>
+                  <span className="material-symbols-outlined text-slate-400 text-[20px]">chevron_right</span>
+                </div>
+              </div>
+
+              {/* Match CTA Button */}
+              <div className="flex flex-col gap-2">
+                <button
+                  onClick={() => handleJoinRoom('ROOM-1')}
+                  className="w-full relative group overflow-hidden py-4 px-6 rounded-xl bg-gradient-to-r from-red-800 via-red-600 to-red-800 text-white font-space font-bold text-sm uppercase tracking-wider shadow-[0_0_28px_rgba(147,0,10,0.7)] hover:shadow-[0_0_36px_rgba(239,68,68,0.85)] hover:scale-[1.01] active:scale-[0.99] transition-all flex items-center justify-center gap-2"
+                >
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full duration-700 transition-transform" />
+                  <span className="material-symbols-outlined text-[22px]">travel_explore</span>
+                  <span>VÀO BÀN CƯỢC (TÌM TRẬN)</span>
+                </button>
+                <div className="flex items-center justify-between text-slate-400 font-space text-[11px] px-1">
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-primary" /> Ping: 24ms (Hà Nội)
+                  </span>
+                  <span>Khóa ghép: ±120 Điểm Danh Vọng</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Tavern Event Banner */}
+            <div className="bg-[#171b26] p-4 rounded-xl border border-[#334155]/30 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded bg-purple-950/60 border border-purple-500/40 flex items-center justify-center text-purple-300">
+                  <span className="material-symbols-outlined text-[20px]">liquor</span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="font-space font-bold text-xs text-white">Đêm Ma Quái: x2 Huyết Tinh</span>
+                  <span className="font-geist text-[11px] text-slate-400">Còn lại: 03 giờ 42 phút</span>
+                </div>
+              </div>
               <button
-                onClick={() => setShowRoleModal(false)}
-                style={{
-                  width: 36,
-                  height: 36,
-                  borderRadius: 'var(--radius-sm)',
-                  backgroundColor: 'var(--surface-container-high)',
-                  color: '#fff',
-                  border: 'none',
-                  cursor: 'pointer',
-                  fontSize: 18,
-                }}
+                onClick={() => router.push('/auth')}
+                className="px-3 py-1 rounded bg-[#262a35] hover:bg-[#353944] text-primary font-space text-[11px] font-bold uppercase transition-colors"
               >
-                ✕
+                Nhận Quà
               </button>
             </div>
+          </div>
 
-            {/* Filter Tabs */}
-            <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
-              {[
-                { id: 'ALL', label: 'Tất Cả (39)' },
-                { id: 'VILLAGE', label: 'Phe Dân Làng (21)' },
-                { id: 'WEREWOLF', label: 'Phe Ma Sói (11)' },
-                { id: 'OTHER', label: 'Biệt Lập & Đổi Phe (7)' },
-              ].map((tab) => (
+          {/* CENTER WING: 3D CHARACTER SPOTLIGHT IN GOTHIC TAVERN (4 COLS) */}
+          <div className="lg:col-span-4 flex flex-col gap-4">
+            <div className="relative bg-[#171b26]/90 backdrop-blur-xl rounded-2xl p-6 border border-[#334155]/40 shadow-xl flex flex-col justify-between overflow-hidden">
+              {/* Header Info */}
+              <div className="flex items-center justify-between z-10">
+                <div className="flex items-center gap-2">
+                  <span className="px-2.5 py-0.5 rounded bg-primary/20 text-primary font-space text-[10px] font-bold uppercase tracking-wider border border-primary/30">
+                    Huyền Thoại Bậc III
+                  </span>
+                  <span className="font-space text-[11px] text-slate-400">Top 0.8%</span>
+                </div>
                 <button
-                  key={tab.id}
-                  onClick={() => setRoleFilter(tab.id as any)}
-                  style={{
-                    padding: '8px 16px',
-                    borderRadius: 'var(--radius-sm)',
-                    backgroundColor: roleFilter === tab.id ? 'var(--primary-container)' : 'var(--surface-container-low)',
-                    color: roleFilter === tab.id ? '#000' : 'var(--on-surface)',
-                    border: '1px solid var(--outline-variant)',
-                    fontFamily: 'var(--font-label)',
-                    fontSize: 12,
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                  }}
+                  onClick={() => router.push('/game/ROOM-1')}
+                  className="w-8 h-8 rounded bg-[#1c1f2a] hover:bg-[#262a35] flex items-center justify-center text-slate-300 hover:text-white transition-colors"
+                  title="Vào Bàn Chơi 3D"
                 >
-                  {tab.label}
+                  <span className="material-symbols-outlined text-[18px]">fullscreen</span>
                 </button>
-              ))}
+              </div>
+
+              {/* 3D Gritty Tavern Character Scene Card */}
+              <div className="relative w-full h-72 my-4 rounded-xl overflow-hidden flex items-end justify-center bg-[#0a0e18] border border-[#334155]/30">
+                <img
+                  src="/assets/plague_doctor.png"
+                  alt="Bác Sĩ Mỏ Quạ • Huyết Ảnh"
+                  className="absolute inset-0 w-full h-full object-cover object-center filter brightness-[0.9] contrast-[1.1] scale-105 hover:scale-110 transition-transform duration-700"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-[#0a0e18] via-[#0a0e18]/40 to-transparent pointer-events-none" />
+                <div className="relative z-10 text-center mb-3 px-4 py-1 rounded-full bg-[#0a0e18]/90 backdrop-blur-md border border-[#334155]/40 shadow-lg">
+                  <span className="font-syne font-bold text-sm text-white tracking-wide uppercase">
+                    Bác Sĩ Mỏ Quạ • Huyết Ảnh
+                  </span>
+                </div>
+              </div>
+
+              {/* Battle Records & Statistics */}
+              <div className="grid grid-cols-3 gap-2 py-1 text-center z-10">
+                <div className="p-2.5 rounded-lg bg-[#1c1f2a] border border-[#334155]/20">
+                  <span className="font-space text-[10px] uppercase text-slate-400 block font-semibold">Trận Đấu</span>
+                  <span className="font-syne text-lg text-white font-bold">200</span>
+                  <span className="font-geist text-[10px] text-primary block mt-0.5 font-medium">142 Thắng</span>
+                </div>
+                <div className="p-2.5 rounded-lg bg-[#1c1f2a] border border-[#334155]/20">
+                  <span className="font-space text-[10px] uppercase text-slate-400 block font-semibold">Tỉ Lệ Thắng</span>
+                  <span className="font-syne text-lg text-red-400 font-bold">71.0%</span>
+                  <span className="font-geist text-[10px] text-red-300 block mt-0.5 font-medium">Cực Chuẩn</span>
+                </div>
+                <div className="p-2.5 rounded-lg bg-[#1c1f2a] border border-[#334155]/20">
+                  <span className="font-space text-[10px] uppercase text-slate-400 block font-semibold">Tín Nhiệm</span>
+                  <span className="font-syne text-lg text-white font-bold">100</span>
+                  <span className="font-geist text-[10px] text-emerald-400 block mt-0.5 font-medium">Tuyệt Đối</span>
+                </div>
+              </div>
+
+              {/* Signature Roles Badges */}
+              <div className="z-10 mt-2 pt-2 border-t border-[#334155]/30">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-space text-[10px] uppercase text-slate-400 font-bold">Vai Trò Ưa Thích:</span>
+                  <span className="font-space text-[10px] text-primary">Tỉ Lệ Thắng</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 px-2.5 py-1.5 rounded-lg bg-[#1c1f2a] flex items-center justify-between border border-[#334155]/20">
+                    <span className="text-xs text-white">🔮 Tiên Tri</span>
+                    <span className="font-space text-xs font-bold text-primary">82%</span>
+                  </div>
+                  <div className="flex-1 px-2.5 py-1.5 rounded-lg bg-[#1c1f2a] flex items-center justify-between border border-[#334155]/20">
+                    <span className="text-xs text-white">🐺 Ma Sói</span>
+                    <span className="font-space text-xs font-bold text-red-400">74%</span>
+                  </div>
+                  <div className="flex-1 px-2.5 py-1.5 rounded-lg bg-[#1c1f2a] flex items-center justify-between border border-[#334155]/20">
+                    <span className="text-xs text-white">🏹 Thợ Săn</span>
+                    <span className="font-space text-xs font-bold text-purple-400">68%</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Customization Actions */}
+              <div className="mt-4 flex gap-2 z-10">
+                <button
+                  onClick={() => router.push('/cards')}
+                  className="flex-1 py-2 px-3 rounded-lg bg-[#262a35] hover:bg-[#353944] text-white font-space font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-colors border border-[#334155]/30"
+                >
+                  <span className="material-symbols-outlined text-[18px] text-purple-400">style</span>
+                  Bách Khoa 40 Thẻ Bài
+                </button>
+                <button
+                  onClick={() => router.push('/game/ROOM-1')}
+                  className="py-2 px-4 rounded-lg bg-red-950/70 hover:bg-red-900 border border-red-500/40 text-red-300 font-space font-bold text-xs uppercase transition-colors"
+                >
+                  POV Bàn Đấu
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* RIGHT WING: GLOBAL CHAT & ONLINE FRIENDS (3 COLS) */}
+          <div className="lg:col-span-3 flex flex-col gap-4">
+            <div className="bg-[#171b26]/90 backdrop-blur-xl rounded-2xl p-5 border border-[#334155]/40 shadow-xl flex flex-col h-full justify-between">
+              <div>
+                {/* Comms Channel Tabs */}
+                <div className="flex items-center gap-1 bg-[#1c1f2a] p-1 rounded-lg mb-3 border border-[#334155]/30">
+                  <button
+                    type="button"
+                    onClick={() => setChatChannel('world')}
+                    className={`flex-1 py-1 rounded text-xs font-space uppercase font-bold transition-colors ${
+                      chatChannel === 'world' ? 'bg-[#262a35] text-primary shadow' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    Kênh Chung
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setChatChannel('friends')}
+                    className={`flex-1 py-1 rounded text-xs font-space uppercase font-bold transition-colors ${
+                      chatChannel === 'friends' ? 'bg-[#262a35] text-primary shadow' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    Bạn Bè (5/18)
+                  </button>
+                </div>
+
+                {/* Message Stream */}
+                <div className="space-y-2.5 max-h-[340px] overflow-y-auto pr-1">
+                  {chatMessages.map((m) => (
+                    <div
+                      key={m.id}
+                      className={`p-2.5 rounded-lg border transition-colors ${
+                        m.isSystem
+                          ? 'bg-red-950/30 border-red-500/30'
+                          : 'bg-[#1c1f2a]/70 hover:bg-[#1c1f2a] border-[#334155]/20'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between font-space text-[10px]">
+                        <span className={`font-bold ${m.color || 'text-red-400'}`}>{m.user}</span>
+                        <span className="text-slate-400">{m.time}</span>
+                      </div>
+                      <p className="font-geist text-xs text-slate-200 mt-1 leading-snug">{m.text}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Chat Input */}
+              <form onSubmit={handleSendMessage} className="mt-3 pt-2 border-t border-[#334155]/30">
+                <div className="flex items-center gap-2 bg-[#1c1f2a] rounded-lg px-3 py-1.5 border border-[#334155]/40 focus-within:border-primary/60 transition-colors">
+                  <input
+                    type="text"
+                    value={chatInput}
+                    onChange={(e) => setChatInput(e.target.value)}
+                    placeholder="Gõ tin nhắn lên kênh thế giới..."
+                    className="w-full bg-transparent text-xs text-white placeholder:text-slate-500 focus:outline-none font-geist"
+                  />
+                  <button type="submit" className="text-primary hover:text-white transition-colors" title="Gửi tin">
+                    <span className="material-symbols-outlined text-[18px]">send</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </section>
+
+        {/* 4. PUBLIC ROOM BROWSER / DANH SÁCH BÀN CHƠI TRỰC TIẾP */}
+        <section className="w-full bg-[#171b26]/90 backdrop-blur-xl rounded-2xl p-6 border border-[#334155]/40 shadow-xl mb-12">
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-6 pb-4 border-b border-[#334155]/30">
+            <div className="flex flex-col">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-primary text-[24px]">meeting_room</span>
+                <h3 className="font-syne font-bold text-lg uppercase text-white tracking-wide">
+                  Danh Sách Bàn Chơi Quán Rượu
+                </h3>
+              </div>
+              <span className="font-geist text-xs text-slate-400 mt-0.5">
+                Chọn phòng trực tiếp hoặc tự lập bàn riêng cùng đồng minh
+              </span>
             </div>
 
-            {/* Grid of Role Cards */}
-            <div style={{ flex: 1, overflowY: 'auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 14 }}>
-              {filteredRoles.map((r) => (
-                <div
-                  key={r.id}
-                  style={{
-                    padding: 16,
-                    borderRadius: 'var(--radius-md)',
-                    backgroundColor: 'var(--surface-container-low)',
-                    border: r.category === 'WEREWOLF' || r.category === 'WOLFPACK' ? '1px solid rgba(239, 68, 68, 0.3)' : '1px solid var(--outline-variant)',
-                  }}
+            {/* Filters & Actions */}
+            <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+              <div className="flex items-center bg-[#1c1f2a] rounded-lg p-1 border border-[#334155]/30">
+                <button
+                  type="button"
+                  onClick={() => setRoomFilter('all')}
+                  className={`px-3 py-1 rounded text-xs font-space uppercase font-bold transition-all ${
+                    roomFilter === 'all' ? 'bg-[#262a35] text-primary' : 'text-slate-400 hover:text-white'
+                  }`}
                 >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-                    <div>
-                      <div style={{ fontFamily: 'var(--font-headline)', fontSize: 15, fontWeight: 700 }}>
-                        {r.nameVi}
-                      </div>
-                      <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>{r.nameEn}</div>
-                    </div>
-                    <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, backgroundColor: 'rgba(255,255,255,0.08)', color: 'var(--text-dim)' }}>
-                      {r.category}
-                    </span>
-                  </div>
-                  <p style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.4 }}>
-                    {r.description}
-                  </p>
+                  Tất Cả
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRoomFilter('ranked')}
+                  className={`px-3 py-1 rounded text-xs font-space uppercase font-bold transition-all ${
+                    roomFilter === 'ranked' ? 'bg-[#262a35] text-primary' : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  Xếp Hạng
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRoomFilter('casual')}
+                  className={`px-3 py-1 rounded text-xs font-space uppercase font-bold transition-all ${
+                    roomFilter === 'casual' ? 'bg-[#262a35] text-primary' : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  Giải Trí
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRoomFilter('locked')}
+                  className={`px-3 py-1 rounded text-xs font-space uppercase font-bold transition-all ${
+                    roomFilter === 'locked' ? 'bg-[#262a35] text-primary' : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  Có Mật Khẩu
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowJoinModal(true)}
+                className="px-4 py-2 rounded-xl bg-gradient-to-r from-red-800 to-red-600 hover:from-red-700 hover:to-red-500 text-white font-space font-bold text-xs uppercase tracking-wider shadow-lg shadow-red-950/40 flex items-center gap-1.5 transition-all"
+              >
+                <span className="material-symbols-outlined text-[16px]">add_circle</span>
+                Tạo Bàn Riêng
+              </button>
+            </div>
+          </div>
+
+          {/* Rooms Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {filteredRooms.map((room) => (
+              <div
+                key={room.code}
+                className="bg-[#111622] hover:bg-[#181f2f] border border-[#334155]/40 hover:border-primary/50 p-4 rounded-xl transition-all shadow-md flex flex-col justify-between gap-3 group"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-space text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                    {room.code}
+                  </span>
+                  <span
+                    className={`px-2 py-0.5 rounded font-space text-[10px] font-bold uppercase ${
+                      room.type === 'ranked'
+                        ? 'bg-red-950 text-red-400 border border-red-500/30'
+                        : room.type === 'locked'
+                        ? 'bg-purple-950 text-purple-400 border border-purple-500/30'
+                        : 'bg-sky-950 text-sky-400 border border-sky-500/30'
+                    }`}
+                  >
+                    {room.mode}
+                  </span>
                 </div>
-              ))}
+
+                <div>
+                  <h4 className="font-syne font-bold text-sm text-white group-hover:text-primary transition-colors">
+                    {room.name}
+                  </h4>
+                  <div className="flex items-center justify-between text-xs text-slate-400 font-space mt-2">
+                    <span className="flex items-center gap-1">
+                      <span className="material-symbols-outlined text-[14px]">person</span>
+                      {room.players}
+                    </span>
+                    <span className="text-emerald-400 font-bold">{room.ping}</span>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => handleJoinRoom(room.code)}
+                  className="w-full py-2 rounded-lg bg-[#262a35] group-hover:bg-primary group-hover:text-[#00354a] text-white font-space font-bold text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-1"
+                >
+                  <span>Tham Gia Bàn</span>
+                  <span className="material-symbols-outlined text-[16px]">play_arrow</span>
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
+      </main>
+
+      {/* QUICK JOIN / CREATE MODAL */}
+      {showJoinModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
+          <div className="bg-[#111622] border border-red-500/40 rounded-2xl p-6 max-w-md w-full shadow-2xl relative">
+            <button
+              type="button"
+              onClick={() => setShowJoinModal(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white"
+            >
+              <span className="material-symbols-outlined">close</span>
+            </button>
+
+            <h3 className="font-syne font-bold text-lg text-white uppercase tracking-wide mb-1">
+              Vào Bàn Chơi / Tạo Bàn Mới
+            </h3>
+            <p className="font-geist text-xs text-slate-400 mb-4">
+              Nhập mã phòng 6 ký tự hoặc tên nhân vật của bạn để bắt đầu.
+            </p>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block font-space text-[11px] uppercase text-slate-300 mb-1">
+                  Biệt Danh Của Bạn
+                </label>
+                <input
+                  type="text"
+                  value={nickname}
+                  onChange={(e) => setNickname(e.target.value)}
+                  placeholder="Ví dụ: Dạ Thần 07..."
+                  className="w-full bg-[#181f2f] border border-[#334155] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-primary font-geist"
+                />
+              </div>
+
+              <div>
+                <label className="block font-space text-[11px] uppercase text-slate-300 mb-1">
+                  Mã Phòng (Nếu tham gia bàn riêng)
+                </label>
+                <input
+                  type="text"
+                  value={quickCodeInput}
+                  onChange={(e) => setQuickCodeInput(e.target.value.toUpperCase())}
+                  placeholder="Ví dụ: ROOM-1..."
+                  className="w-full bg-[#181f2f] border border-[#334155] rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-primary font-space font-bold uppercase"
+                />
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => handleJoinRoom(quickCodeInput || 'ROOM-1')}
+                  className="flex-1 py-2.5 rounded-lg bg-primary text-[#00354a] font-space font-bold text-xs uppercase tracking-wider"
+                >
+                  Vào Phòng
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleJoinRoom('NEW')}
+                  className="flex-1 py-2.5 rounded-lg bg-gradient-to-r from-red-800 to-red-600 text-white font-space font-bold text-xs uppercase tracking-wider"
+                >
+                  Tạo Phòng Mới
+                </button>
+              </div>
             </div>
           </div>
         </div>

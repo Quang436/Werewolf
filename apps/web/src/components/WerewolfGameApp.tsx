@@ -4,7 +4,6 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   ALL_ROLES_FROM_PDF,
   ChatChannel,
-  Phase,
   PublicPlayerView,
   Role,
 } from '@werewolf/shared';
@@ -16,57 +15,6 @@ export interface WerewolfGameAppProps {
   onSendChat: (channel: ChatChannel, text: string) => void;
 }
 
-const ROLE_EMOJIS: Record<Role, string> = {
-  // 1. Phe Dân Làng (21)
-  VILLAGER: '🧑‍🌾',
-  SEER: '🔮',
-  APPRENTICE_SEER: '🔭',
-  AURA_SEER: '✨',
-  BODYGUARD: '🛡️',
-  CUPID: '💘',
-  DISEASED: '🤢',
-  HUNTER: '🏹',
-  IDIOT: '🤪',
-  LYCAN: '🐺🐾',
-  MASON: '👬',
-  MAYOR: '🎖️',
-  OLD_HAG: '👵',
-  PACIFIST: '🕊️',
-  PI: '🕵️',
-  PRIEST: '✝️',
-  PRINCE: '👑',
-  SPELLCASTER: '🤐',
-  TOUGH_GUY: '💪',
-  TROUBLE_MAKER: '🧨',
-  WITCH: '🧙‍♀️',
-  // 2. Phe Ma Sói (5)
-  WEREWOLF: '🐺',
-  MINION: '😈',
-  SORCERESS: '🔮🐺',
-  LONE_WOLF: '🌑🐺',
-  WOLF_CUB: '🐾',
-  // 3. Đổi phe & Trung lập (3)
-  CURSED: '💀',
-  DOPPELGANGER: '🎭',
-  DRUNK: '🍺',
-  // 4. Phe Biệt Lập / Thứ Ba (4)
-  CULT_LEADER: '🕯️',
-  HOODLUM: '🗡️',
-  TANNER: '🪢',
-  VAMPIRE: '🧛',
-  // 5. Bản Mở Rộng Wolfpack (6)
-  BIG_BAD_WOLF: '👹🐺',
-  DIRE_WOLF: '❄️🐺',
-  FRUIT_WOLF: '🍏🐺',
-  FANG_FACE: '🦷🐺',
-  WOLVERINE: '⚔️🐺',
-  VIRGINIA_WOOLF: '💃',
-};
-
-const ROLE_NAMES: Record<Role, string> = Object.fromEntries(
-  Object.entries(ALL_ROLES_FROM_PDF).map(([id, info]) => [id, info.nameVi])
-) as Record<Role, string>;
-
 export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
   store,
   onEmitAction,
@@ -74,9 +22,9 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
 }) => {
   const [state, setState] = useState(store.getState());
   const [chatInput, setChatInput] = useState('');
-  const [showRoleModal, setShowRoleModal] = useState(false);
-  const [selectedTargetId, setSelectedTargetId] = useState<string | null>(null);
-  const [micActive, setMicActive] = useState(false);
+  const [isPov2, setIsPov2] = useState(false);
+  const [micActive, setMicActive] = useState(true);
+  const [selectedActionIndex, setSelectedActionIndex] = useState<number | null>(null);
 
   useEffect(() => {
     return store.subscribe((newState) => {
@@ -84,7 +32,6 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
     });
   }, [store]);
 
-  // Bộ đếm thời gian countdown mỗi 250ms
   useEffect(() => {
     const timer = setInterval(() => {
       store.updateRemainingTime();
@@ -93,457 +40,552 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
     return () => clearInterval(timer);
   }, [store]);
 
+  // Keybind listeners: KeyV (POV toggle), KeyE (Debate), Digit1 (Vote)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+
+      if (e.code === 'KeyV') {
+        setIsPov2((prev) => !prev);
+      } else if (e.code === 'KeyE') {
+        onEmitAction('day:debate', { message: 'Tôi khẳng định mình vô tội!' });
+      } else if (e.code === 'Digit1') {
+        onEmitAction('day:vote', { targetId: 'TARGET_DEFENDANT' });
+      } else if (e.code === 'Space') {
+        e.preventDefault();
+        onEmitAction('day:vote', { targetId: 'SKIP' });
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onEmitAction]);
+
   const room = state.room;
   if (!room) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', backgroundColor: 'var(--surface)' }}>
-        <div className="glass-panel" style={{ padding: '36px 48px', textAlign: 'center', border: '1px solid var(--outline-variant)' }}>
-          <div style={{ fontSize: 48, marginBottom: 12 }}>🐺</div>
-          <h2 style={{ fontFamily: 'var(--font-headline)', fontSize: 20 }}>Đang kết nối tới Quán Rượu Vực Thẳm...</h2>
+      <div className="flex items-center justify-center h-screen bg-[#07090e] text-white font-geist">
+        <div className="bg-[#111622] p-8 rounded-2xl border border-red-500/40 text-center shadow-2xl">
+          <div className="w-12 h-12 rounded-full bg-red-950/60 border border-red-500/50 flex items-center justify-center mx-auto mb-3">
+            <span className="material-symbols-outlined text-red-500 animate-spin text-2xl">sync</span>
+          </div>
+          <h2 className="font-syne font-bold text-lg uppercase tracking-wider text-white">ĐANG KẾT NỐI BÀN ĐẤU...</h2>
+          <p className="font-geist text-xs text-slate-400 mt-1">Đang đồng bộ dữ liệu bảo mật từ Quản Trò</p>
         </div>
       </div>
     );
   }
 
-  const formatTimer = (ms: number) => {
-    const totalSec = Math.max(0, Math.ceil(ms / 1000));
-    const mins = Math.floor(totalSec / 60);
-    const secs = totalSec % 60;
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  const myPlayerInfo = room.players.find((p) => p.id === room.me?.id);
+  const myNickname =
+    myPlayerInfo?.nickname ||
+    (typeof window !== 'undefined' ? sessionStorage.getItem('werewolf_nickname') || 'Thợ Săn Bạn' : 'Thợ Săn Bạn');
+
+  const isNight = room.phase.includes('NIGHT');
+  const remainingSeconds = Math.max(0, Math.ceil(state.remainingMs / 1000));
+  const formatTimer = (s: number) => {
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return `${m.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
   };
 
-  // Tính toán vị trí lượng giác của từng ghế trên bàn tròn Liar's Bar
-  const playerSeats = useMemo(() => {
-    const total = Math.max(1, room.players.length);
-    const radiusX = 260; // Bán kính elip ngang
-    const radiusY = 200; // Bán kính elip dọc theo góc nhìn Liar's Bar POV
-    const centerX = 300;
-    const centerY = 260;
-
-    return room.players.map((p, idx) => {
-      // Góc chia đều quanh vòng tròn (bắt đầu từ góc 90 độ phía dưới)
-      const angle = (idx / total) * 2 * Math.PI + Math.PI / 2;
-      const x = centerX + radiusX * Math.cos(angle) - 45;
-      const y = centerY + radiusY * Math.sin(angle) - 55;
-      return { player: p, x, y };
-    });
-  }, [room.players]);
-
-  const me = room.me;
-  const isNight = room.phase.includes('NIGHT') || room.phase.includes('TURN');
+  const handleSendChat = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!chatInput.trim()) return;
+    onSendChat(state.activeChatChannel, chatInput.trim());
+    setChatInput('');
+  };
 
   return (
-    <div style={{ minHeight: '100vh', backgroundColor: '#030303', color: 'var(--on-surface)', display: 'flex', flexDirection: 'column' }}>
-      {/* 1. TOP CINEMATIC HUD (Liar's Bar / Gothic HUD) */}
-      <header
-        className="hud-glass"
-        style={{
-          height: 68,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '0 24px',
-          borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
-          zIndex: 40,
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: 11, fontFamily: 'var(--font-label)', color: 'var(--text-dim)', textTransform: 'uppercase' }}>PHÒNG:</span>
-            <span style={{ fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 900, color: 'var(--village-blue)', letterSpacing: 2 }}>
-              {room.code}
+    <div className="relative w-screen h-screen bg-black text-gray-100 overflow-hidden font-game select-none">
+      {/* 1. 3D PERSPECTIVE CANVAS & POV BACKGROUND FRAME */}
+      <div className="absolute inset-0 z-0 w-full h-full overflow-hidden">
+        <img
+          alt="Bàn Ma Sói Sinh Tử 3D POV Liar's Bar"
+          src="/assets/liars_bar_table.png"
+          className="w-full h-full object-cover object-center filter brightness-95 contrast-110 pointer-events-none transition-transform duration-700 ease-out"
+          style={{
+            transform: isPov2 ? 'scale(1.18) translateY(-4%)' : 'scale(1) translateY(0)',
+          }}
+        />
+
+        {/* Cinematic Vignettes */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-black/80 pointer-events-none" />
+        <div className="absolute inset-0 bg-gradient-to-r from-black/60 via-transparent to-black/60 pointer-events-none" />
+
+        {/* 2ND POV Camera Badge */}
+        {isPov2 && (
+          <div className="absolute top-20 left-1/2 -translate-x-1/2 z-20 pointer-events-none bg-red-950/90 border border-red-500/80 px-4 py-1.5 rounded-full shadow-[0_0_20px_rgba(220,38,38,0.6)] flex items-center gap-2 animate-fadeIn">
+            <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
+            <span className="text-xs font-black uppercase text-red-200 tracking-wider font-display">
+              ĐANG XEM: GÓC NHÌN THỨ 2 - CẬN CẢNH ĐỐI DIỆN / BÀN ĐẤU TOÀN CẢNH
             </span>
           </div>
-          <div style={{ width: 1, height: 20, backgroundColor: 'rgba(255, 255, 255, 0.1)' }}></div>
-          <div style={{ fontFamily: 'var(--font-label)', fontSize: 13, color: 'var(--text-muted)' }}>
-            Vòng: <strong style={{ color: '#fff' }}>Đêm / Ngày {room.round}</strong>
-          </div>
-        </div>
+        )}
 
-        {/* Center Alert / Phase Status */}
-        <div style={{ textAlign: 'center' }}>
-          <div className={`phase-title ${isNight ? 'night' : 'day'}`}>
-            {room.phase.replace(/_/g, ' ')}
-          </div>
-          <div style={{ fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-label)' }}>
-            {isNight ? 'Trời tối, cả làng nhắm mắt...' : 'Trời sáng, thảo luận tìm Sói!'}
-          </div>
-        </div>
-
-        {/* Right Tools & Nav */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <a
-            href="/"
-            style={{
-              padding: '6px 12px',
-              borderRadius: 'var(--radius-sm)',
-              backgroundColor: 'rgba(255, 255, 255, 0.05)',
-              border: '1px solid rgba(255, 255, 255, 0.1)',
-              color: 'var(--on-surface-variant)',
-              textDecoration: 'none',
-              fontFamily: 'var(--font-label)',
-              fontSize: 11,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 4,
-            }}
+        {/* 3D Werewolf Table Center Tokens (Perspective 55deg tilt) */}
+        <div
+          className="absolute inset-0 z-10 pointer-events-none"
+          style={{
+            transform: isPov2 ? 'scale(1.08) translateY(-3%)' : 'scale(1) translateY(0)',
+            transition: 'transform 0.6s cubic-bezier(0.16, 1, 0.3, 1)',
+          }}
+        >
+          {/* Center Table Verdict Badges */}
+          <div
+            className="absolute left-[48%] top-[56%] -translate-x-1/2 -translate-y-1/2 flex items-center gap-2"
+            style={{ perspective: 500, transform: 'rotateX(55deg)' }}
           >
-            <span className="material-symbols-outlined" style={{ fontSize: 14 }}>home</span>
-            Sảnh Chờ
-          </a>
-          <a
-            href="/cards"
-            target="_blank"
-            rel="noreferrer"
-            style={{
-              padding: '6px 12px',
-              borderRadius: 'var(--radius-sm)',
-              backgroundColor: 'rgba(255, 255, 255, 0.05)',
-              border: '1px solid rgba(255, 255, 255, 0.1)',
-              color: 'var(--on-surface-variant)',
-              textDecoration: 'none',
-              fontFamily: 'var(--font-label)',
-              fontSize: 11,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 4,
-            }}
-          >
-            <span className="material-symbols-outlined" style={{ fontSize: 14 }}>style</span>
-            Bách Khoa
-          </a>
-          <button
-            onClick={() => setMicActive(!micActive)}
-            style={{
-              padding: '6px 12px',
-              borderRadius: 'var(--radius-sm)',
-              backgroundColor: micActive ? 'rgba(56, 189, 248, 0.2)' : 'rgba(255, 255, 255, 0.05)',
-              border: micActive ? '1px solid var(--primary)' : '1px solid rgba(255, 255, 255, 0.1)',
-              color: micActive ? 'var(--primary)' : 'var(--text-dim)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              cursor: 'pointer',
-              fontFamily: 'var(--font-label)',
-              fontSize: 11,
-            }}
-          >
-            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>{micActive ? 'mic' : 'mic_off'}</span>
-            <span>{micActive ? 'Đang Nói' : 'Tắt Mic'}</span>
-          </button>
-          <button
-            onClick={() => setShowRoleModal(true)}
-            style={{
-              padding: '6px 14px',
-              borderRadius: 'var(--radius-sm)',
-              backgroundColor: 'var(--surface-container-high)',
-              border: '1px solid rgba(255, 255, 255, 0.15)',
-              color: 'var(--amber-glow)',
-              cursor: 'pointer',
-              fontFamily: 'var(--font-label)',
-              fontSize: 12,
-              fontWeight: 700,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-            }}
-          >
-            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>visibility</span>
-            Thẻ Của Tôi
-          </button>
-        </div>
-      </header>
-
-      {/* 2. MAIN BATTLEGROUND (Liar's Bar 3D Table + Chat) */}
-      <div style={{ flex: 1, display: 'flex', gap: 20, padding: '16px 24px', maxWidth: 1560, margin: '0 auto', width: '100%' }}>
-        {/* Left Column: Player Live Status */}
-        <div style={{ width: 220, display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div className="glass-panel" style={{ padding: 16, height: '100%' }}>
-            <h4 style={{ fontFamily: 'var(--font-label)', fontSize: 11, color: 'var(--text-dim)', textTransform: 'uppercase', marginBottom: 12 }}>
-              DANH SÁCH GHẾ ({room.players.filter((p) => p.isAlive).length}/{room.players.length} SỐNG)
-            </h4>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 'calc(100vh - 220px)', overflowY: 'auto' }}>
-              {room.players.map((p) => (
-                <div
-                  key={p.id}
-                  onClick={() => setSelectedTargetId(p.id)}
-                  style={{
-                    padding: '8px 10px',
-                    borderRadius: 'var(--radius-sm)',
-                    backgroundColor: selectedTargetId === p.id ? 'rgba(239, 68, 68, 0.2)' : 'var(--surface-container-low)',
-                    border: selectedTargetId === p.id ? '1px solid var(--wolf-red)' : '1px solid rgba(255, 255, 255, 0.05)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    cursor: 'pointer',
-                    opacity: p.isAlive ? 1 : 0.45,
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ fontSize: 16 }}>{p.revealedRole ? ROLE_EMOJIS[p.revealedRole] : '👤'}</span>
-                    <span style={{ fontFamily: 'var(--font-label)', fontSize: 12, color: p.id === me.id ? 'var(--primary)' : 'inherit' }}>
-                      {p.nickname} {p.id === me.id ? '(Bạn)' : ''}
-                    </span>
-                  </div>
-                  <span style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-label)' }}>
-                    #{p.seat}
-                  </span>
-                </div>
-              ))}
+            <div className="w-14 h-20 rounded bg-gradient-to-b from-red-950 via-zinc-950 to-black border border-red-500/80 shadow-[0_0_15px_rgba(220,38,38,0.6)] flex flex-col items-center justify-between p-1 rotate-[-12deg]">
+              <div className="text-[7px] font-display text-red-400 font-bold tracking-widest uppercase">HỘI ĐỒNG</div>
+              <div className="text-lg leading-none">🌕</div>
+              <div className="text-[6px] font-mono text-gray-400 uppercase">MA SÓI</div>
             </div>
-          </div>
-        </div>
-
-        {/* Center: 3D Perspective Table */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <div className="table-viewport-container">
-            {/* Background Image of Liar's Bar */}
-            <img
-              src="/assets/liars_bar_bg.png"
-              alt="Liar's Bar Table"
-              className="table-background-image"
-              onError={(e) => {
-                // Fallback nếu ảnh tải chậm
-                (e.target as HTMLElement).style.display = 'none';
-              }}
-            />
-
-            {/* Circular Table Seats */}
-            <div className="circular-table">
-              {playerSeats.map(({ player, x, y }) => {
-                const isMe = player.id === me.id;
-                const isSelected = selectedTargetId === player.id;
-
-                return (
-                  <div
-                    key={player.id}
-                    className={`seat-node ${player.isAlive ? 'alive' : 'dead'}`}
-                    style={{
-                      left: x,
-                      top: y,
-                      outline: isSelected ? '2px solid var(--blood-red)' : isMe ? '2px solid var(--village-blue)' : 'none',
-                      borderRadius: 12,
-                    }}
-                    onClick={() => setSelectedTargetId(player.id)}
-                  >
-                    <div className="seat-avatar">
-                      {player.revealedRole ? ROLE_EMOJIS[player.revealedRole] : isMe && me.role ? ROLE_EMOJIS[me.role] : '👤'}
-                    </div>
-                    <div className="seat-nickname">{player.nickname}</div>
-                    <div className="seat-badge">Ghế {player.seat}</div>
-                  </div>
-                );
-              })}
-
-              {/* Table Center HUD: Phase & Countdown Clock */}
-              <div className="table-center-hud">
-                <div className={`countdown-timer ${state.remainingMs < 10000 ? 'urgent' : ''}`}>
-                  {formatTimer(state.remainingMs)}
-                </div>
-                <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 4, fontFamily: 'var(--font-label)' }}>
-                  THỜI GIAN CÒN LẠI
-                </div>
-              </div>
+            <div className="w-14 h-20 rounded bg-gradient-to-b from-amber-950 via-zinc-950 to-black border border-amber-500/80 shadow-[0_0_15px_rgba(245,158,11,0.5)] flex flex-col items-center justify-between p-1 rotate-[4deg]">
+              <div className="text-[7px] font-display text-amber-300 font-bold tracking-widest uppercase">PHÁN QUYẾT</div>
+              <div className="text-lg leading-none">⚖️</div>
+              <div className="text-[6px] font-mono text-gray-400 uppercase">#02 TREO CỔ</div>
+            </div>
+            <div className="w-14 h-20 rounded bg-gradient-to-b from-purple-950 via-zinc-950 to-black border border-purple-500/70 shadow-[0_0_12px_rgba(168,85,247,0.4)] flex flex-col items-center justify-between p-1 rotate-[18deg]">
+              <div className="text-[7px] font-display text-purple-300 font-bold tracking-widest uppercase">TIÊN TRI</div>
+              <div className="text-lg leading-none">🔮</div>
+              <div className="text-[6px] font-mono text-gray-400 uppercase">SOI THÂN PHẬN</div>
             </div>
           </div>
 
-          {/* Bottom Hand Tarot Deck (Liar's Bar Card Fan) */}
-          <div className="werewolf-card-fan">
-            {/* 1. Thẻ bài Thân Phận (Secret Role Card) */}
-            <div
-              className="werewolf-tarot-card"
-              onClick={() => setShowRoleModal(true)}
-              style={{
-                border: me.team === 'WEREWOLF' ? '1px solid var(--blood-red)' : '1px solid var(--village-blue)',
-              }}
-            >
-              <div style={{ fontSize: 9, fontFamily: 'var(--font-label)', color: 'var(--text-dim)', textTransform: 'uppercase' }}>
-                THÂN PHẬN
-              </div>
-              <div style={{ fontSize: 36 }}>{me.role ? ROLE_EMOJIS[me.role] : '❓'}</div>
-              <div style={{ fontFamily: 'var(--font-headline)', fontSize: 11, fontWeight: 700, color: me.team === 'WEREWOLF' ? 'var(--error)' : 'var(--primary)' }}>
-                {me.role ? ROLE_NAMES[me.role] : 'ẨN DANH'}
-              </div>
-            </div>
-
-            {/* 2. Thẻ Kỹ Năng / Hành Động (Action Card) */}
-            <div
-              className="werewolf-tarot-card"
-              onClick={() => {
-                if (selectedTargetId) {
-                  onEmitAction('night:bodyguardProtect', { targetId: selectedTargetId });
-                }
-              }}
-              style={{
-                border: selectedTargetId ? '1px solid var(--amber-glow)' : '1px solid var(--outline-variant)',
-                cursor: selectedTargetId ? 'pointer' : 'default',
-              }}
-            >
-              <div style={{ fontSize: 9, fontFamily: 'var(--font-label)', color: 'var(--text-dim)', textTransform: 'uppercase' }}>
-                HÀNH ĐỘNG
-              </div>
-              <div style={{ fontSize: 32 }}>⚡</div>
-              <button
-                disabled={!selectedTargetId}
-                style={{
-                  background: selectedTargetId ? 'var(--blood-red)' : 'rgba(255,255,255,0.1)',
-                  border: 'none',
-                  color: '#fff',
-                  borderRadius: 4,
-                  padding: '4px 8px',
-                  fontSize: 10,
-                  fontWeight: 700,
-                  cursor: selectedTargetId ? 'pointer' : 'not-allowed',
-                }}
-              >
-                {selectedTargetId ? 'XÁC NHẬN' : 'CHỌN MỤC TIÊU'}
-              </button>
-            </div>
-
-            {/* 3. Thẻ Bỏ Qua / Tha Tội (Skip Card) */}
-            <div
-              className="werewolf-tarot-card"
-              onClick={() => onEmitAction('day:vote', { targetId: 'SKIP' })}
-            >
-              <div style={{ fontSize: 9, fontFamily: 'var(--font-label)', color: 'var(--text-dim)', textTransform: 'uppercase' }}>
-                BỎ QUA
-              </div>
-              <div style={{ fontSize: 32 }}>🕊️</div>
-              <div style={{ fontFamily: 'var(--font-headline)', fontSize: 11, fontWeight: 600, color: 'var(--text-muted)' }}>
-                BỎ PHIẾU TRẮNG
-              </div>
+          {/* Left Table Prop */}
+          <div
+            className="absolute left-[20%] top-[62%] -translate-x-1/2 flex gap-1"
+            style={{ perspective: 400, transform: 'rotateX(50deg) rotateZ(18deg)' }}
+          >
+            <div className="w-10 h-14 rounded bg-stone-900 border border-amber-600/60 shadow flex flex-col items-center justify-center">
+              <span className="text-[6px] font-mono text-amber-400">THẺ LÀNG</span>
+              <span className="text-xs">📜</span>
             </div>
           </div>
-        </div>
 
-        {/* Right Column: 4-Channel Multi-Stream Chat */}
-        <div style={{ width: 360, display: 'flex', flexDirection: 'column' }}>
-          <div className="glass-panel chat-container" style={{ height: '100%', minHeight: 640 }}>
-            <div className="chat-tabs">
-              {(['public', 'wolves', 'lovers', 'dead'] as ChatChannel[]).map((ch) => (
-                <button
-                  key={ch}
-                  className={`chat-tab-btn ${ch} ${state.activeChatChannel === ch ? 'active' : ''}`}
-                  onClick={() => store.setActiveChatChannel(ch)}
-                >
-                  {ch === 'public'
-                    ? 'Làng'
-                    : ch === 'wolves'
-                    ? '🐺 Sói'
-                    : ch === 'lovers'
-                    ? '💘 Cặp Đôi'
-                    : '☠️ Người Chết'}
-                </button>
-              ))}
+          {/* Right Table Prop */}
+          <div
+            className="absolute right-[22%] top-[63%] -translate-x-1/2 flex gap-1"
+            style={{ perspective: 400, transform: 'rotateX(50deg) rotateZ(-20deg)' }}
+          >
+            <div className="w-10 h-14 rounded bg-red-950 border border-red-500/60 shadow flex flex-col items-center justify-center">
+              <span className="text-[6px] font-mono text-red-300">PHIẾU PHẠT</span>
+              <span className="text-xs">🪢</span>
             </div>
-
-            {/* Messages Stream */}
-            <div className="chat-messages">
-              {(state.chatMessages[state.activeChatChannel] || []).map((msg) => {
-                const isMine = msg.senderId === me.id;
-                return (
-                  <div key={msg.id} className={`chat-bubble ${isMine ? 'mine' : ''}`}>
-                    <div style={{ fontSize: 10, color: 'var(--text-dim)', marginBottom: 2 }}>
-                      {isMine ? 'Bạn' : msg.senderNickname || msg.senderId}
-                    </div>
-                    <div>{msg.text}</div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Input Form */}
-            <form
-              className="chat-input-bar"
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (chatInput.trim()) {
-                  onSendChat(state.activeChatChannel, chatInput.trim());
-                  setChatInput('');
-                }
-              }}
-            >
-              <input
-                type="text"
-                className="chat-input-field"
-                placeholder={`Chat vào kênh [${state.activeChatChannel}]...`}
-                value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
-              />
-              <button type="submit" className="chat-send-btn">
-                GỬI
-              </button>
-            </form>
           </div>
         </div>
       </div>
 
-      {/* 3. SECRET ROLE PEEK MODAL */}
-      {showRoleModal && me.role && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 100,
-            backgroundColor: 'rgba(0, 0, 0, 0.85)',
-            backdropFilter: 'blur(16px)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: 24,
-          }}
-        >
-          <div
-            className="glass-panel"
-            style={{
-              width: '100%',
-              maxWidth: 440,
-              padding: 28,
-              textAlign: 'center',
-              border: me.team === 'WEREWOLF' ? '2px solid var(--blood-red)' : '2px solid var(--village-blue)',
-            }}
-          >
-            <div style={{ fontSize: 56, marginBottom: 8 }}>{ROLE_EMOJIS[me.role]}</div>
-            <h2 style={{ fontFamily: 'var(--font-headline)', fontSize: 24, fontWeight: 800, color: me.team === 'WEREWOLF' ? 'var(--error)' : 'var(--primary)' }}>
-              {ROLE_NAMES[me.role]}
-            </h2>
-            <div style={{ fontFamily: 'var(--font-label)', fontSize: 12, color: 'var(--text-dim)', marginBottom: 12 }}>
-              {ALL_ROLES_FROM_PDF[me.role]?.nameEn}
+      {/* 2. SPATIAL SEAT OVERLAYS AROUND THE TABLE */}
+      <div
+        className="absolute inset-0 z-10 pointer-events-none transition-transform duration-700 ease-out"
+        style={{
+          transform: isPov2 ? 'scale(1.08) translateY(-3%)' : 'scale(1) translateY(0)',
+        }}
+      >
+        <div className="absolute left-[7%] top-[45%] -translate-y-1/2 flex flex-col items-center">
+          <span className="text-xs font-bold text-white tracking-wider font-display drop-shadow opacity-85">
+            #01 BÁC SĨ MỎ QUẠ
+          </span>
+        </div>
+        <div className="absolute left-[21%] top-[25%] flex flex-col items-center">
+          <span className="text-xs font-bold text-red-300 tracking-wider font-display drop-shadow opacity-90 animate-pulse">
+            #02 LORDVADER (3 PHIẾU)
+          </span>
+        </div>
+        <div className="absolute left-[37%] top-[28%] flex flex-col items-center">
+          <span className="text-xs font-bold text-white tracking-wider font-display drop-shadow opacity-85">
+            #03 XEMESIS
+          </span>
+        </div>
+        <div className="absolute left-[50%] top-[24%] -translate-x-1/2 flex flex-col items-center">
+          <span className="text-xs font-bold text-cyan-300 tracking-wider font-display drop-shadow opacity-90">
+            #04 QUẢN TRÒ (MODERATOR)
+          </span>
+        </div>
+        <div className="absolute left-[62%] top-[29%] flex flex-col items-center">
+          <span className="text-xs font-bold text-gray-500 line-through tracking-wider font-display drop-shadow opacity-60">
+            #05 PEWPEW (ĐÃ CHẾT)
+          </span>
+        </div>
+        <div className="absolute left-[73%] top-[25%] flex flex-col items-center">
+          <span className="text-xs font-bold text-white tracking-wider font-display drop-shadow opacity-90">
+            #06 ĐỘ MIXI
+          </span>
+        </div>
+        <div className="absolute right-[4%] top-[34%] flex flex-col items-center">
+          <span className="text-xs font-bold text-white tracking-wider font-display drop-shadow opacity-85">
+            #07 MẶT NẠ VÀNG
+          </span>
+        </div>
+      </div>
+
+      {/* 3. TOP BAR: TURN INFO & COUNTDOWN TIMER & CAMERA TOGGLE */}
+      <header className="absolute top-3 inset-x-0 z-30 flex justify-center pointer-events-none px-6">
+        <div className="flex items-center gap-3 pointer-events-auto bg-black/75 backdrop-blur-md px-4 py-1.5 rounded-full border border-white/10 shadow-2xl">
+          <div className="flex items-center gap-2 pr-3 border-r border-white/10">
+            <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
+            <span className="text-xs font-bold text-red-400 font-display uppercase tracking-wider">
+              {room.phase.replace(/_/g, ' ')}
+            </span>
+            <span className="text-lg font-black font-display text-red-500 neon-text-red leading-none">
+              {formatTimer(remainingSeconds)}
+              <span className="text-[10px] text-red-300 ml-0.5">s</span>
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-red-950/60 border border-red-500/40 text-[11px] font-mono text-red-200">
+            <span className="text-amber-400 font-bold">#02 LordVader:</span>
+            <span className="font-black text-amber-300">3/5 Phiếu</span>
+          </div>
+
+          {/* POV Camera Controls */}
+          <div className="flex items-center gap-1.5 pl-2 border-l border-white/10">
+            <div className="flex items-center gap-1 bg-zinc-900/80 p-0.5 rounded-full border border-white/10">
+              <button
+                type="button"
+                onClick={() => setIsPov2(false)}
+                className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold font-display uppercase tracking-wider transition ${
+                  !isPov2
+                    ? 'bg-gradient-to-r from-red-600 to-rose-700 text-white shadow-[0_0_10px_rgba(220,38,38,0.7)] border border-red-400'
+                    : 'text-gray-400 hover:text-white hover:bg-zinc-800'
+                }`}
+              >
+                1ST
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsPov2(true)}
+                className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold font-display uppercase tracking-wider transition ${
+                  isPov2
+                    ? 'bg-gradient-to-r from-red-600 to-rose-700 text-white shadow-[0_0_10px_rgba(220,38,38,0.7)] border border-red-400'
+                    : 'text-gray-400 hover:text-white hover:bg-zinc-800'
+                }`}
+              >
+                2ND
+              </button>
             </div>
-
-            <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginBottom: 16 }}>
-              <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 4, backgroundColor: 'rgba(255,255,255,0.08)', color: 'var(--text-muted)' }}>
-                Phe: {me.team}
-              </span>
-              <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 4, backgroundColor: 'rgba(255,255,255,0.08)', color: 'var(--text-muted)' }}>
-                Nhóm: {ALL_ROLES_FROM_PDF[me.role]?.category}
-              </span>
-            </div>
-
-            <p style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.6, marginBottom: 24 }}>
-              {ALL_ROLES_FROM_PDF[me.role]?.description || 'Sử dụng kỹ năng để mang lại chiến thắng cho phe của bạn.'}
-            </p>
-
-            <button
-              onClick={() => setShowRoleModal(false)}
-              style={{
-                width: '100%',
-                padding: '10px 16px',
-                borderRadius: 'var(--radius-sm)',
-                backgroundColor: 'var(--surface-container-high)',
-                color: '#fff',
-                border: '1px solid rgba(255, 255, 255, 0.15)',
-                fontFamily: 'var(--font-headline)',
-                fontSize: 13,
-                fontWeight: 700,
-                cursor: 'pointer',
-              }}
-            >
-              ĐÓNG THẺ BÀI
-            </button>
+            <kbd className="px-1.5 py-0.5 bg-black/60 rounded text-[9px] font-mono text-amber-300 border border-white/10">
+              [V]
+            </kbd>
           </div>
         </div>
-      )}
+      </header>
+
+      {/* 4. STREAMER WEBCAM & VOICE INDICATOR (TOP LEFT) */}
+      <aside className="absolute top-3 left-4 z-30 flex items-center gap-2 pointer-events-auto">
+        <div className="flex items-center gap-2.5 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 shadow-lg">
+          <div className="relative w-8 h-8 rounded-full border border-amber-400/80 bg-zinc-800 flex items-center justify-center text-sm shadow">
+            <span>🧔🏻‍♂️</span>
+            <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-red-500 rounded-full border border-black animate-pulse" />
+          </div>
+          <div className="flex flex-col">
+            <span className="text-[11px] font-bold text-amber-300 font-display leading-tight">
+              {myNickname}
+            </span>
+            <div className="flex items-center gap-1 text-[9px] font-mono text-emerald-400">
+              <span className="w-1 h-2 bg-emerald-400 rounded-full eq-bar-1" />
+              <span className="w-1 h-3 bg-emerald-400 rounded-full eq-bar-2" />
+              <span>MIC ON</span>
+            </div>
+          </div>
+        </div>
+
+        <button
+          onClick={() => (window.location.href = '/')}
+          className="px-2.5 py-1.5 rounded-full bg-black/60 backdrop-blur-md border border-white/10 text-slate-300 hover:text-white text-[11px] font-mono flex items-center gap-1"
+        >
+          <span className="material-symbols-outlined text-[14px]">logout</span>
+          <span>Rời Bàn</span>
+        </button>
+      </aside>
+
+      {/* 5. LEFT HUD: SEAT STATUS ROSTER */}
+      <aside className="absolute left-4 bottom-24 z-30 w-44 flex flex-col gap-1">
+        <div className="bg-black/60 backdrop-blur-md p-2.5 rounded-xl border border-white/10 shadow-lg">
+          <div className="text-[9px] font-mono uppercase tracking-wider text-gray-400 mb-1 flex items-center justify-between pb-1 border-b border-white/10">
+            <span className="font-bold">BÀN CHƠI</span>
+            <span className="text-emerald-400 font-bold">6/8 SỐNG</span>
+          </div>
+          <div className="space-y-1 text-[10px]">
+            <div className="flex justify-between px-1.5 py-0.5 rounded text-gray-300">
+              <span>#1 Bác Sĩ</span>
+              <span className="text-emerald-400 font-bold">Sống</span>
+            </div>
+            <div className="flex justify-between px-1.5 py-0.5 rounded bg-red-950/70 border border-red-500/50 text-red-200 font-bold animate-pulse">
+              <span>#2 LordVader</span>
+              <span className="text-red-400 font-mono">3 Phiếu</span>
+            </div>
+            <div className="flex justify-between px-1.5 py-0.5 rounded text-gray-300">
+              <span>#3 Xemesis</span>
+              <span className="text-emerald-400 font-bold">Sống</span>
+            </div>
+            <div className="flex justify-between px-1.5 py-0.5 rounded text-cyan-300">
+              <span>#4 Quản Trò</span>
+              <span className="text-cyan-400">Chủ tọa</span>
+            </div>
+            <div className="flex justify-between px-1.5 py-0.5 rounded text-gray-500 line-through">
+              <span>#5 PewPew</span>
+              <span className="text-red-500">Chết</span>
+            </div>
+            <div className="flex justify-between px-1.5 py-0.5 rounded text-gray-300">
+              <span>#6 Độ Mixi</span>
+              <span className="text-emerald-400 font-bold">Sống</span>
+            </div>
+            <div className="flex justify-between px-1.5 py-0.5 rounded text-gray-300">
+              <span>#7 Mặt Nạ</span>
+              <span className="text-emerald-400 font-bold">Sống</span>
+            </div>
+            <div className="flex justify-between px-1.5 py-0.5 rounded bg-emerald-950/70 border border-emerald-400/50 text-emerald-200 font-bold">
+              <span>#8 Bạn</span>
+              <span className="text-amber-300 font-bold">Lượt bạn</span>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      {/* 6. RIGHT HUD: COMBAT / TRIAL LOG & CHAT STREAM */}
+      <aside className="absolute top-3 right-4 z-30 flex flex-col w-72 pointer-events-auto gap-2">
+        <div className="bg-black/60 backdrop-blur-md p-3 rounded-xl border border-white/10 shadow-lg">
+          <div className="flex items-center justify-between pb-1.5 border-b border-white/10 mb-2">
+            <span className="text-[11px] font-bold text-amber-400 font-display tracking-wider">NHẬT KÝ BÀN ĐẤU</span>
+            <span className="text-[9px] font-mono text-emerald-400 bg-emerald-950/80 px-1.5 py-0.2 rounded border border-emerald-500/40">
+              LIVE
+            </span>
+          </div>
+          <div className="space-y-1.5 text-xs text-gray-300 font-sans max-h-36 overflow-y-auto pr-1">
+            <div className="border-l-2 border-red-500 pl-2 text-[11px]">
+              <span className="text-red-400 font-semibold">#06 Độ Mixi:</span> Cáo buộc #02 LordVader có biểu hiện mờ ám.
+            </div>
+            <div className="border-l-2 border-amber-500 pl-2 text-[11px]">
+              <span className="text-amber-300 font-semibold">#02 LordVader:</span> "Tôi là Dân làng lương thiện!"
+            </div>
+            <div className="border-l-2 border-red-500 pl-2 text-[11px] text-red-200 font-bold">
+              #02 LordVader đang có 3 phiếu kết tội.
+            </div>
+          </div>
+        </div>
+
+        {/* In-Game Live Chat Box */}
+        <div className="bg-black/70 backdrop-blur-md p-3 rounded-xl border border-white/10 shadow-lg flex flex-col h-56 justify-between">
+          <div className="flex items-center gap-1 border-b border-white/10 pb-1 mb-1">
+            {(['public', 'wolves', 'lovers', 'dead'] as ChatChannel[]).map((ch) => (
+              <button
+                key={ch}
+                onClick={() => store.setActiveChatChannel(ch)}
+                className={`flex-1 py-0.5 rounded text-[10px] font-mono uppercase font-bold transition-colors ${
+                  state.activeChatChannel === ch
+                    ? 'bg-red-950 text-red-300 border border-red-500/40'
+                    : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                {ch === 'public' ? 'Làng' : ch === 'wolves' ? 'Sói' : ch === 'lovers' ? 'Đôi' : 'Ma'}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex-1 overflow-y-auto space-y-1 text-[11px] pr-1">
+            {(state.chatMessages[state.activeChatChannel] || []).map((msg) => (
+              <div key={msg.id} className="text-slate-300">
+                <span className="text-amber-300 font-mono font-bold mr-1">
+                  {msg.senderNickname || msg.senderId}:
+                </span>
+                <span>{msg.text}</span>
+              </div>
+            ))}
+          </div>
+
+          <form onSubmit={handleSendChat} className="flex gap-1 pt-1.5 border-t border-white/10">
+            <input
+              type="text"
+              value={chatInput}
+              onChange={(e) => setChatInput(e.target.value)}
+              placeholder="Nói gì đó..."
+              className="flex-1 bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-red-500"
+            />
+            <button
+              type="submit"
+              className="px-2 py-1 bg-red-800 hover:bg-red-700 text-white text-xs rounded font-mono"
+            >
+              Gửi
+            </button>
+          </form>
+        </div>
+      </aside>
+
+      {/* 7. BOTTOM POV CARDS & PLAYER HAND (FANNED OUT) */}
+      <section className="absolute bottom-16 inset-x-0 z-20 flex justify-center items-end pointer-events-auto">
+        <div className="flex flex-col items-center pointer-events-auto select-none relative">
+          <div className="werewolf-card-fan flex items-end justify-center mb-1 -space-x-8 pointer-events-auto">
+            {/* Card 1: Tiên Tri */}
+            <div
+              onClick={() => setSelectedActionIndex(0)}
+              className="werewolf-tarot-card werewolf-card-back border border-amber-500/80 p-1.5 flex flex-col justify-between items-center text-center cursor-pointer shadow-2xl rotate-[-15deg] -translate-y-1 hover:border-amber-300 bg-gradient-to-b from-stone-900 via-zinc-950 to-black"
+            >
+              <div className="w-full flex justify-between items-center px-1 text-[8px] font-mono text-amber-400/80">
+                <span>✦</span>
+                <span className="tracking-wider">VILLAGE</span>
+                <span>✦</span>
+              </div>
+              <div className="flex flex-col items-center my-auto">
+                <span className="text-3xl filter drop-shadow-[0_0_8px_rgba(245,158,11,0.7)]">🔮</span>
+                <span className="text-[9px] font-black font-display text-amber-300 tracking-wider mt-1">TIÊN TRI</span>
+                <span className="text-[7px] text-gray-400 font-mono scale-90">SOI ĐÊM NAY</span>
+              </div>
+              <div className="w-full text-center pb-0.5 text-[7px] text-amber-500 font-mono border-t border-amber-500/30">
+                BẢO VỆ LÀNG
+              </div>
+            </div>
+
+            {/* Card 2: Treo Cổ */}
+            <div
+              onClick={() => setSelectedActionIndex(1)}
+              className="werewolf-tarot-card werewolf-card-back border border-red-500/90 p-1.5 flex flex-col justify-between items-center text-center cursor-pointer shadow-2xl rotate-[-5deg] -translate-y-4 hover:border-red-400 bg-gradient-to-b from-red-950 via-zinc-950 to-black"
+            >
+              <div className="w-full flex justify-between items-center px-1 text-[8px] font-mono text-red-400">
+                <span>☠</span>
+                <span className="tracking-wider">TÒA ÁN</span>
+                <span>☠</span>
+              </div>
+              <div className="flex flex-col items-center my-auto">
+                <span className="text-3xl filter drop-shadow-[0_0_10px_rgba(220,38,38,0.9)]">🪢</span>
+                <span className="text-[9px] font-black font-display text-red-200 tracking-wider mt-1">TREO CỔ</span>
+                <span className="text-[7px] text-red-400 font-mono">#02 LORDVADER</span>
+              </div>
+              <div className="w-full text-center pb-0.5 text-[7px] text-red-400 font-mono border-t border-red-500/30">
+                3/5 PHIẾU TỘI
+              </div>
+            </div>
+
+            {/* Card 3: Dân Làng */}
+            <div
+              onClick={() => setSelectedActionIndex(2)}
+              className="werewolf-tarot-card werewolf-card-back border border-amber-400/90 p-1.5 flex flex-col justify-between items-center text-center cursor-pointer shadow-2xl rotate-[5deg] -translate-y-4 hover:border-yellow-300 bg-gradient-to-b from-amber-950 via-zinc-950 to-black"
+            >
+              <div className="w-full flex justify-between items-center px-1 text-[8px] font-mono text-amber-400">
+                <span>🌕</span>
+                <span className="tracking-wider">VAI TRÒ</span>
+                <span>🌕</span>
+              </div>
+              <div className="flex flex-col items-center my-auto">
+                <span className="text-3xl filter drop-shadow-[0_0_10px_rgba(245,158,11,0.8)]">👨‍🌾</span>
+                <span className="text-[9px] font-black font-display text-amber-300 tracking-wider mt-1">DÂN LÀNG</span>
+                <span className="text-[7px] text-emerald-400 font-mono">LƯƠNG THIỆN</span>
+              </div>
+              <div className="w-full text-center pb-0.5 text-[7px] text-amber-400 font-mono border-t border-amber-500/30">
+                BẦU CHỌN TREO
+              </div>
+            </div>
+
+            {/* Card 4: Phiếu Trắng */}
+            <div
+              onClick={() => setSelectedActionIndex(3)}
+              className="werewolf-tarot-card werewolf-card-back border border-zinc-600 p-1.5 flex flex-col justify-between items-center text-center cursor-pointer shadow-2xl rotate-[15deg] -translate-y-1 hover:border-zinc-400 bg-gradient-to-b from-zinc-900 via-zinc-950 to-black"
+            >
+              <div className="w-full flex justify-between items-center px-1 text-[8px] font-mono text-gray-400">
+                <span>⚖</span>
+                <span className="tracking-wider">BỎ PHIẾU</span>
+                <span>⚖</span>
+              </div>
+              <div className="flex flex-col items-center my-auto">
+                <span className="text-3xl filter drop-shadow">🕊️</span>
+                <span className="text-[9px] font-black font-display text-gray-200 tracking-wider mt-1">PHIẾU TRẮNG</span>
+                <span className="text-[7px] text-gray-400 font-mono">TRUNG LẬP</span>
+              </div>
+              <div className="w-full text-center pb-0.5 text-[7px] text-gray-400 font-mono border-t border-zinc-700/60">
+                KHÔNG KẾT TỘI
+              </div>
+            </div>
+          </div>
+
+          {/* Quick Action Badges */}
+          <div className="flex items-center justify-center gap-2 mt-1">
+            <div
+              onClick={() => setSelectedActionIndex(0)}
+              className="hand-card-skew px-3 py-1.5 rounded-lg bg-black/80 backdrop-blur-md border border-amber-400/80 text-amber-300 flex items-center gap-2 cursor-pointer shadow-lg hover:border-yellow-300"
+            >
+              <span className="text-base">👨‍🌾</span>
+              <div className="text-left leading-tight">
+                <div className="text-[10px] font-extrabold font-display">DÂN LÀNG / TIÊN TRI</div>
+                <div className="text-[8px] text-amber-200/80">Tìm diệt Ma Sói trong làng</div>
+              </div>
+            </div>
+
+            <div
+              onClick={() => {
+                setSelectedActionIndex(1);
+                onEmitAction('day:vote', { targetId: '#02_LORDVADER' });
+              }}
+              className="hand-card-skew px-3 py-1.5 rounded-lg bg-red-950/90 backdrop-blur-md border border-red-500 text-red-200 flex items-center gap-2 cursor-pointer shadow-[0_0_15px_rgba(220,38,38,0.5)] -translate-y-1 hover:border-red-400"
+            >
+              <span className="text-base">🪢</span>
+              <div className="text-left leading-tight">
+                <div className="text-[10px] font-black font-display text-white">TREO CỔ #02 LORDVADER</div>
+                <div className="text-[8px] text-red-300">Phiếu phán quyết (3/5)</div>
+              </div>
+            </div>
+
+            <div
+              onClick={() => {
+                setSelectedActionIndex(3);
+                onEmitAction('day:vote', { targetId: 'SKIP' });
+              }}
+              className="hand-card-skew px-3 py-1.5 rounded-lg bg-black/80 backdrop-blur-md border border-zinc-600 text-gray-300 flex items-center gap-2 cursor-pointer shadow-lg hover:border-zinc-400"
+            >
+              <span className="text-base">🕊️</span>
+              <div className="text-left leading-tight">
+                <div className="text-[10px] font-bold font-display">BỎ PHIẾU TRẮNG</div>
+                <div className="text-[8px] text-gray-400">Từ chối treo cổ</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* 8. BOTTOM ACTION CONTROLLER BAR */}
+      <footer className="absolute bottom-3 inset-x-0 z-30 flex justify-center px-4">
+        <div className="bg-black/85 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/15 shadow-2xl flex items-center gap-2 max-w-xl w-full justify-between">
+          <button
+            type="button"
+            onClick={() => onEmitAction('day:vote', { targetId: '#02_LORDVADER' })}
+            className="flex-1 bg-red-950/80 hover:bg-red-900 border border-red-600/80 text-white rounded-lg px-3 py-1.5 flex items-center justify-between text-xs font-bold transition shadow-[0_0_10px_rgba(220,38,38,0.4)]"
+          >
+            <span className="flex items-center gap-1.5 font-display">
+              <span>🪢</span> Bỏ phiếu Treo cổ #02
+            </span>
+            <kbd className="px-1 py-0.2 bg-black/60 rounded text-[9px] font-mono text-gray-300 border border-white/10">
+              [1]
+            </kbd>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onEmitAction('day:debate', { message: 'Tôi kháng cáo!' })}
+            className="flex-1 bg-gradient-to-r from-red-600 to-rose-700 hover:from-red-500 hover:to-rose-600 text-white rounded-lg px-3 py-1.5 flex items-center justify-between text-xs font-black shadow-[0_0_15px_rgba(220,38,38,0.7)] border border-red-400 transition animate-glowBeat"
+          >
+            <span className="flex items-center gap-1.5 font-display">
+              <span>🗣️</span> Tranh luận / Bào chữa
+            </span>
+            <kbd className="px-1 py-0.2 bg-black/40 rounded text-[9px] font-mono text-red-200 border border-red-300/40">
+              [E]
+            </kbd>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onEmitAction('day:vote', { targetId: 'SKIP' })}
+            className="flex-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-gray-300 hover:text-white rounded-lg px-3 py-1.5 flex items-center justify-between text-xs font-bold transition"
+          >
+            <span className="flex items-center gap-1.5 font-display">
+              <span>🕊️</span> Bỏ phiếu trắng
+            </span>
+            <kbd className="px-1 py-0.2 bg-black/60 rounded text-[9px] font-mono text-gray-400 border border-white/10">
+              [SPACE]
+            </kbd>
+          </button>
+        </div>
+      </footer>
     </div>
   );
 };

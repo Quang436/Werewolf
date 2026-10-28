@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
+    "dev": "tsx watch src/main.ts",
     "build": "tsc",
     "test": "tsx --test src/**/__tests__/*.spec.ts",
     "prisma:generate": "prisma generate",

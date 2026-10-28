@@ -36,9 +36,12 @@ export default function GameRoomPage() {
     if (code === 'NEW') {
       // Tạo phòng mới
       emitAction('room:create', {}).then((res) => {
-        if (res.ok && res.data?.code) {
-          router.replace(`/game/${res.data.code}`);
-        } else if (!res.ok) {
+        if (res.ok) {
+          const roomCode = (res as any).data?.code;
+          if (roomCode) {
+            router.replace(`/game/${roomCode}`);
+          }
+        } else {
           setInitError(res.error.message);
         }
       });

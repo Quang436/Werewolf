@@ -7,7 +7,11 @@
     "apps/*"
   ],
   "scripts": {
-    "test": "npm --prefix packages/shared test"
+    "dev": "npm --prefix apps/web run dev",
+    "dev:web": "npm --prefix apps/web run dev",
+    "dev:server": "npm --prefix apps/server run dev",
+    "build:web": "npm --prefix apps/web run build",
+    "test": "tsx --test packages/shared/src/engine/__tests__/*.spec.ts apps/server/src/game/__tests__/*.spec.ts"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",

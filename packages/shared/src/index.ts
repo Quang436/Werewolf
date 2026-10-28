@@ -150,6 +150,7 @@ export const ConnectionStatus = z.enum(['ONLINE', 'DISCONNECTED', 'LEFT']);
 export const DeathCause = z.enum(['WOLF', 'POISON', 'EXECUTION', 'HUNTER', 'HEARTBREAK', 'LEFT']);
 export type DeathCause = z.infer<typeof DeathCause>;
 export const ChatChannel = z.enum(['public', 'wolves', 'lovers', 'dead']);
+export type ChatChannel = z.infer<typeof ChatChannel>;
 export const Verdict = z.enum(['GUILTY', 'INNOCENT']);
 export const SKIP = 'SKIP' as const;
 

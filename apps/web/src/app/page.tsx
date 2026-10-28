@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { AuthClient, UserProfile } from '../services/auth.client';
 
 export default function HomePage() {
   const router = useRouter();
@@ -17,6 +18,15 @@ export default function HomePage() {
   const [quickCodeInput, setQuickCodeInput] = useState('');
   const [nickname, setNickname] = useState('');
   const [showJoinModal, setShowJoinModal] = useState(false);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+
+  useEffect(() => {
+    const session = AuthClient.getCurrentSession();
+    if (session.user) {
+      setUserProfile(session.user);
+      setNickname(session.user.nickname);
+    }
+  }, []);
 
   const roomsList = [
     { code: 'ROOM-1', name: 'Làng Ma Sói #1842', mode: 'Xếp Hạng', players: '6/8', host: 'Dạ Thần', ping: '18ms', type: 'ranked' },
@@ -112,17 +122,23 @@ export default function HomePage() {
             <div className="hidden 2xl:flex items-center gap-3 px-3 py-1 rounded bg-[#171b26] border border-[#334155]/30">
               <div className="flex items-center gap-1.5" title="Bạc">
                 <span className="material-symbols-outlined text-[18px] text-slate-400">monetization_on</span>
-                <span className="font-space text-xs text-white">142,850</span>
+                <span className="font-space text-xs text-white">
+                  {(userProfile?.silverCoins ?? 24500).toLocaleString('vi-VN')}
+                </span>
               </div>
               <div className="w-px h-3.5 bg-slate-600/40" />
               <div className="flex items-center gap-1.5" title="Vàng">
                 <span className="material-symbols-outlined text-[18px] text-amber-400">stars</span>
-                <span className="font-space text-xs text-white">3,240</span>
+                <span className="font-space text-xs text-white">
+                  {(userProfile?.goldGems ?? 850).toLocaleString('vi-VN')}
+                </span>
               </div>
               <div className="w-px h-3.5 bg-slate-600/40" />
               <div className="flex items-center gap-1.5" title="Huyết Tinh">
                 <span className="material-symbols-outlined text-[18px] text-red-500 animate-pulse">bloodtype</span>
-                <span className="font-space text-xs text-red-400 font-bold">850</span>
+                <span className="font-space text-xs text-red-400 font-bold">
+                  {(userProfile?.bloodCrystals ?? 120).toLocaleString('vi-VN')}
+                </span>
               </div>
             </div>
 
@@ -131,21 +147,28 @@ export default function HomePage() {
               <div className="hidden md:flex flex-col text-right">
                 <div className="flex items-center justify-end gap-1.5">
                   <span className="px-1.5 py-0.2 rounded bg-purple-950 text-purple-300 font-space text-[10px] font-bold">
-                    CẤP 38
+                    CẤP {userProfile?.level ?? 42}
                   </span>
-                  <span className="font-space text-xs text-white tracking-wide font-bold">Huyết Ảnh</span>
+                  <span className="font-space text-xs text-white tracking-wide font-bold">
+                    {userProfile?.nickname ?? 'Huyết Ảnh'}
+                  </span>
                 </div>
-                <span className="font-geist text-[11px] text-slate-400">Thợ Săn Huyền Thoại</span>
+                <span className="font-geist text-[11px] text-slate-400">
+                  {userProfile?.rankTitle ?? 'Thợ Săn Huyền Thoại'}
+                </span>
               </div>
               <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-[#00354a] font-bold shadow">
                 <span className="material-symbols-outlined text-[18px]">person</span>
               </div>
               <button
-                onClick={() => router.push('/auth')}
+                onClick={() => {
+                  AuthClient.logout();
+                  router.push('/auth');
+                }}
                 className="w-8 h-8 rounded bg-[#262a35] hover:bg-[#353944] flex items-center justify-center text-slate-300 hover:text-white transition-colors"
-                title="Tài khoản / Đăng xuất"
+                title="Đổi Tài Khoản / Đăng Xuất"
               >
-                <span className="material-symbols-outlined text-[18px]">settings</span>
+                <span className="material-symbols-outlined text-[18px]">logout</span>
               </button>
             </div>
           </div>
@@ -379,17 +402,27 @@ export default function HomePage() {
               <div className="grid grid-cols-3 gap-2 py-1 text-center z-10">
                 <div className="p-2.5 rounded-lg bg-[#1c1f2a] border border-[#334155]/20">
                   <span className="font-space text-[10px] uppercase text-slate-400 block font-semibold">Trận Đấu</span>
-                  <span className="font-syne text-lg text-white font-bold">200</span>
-                  <span className="font-geist text-[10px] text-primary block mt-0.5 font-medium">142 Thắng</span>
+                  <span className="font-syne text-lg text-white font-bold">
+                    {userProfile?.gamesPlayed ?? 142}
+                  </span>
+                  <span className="font-geist text-[10px] text-primary block mt-0.5 font-medium">
+                    {userProfile?.totalWins ?? 98} Thắng
+                  </span>
                 </div>
                 <div className="p-2.5 rounded-lg bg-[#1c1f2a] border border-[#334155]/20">
                   <span className="font-space text-[10px] uppercase text-slate-400 block font-semibold">Tỉ Lệ Thắng</span>
-                  <span className="font-syne text-lg text-red-400 font-bold">71.0%</span>
-                  <span className="font-geist text-[10px] text-red-300 block mt-0.5 font-medium">Cực Chuẩn</span>
+                  <span className="font-syne text-lg text-red-400 font-bold">
+                    {(userProfile?.survivalRate ?? 69.0).toFixed(1)}%
+                  </span>
+                  <span className="font-geist text-[10px] text-red-300 block mt-0.5 font-medium">
+                    {userProfile?.winStreak ? `Chuỗi ${userProfile.winStreak}W` : 'Cực Chuẩn'}
+                  </span>
                 </div>
                 <div className="p-2.5 rounded-lg bg-[#1c1f2a] border border-[#334155]/20">
                   <span className="font-space text-[10px] uppercase text-slate-400 block font-semibold">Tín Nhiệm</span>
-                  <span className="font-syne text-lg text-white font-bold">100</span>
+                  <span className="font-syne text-lg text-white font-bold">
+                    {userProfile?.reputation ?? 100}
+                  </span>
                   <span className="font-geist text-[10px] text-emerald-400 block mt-0.5 font-medium">Tuyệt Đối</span>
                 </div>
               </div>

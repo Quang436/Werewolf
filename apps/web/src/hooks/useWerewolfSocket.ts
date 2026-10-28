@@ -20,6 +20,8 @@ import {
 } from '@werewolf/shared';
 import { GameStateManager } from '../stores/game.store';
 
+import { AuthClient } from '../services/auth.client';
+
 export interface UseWerewolfSocketOptions {
   store: GameStateManager;
   token?: string;
@@ -28,15 +30,22 @@ export interface UseWerewolfSocketOptions {
 
 export function useWerewolfSocket({
   store,
-  token = 'demo_user_token',
+  token,
   serverUrl = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3001',
 }: UseWerewolfSocketOptions) {
   const socketRef = useRef<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
 
   useEffect(() => {
+    const session = AuthClient.getCurrentSession();
+    const effectiveToken = token || session.token || 'guest_token';
+    const nickname = session.user?.nickname || 'Người Làng';
+    const userId = session.user?.id || `usr_${Date.now().toString(36)}`;
+    const avatarUrl = session.user?.avatarUrl || null;
+
     const socket = io(`${serverUrl}/game`, {
-      auth: { token },
+      auth: { token: effectiveToken },
+      query: { nickname, userId, avatarUrl },
       transports: ['websocket', 'polling'],
       reconnectionAttempts: 10,
       reconnectionDelay: 1000,

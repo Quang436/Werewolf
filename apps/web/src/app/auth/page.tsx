@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { AuthClient } from '../../services/auth.client';
 
 export default function AuthPage() {
   const router = useRouter();
@@ -11,6 +12,7 @@ export default function AuthPage() {
   const [isAtmosphericOn, setIsAtmosphericOn] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitBtnText, setSubmitBtnText] = useState('BƯỚC VÀO QUÁN RƯỢU');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Form states
   const [loginIdentity, setLoginIdentity] = useState('');
@@ -36,47 +38,60 @@ export default function AuthPage() {
     return () => window.removeEventListener('mousemove', handleMouseMove);
   }, [isAtmosphericOn]);
 
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!loginIdentity.trim()) return;
-
+    setErrorMessage(null);
     setIsSubmitting(true);
     setSubmitBtnText('ĐANG XÁC THỰC LINH HỒN...');
 
-    setTimeout(() => {
+    const res = await AuthClient.login(loginIdentity.trim(), loginPassword);
+    if (res.success) {
       setSubmitBtnText('CHÀO MỪNG THỢ SĂN!');
-      sessionStorage.setItem('werewolf_nickname', loginIdentity.trim());
       setTimeout(() => {
         router.push('/');
-      }, 700);
-    }, 900);
+      }, 500);
+    } else {
+      setIsSubmitting(false);
+      setErrorMessage(res.error || 'Đăng nhập không thành công');
+      setSubmitBtnText('BƯỚC VÀO QUÁN RƯỢU');
+    }
   };
 
-  const handleRegisterSubmit = (e: React.FormEvent) => {
+  const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!regName.trim() || !regEmail.trim() || !regPassword.trim()) return;
+    if (!regName.trim() || !regPassword.trim()) return;
+    if (regPassword !== regConfirmPassword) {
+      setErrorMessage('Mật khẩu nhập lại không khớp!');
+      return;
+    }
 
+    setErrorMessage(null);
     setIsSubmitting(true);
     setSubmitBtnText('ĐANG KHỞI TẠO DANH PHẬN...');
 
-    setTimeout(() => {
+    const res = await AuthClient.register(regName.trim(), regName.trim(), regPassword, regEmail.trim());
+    if (res.success) {
       setSubmitBtnText('GIA NHẬP THÀNH CÔNG!');
-      sessionStorage.setItem('werewolf_nickname', regName.trim());
       setTimeout(() => {
         router.push('/');
-      }, 700);
-    }, 900);
+      }, 500);
+    } else {
+      setIsSubmitting(false);
+      setErrorMessage(res.error || 'Khởi tạo tài khoản thất bại');
+      setSubmitBtnText('TẠO TÀI KHOẢN');
+    }
   };
 
-  const triggerSocialFeedback = (e: React.MouseEvent<HTMLButtonElement>, name: string) => {
+  const triggerSocialFeedback = async (e: React.MouseEvent<HTMLButtonElement>, name: string) => {
     const btn = e.currentTarget;
     const oldText = btn.innerHTML;
     btn.innerHTML = `<span class="material-symbols-outlined text-[16px] animate-spin">refresh</span><span>Đang nối...</span>`;
+    await AuthClient.quickGuest(`Thợ Săn ${name}`);
     setTimeout(() => {
       btn.innerHTML = oldText;
-      sessionStorage.setItem('werewolf_nickname', `Thợ Săn (${name})`);
       router.push('/');
-    }, 900);
+    }, 400);
   };
 
   return (
@@ -309,6 +324,13 @@ export default function AuthPage() {
                   </label>
                   <span className="font-space text-[10px] uppercase text-slate-400">v1.4.2-b</span>
                 </div>
+
+                {errorMessage && (
+                  <div className="p-2.5 rounded bg-red-950/80 border border-red-500/50 text-red-200 text-xs flex items-center gap-2 animate-pulse">
+                    <span className="material-symbols-outlined text-[18px] text-red-400">error</span>
+                    <span>{errorMessage}</span>
+                  </div>
+                )}
 
                 {/* Main Submit CTA */}
                 <button

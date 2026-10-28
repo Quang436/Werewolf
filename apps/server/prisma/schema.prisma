@@ -1,4 +1,4 @@
-// Prisma Schema cho Dự án Game Ma Sói (Werewolf)
+// Prisma Schema cho Dự án Game Ma Sói (Werewolf: Liar's Bar Edition)
 // Cơ sở dữ liệu: PostgreSQL
 
 datasource db {
@@ -10,20 +10,67 @@ generator client {
   provider = "prisma-client-js"
 }
 
+// Danh sách 40 vai trò hoàn chỉnh của Game Ma Sói
 enum RoleType {
-  WEREWOLF
+  // 1. Phe Dân Làng (21 vai trò)
   VILLAGER
   SEER
+  APPRENTICE_SEER
+  AURA_SEER
   BODYGUARD
-  WITCH
-  HUNTER
   CUPID
+  DISEASED
+  HUNTER
+  IDIOT
+  LYCAN
+  MASON
+  MAYOR
+  OLD_HAG
+  PACIFIST
+  PI
+  PRIEST
+  PRINCE
+  SPELLCASTER
+  TOUGH_GUY
+  TROUBLE_MAKER
+  WITCH
+
+  // 2. Phe Ma Sói (5 vai trò)
+  WEREWOLF
+  MINION
+  SORCERESS
+  LONE_WOLF
+  WOLF_CUB
+
+  // 3. Đổi phe & Trung lập (3 vai trò)
+  CURSED
+  DOPPELGANGER
+  DRUNK
+
+  // 4. Phe Biệt Lập / Thứ Ba (4 vai trò)
+  CULT_LEADER
+  HOODLUM
+  TANNER
+  VAMPIRE
+
+  // 5. Bản Mở Rộng Wolfpack (6 vai trò)
+  BIG_BAD_WOLF
+  DIRE_WOLF
+  FRUIT_WOLF
+  FANG_FACE
+  WOLVERINE
+  VIRGINIA_WOOLF
 }
 
 enum TeamType {
   WEREWOLF
   VILLAGE
   LOVERS
+  VAMPIRE
+  TANNER
+  CULT_LEADER
+  HOODLUM
+  LONE_WOLF
 }
 
 enum DeathCauseType {
@@ -35,6 +82,13 @@ enum DeathCauseType {
   LEFT
 }
 
+enum GameModeType {
+  CASUAL
+  RANKED
+  HIGH_ROLLER
+  CUSTOM
+}
+
 model User {
   id           String   @id @default(uuid())
   email        String?  @unique
@@ -42,43 +96,65 @@ model User {
   passwordHash String?
   nickname     String
   avatarUrl    String?
-  elo          Int      @default(1000)
+  bio          String?
   
+  // Xếp hạng & Cấp độ
+  elo          Int      @default(1000)
+  level        Int      @default(1)
+  exp          Int      @default(0)
+  rankTitle    String   @default("Tân Binh Làng Sương")
+  reputation   Int      @default(100)
+
+  // Tiền tệ kinh tế trong game (HUD Quán Rượu Liar's Bar)
+  silverCoins   Int     @default(1000)
+  goldGems      Int     @default(50)
+  bloodCrystals Int     @default(10)
+
+  // Tùy chọn yêu thích
+  favoriteRoles Json?   // Danh sách vai trò người chơi ưu tiên pick
+
   // Thống kê thành tích (Game Stats)
-  gamesPlayed  Int      @default(0)
-  totalWins    Int      @default(0)
-  totalLosses  Int      @default(0)
-  wolfWins     Int      @default(0)
-  villageWins  Int      @default(0)
-  loversWins   Int      @default(0)
+  gamesPlayed   Int     @default(0)
+  totalWins     Int     @default(0)
+  totalLosses   Int     @default(0)
+  wolfWins      Int     @default(0)
+  villageWins   Int     @default(0)
+  loversWins    Int     @default(0)
+  thirdPartyWins Int    @default(0)
+  survivalRate  Float   @default(0.0)
+  winStreak     Int     @default(0)
+  bestWinStreak Int     @default(0)
 
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
-  matchStats   PlayerMatchStat[]
-  hostedRooms  MatchHistory[]
+  matchStats    PlayerMatchStat[]
+  hostedRooms   MatchHistory[]
+  friends       Friendship[]      @relation("UserFriends")
+  friendOf      Friendship[]      @relation("UserFriendOf")
 
   @@map("users")
 }
 
 model MatchHistory {
-  id          String   @id @default(uuid())
+  id          String       @id @default(uuid())
   roomId      String
   roomCode    String
+  mode        GameModeType @default(CASUAL)
   hostId      String?
-  host        User?    @relation(fields: [hostId], references: [id], onDelete: SetNull)
+  host        User?        @relation(fields: [hostId], references: [id], onDelete: SetNull)
   
   winnerTeam  TeamType
-  roundsCount Int      @default(1)
+  roundsCount Int          @default(1)
   playerCount Int
   
   // JSON Snapshot chi tiết toàn bộ ván đấu (Log bảo mật sau khi reveal)
-  gameConfig  Json     // Cấu hình luật phòng đã chơi
-  historyLog  Json     // Toàn bộ diễn biến đêm & ngày
-  playerReveals Json   // Danh sách danh tính thật và kết quả của tất cả người chơi
+  gameConfig    Json       // Cấu hình luật phòng đã chơi
+  historyLog    Json       // Toàn bộ diễn biến đêm & ngày
+  playerReveals Json       // Danh tính thật và kết quả của tất cả người chơi
 
   startedAt   DateTime
-  endedAt     DateTime @default(now())
+  endedAt     DateTime     @default(now())
 
   playerStats PlayerMatchStat[]
 
@@ -102,6 +178,8 @@ model PlayerMatchStat {
 
   // Chỉ số trong trận
   eloChange   Int            @default(0)
+  silverEarned Int           @default(0)
+  expEarned   Int            @default(0)
   scorePoints Int            @default(0)
 
   createdAt   DateTime       @default(now())
@@ -109,4 +187,17 @@ model PlayerMatchStat {
   @@index([matchId])
   @@index([userId])
   @@map("player_match_stats")
+}
+
+model Friendship {
+  id        String   @id @default(uuid())
+  userId    String
+  friendId  String
+  user      User     @relation("UserFriends", fields: [userId], references: [id], onDelete: Cascade)
+  friend    User     @relation("UserFriendOf", fields: [friendId], references: [id], onDelete: Cascade)
+  status    String   @default("ACCEPTED") // PENDING, ACCEPTED, BLOCKED
+  createdAt DateTime @default(now())
+
+  @@unique([userId, friendId])
+  @@map("friendships")
 }

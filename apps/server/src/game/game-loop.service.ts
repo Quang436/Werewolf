@@ -25,6 +25,7 @@ import {
   WinChecker,
 } from '@werewolf/shared';
 import { RedisStoreAdapter } from './game-room.manager';
+import { DatabaseService } from '../db/db.service';
 
 export interface Broadcaster {
   emitToRoom(roomId: string, event: string, payload: unknown): void;
@@ -254,6 +255,9 @@ export class GameLoopService {
           room.winner = winResult.winner;
           room.phase = 'GAME_OVER';
           room.phaseEndsAt = null;
+          this.handleGameOver(room).catch((err) =>
+            console.error('[Database Error] Failed to persist match history:', err)
+          );
         } else {
           // Chưa có phe thắng -> đi tiếp theo ngữ cảnh
           if (room.afterCheckWin === 'DAY') {
@@ -347,5 +351,65 @@ export class GameLoopService {
         },
       });
     }
+  }
+
+  /**
+   * Lưu trữ lịch sử ván đấu và tính toán phần thưởng/elo cho người chơi
+   */
+  public async handleGameOver(room: RoomState): Promise<void> {
+    if (!room.winner) return;
+
+    const db = DatabaseService.getInstance();
+    const playerStats = room.players.map((p) => {
+      const isWin = p.team === room.winner;
+      const eloChange = isWin ? 25 : -18;
+      const silverEarned = isWin ? 180 : 50;
+      const expEarned = isWin ? 90 : 30;
+      const scorePoints = (isWin ? 100 : 20) + (p.isAlive ? 50 : 0);
+
+      return {
+        userId: p.id.startsWith('u_') || p.id.startsWith('usr_') ? p.id : undefined,
+        nickname: p.nickname,
+        role: p.role || 'VILLAGER',
+        team: p.team || 'VILLAGE',
+        isAlive: p.isAlive,
+        deathCause: p.deathInfo?.cause || null,
+        deathRound: p.deathInfo?.round || null,
+        eloChange,
+        silverEarned,
+        expEarned,
+        scorePoints,
+      };
+    });
+
+    const playerReveals = room.players.map((p) => ({
+      id: p.id,
+      nickname: p.nickname,
+      seat: p.seat,
+      role: p.role,
+      team: p.team,
+      isAlive: p.isAlive,
+      deathInfo: p.deathInfo,
+    }));
+
+    await db.saveMatchHistory({
+      roomId: room.id,
+      roomCode: room.code,
+      mode: 'CASUAL',
+      winnerTeam: room.winner,
+      playerCount: room.players.length,
+      roundsCount: room.round,
+      gameConfig: room.settings as any,
+      historyLog: room.history as any,
+      playerReveals: playerReveals as any,
+      playerStats,
+    });
+
+    // Phát sự kiện thông báo game kết thúc kèm bảng điểm vinh danh
+    this.broadcaster.emitToRoom(room.id, 'game:over', {
+      winner: room.winner,
+      players: playerReveals,
+      stats: playerStats,
+    });
   }
 }

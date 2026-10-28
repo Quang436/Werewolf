@@ -586,6 +586,48 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
           </button>
         </div>
       </footer>
+
+      {/* 8. GAME OVER VICTORY / DEFEAT MODAL */}
+      {(room.phase === 'GAME_OVER' || room.winner) && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4">
+          <div className="bg-[#111622] border border-amber-500/50 rounded-2xl p-8 max-w-lg w-full text-center shadow-[0_0_50px_rgba(245,158,11,0.3)] animate-fadeIn">
+            <span className="text-4xl block mb-2">{room.winner === 'WEREWOLF' ? '🐺' : '🏆'}</span>
+            <h2 className="font-syne font-extrabold text-2xl uppercase text-amber-400 tracking-wider">
+              {room.winner === 'WEREWOLF'
+                ? 'PHE MA SÓI THẮNG!'
+                : room.winner === 'VILLAGE'
+                ? 'PHE DÂN LÀNG THẮNG!'
+                : 'TRÒ CHƠI KẾT THÚC!'}
+            </h2>
+            <p className="font-geist text-xs text-slate-300 mt-2">
+              Toàn bộ danh tính đã được hé lộ. Thành tích và phần thưởng đã được cập nhật vào cơ sở dữ liệu!
+            </p>
+
+            <div className="my-6 grid grid-cols-3 gap-2">
+              <div className="bg-[#1a2030] p-3 rounded-xl border border-white/10">
+                <span className="text-[10px] text-slate-400 font-space uppercase block">Điểm Danh Vọng</span>
+                <span className="text-lg font-bold text-emerald-400 font-syne">+25 Elo</span>
+              </div>
+              <div className="bg-[#1a2030] p-3 rounded-xl border border-white/10">
+                <span className="text-[10px] text-slate-400 font-space uppercase block">Tiền Thưởng Bạc</span>
+                <span className="text-lg font-bold text-amber-400 font-syne">+180 Bạc</span>
+              </div>
+              <div className="bg-[#1a2030] p-3 rounded-xl border border-white/10">
+                <span className="text-[10px] text-slate-400 font-space uppercase block">Kinh Nghiệm</span>
+                <span className="text-lg font-bold text-purple-400 font-syne">+90 EXP</span>
+              </div>
+            </div>
+
+            <button
+              onClick={() => (window.location.href = '/')}
+              className="w-full py-3 rounded-xl bg-gradient-to-r from-red-800 to-red-600 hover:from-red-700 hover:to-red-500 text-white font-space font-bold text-xs uppercase tracking-wider shadow-lg shadow-red-950/60 transition-all flex items-center justify-center gap-2"
+            >
+              <span className="material-symbols-outlined text-[18px]">home</span>
+              <span>QUAY VỀ SẢNH CHỜ</span>
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

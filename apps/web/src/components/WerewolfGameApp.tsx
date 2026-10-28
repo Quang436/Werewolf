@@ -104,13 +104,13 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
         room={room}
         isPov2={isPov2}
         setIsPov2={setIsPov2}
-        onAimAtPlayer={(targetId, nickname) => {
+        onAimAtPlayer={(targetId: string, nickname: string) => {
           // Highlight target
         }}
-        onShootPlayer={(targetId, nickname) => {
+        onShootPlayer={(targetId: string, nickname: string) => {
           onEmitAction('day:vote', { targetId });
         }}
-        onPlayCard={(cardName) => {
+        onPlayCard={(cardName: string) => {
           onEmitAction('day:debate', { message: `Tôi ra lá bài: ${cardName}!` });
         }}
       />

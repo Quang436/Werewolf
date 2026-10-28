@@ -49,7 +49,15 @@ export default function GameRoomPage() {
       // Tham gia phòng
       emitAction('room:join', { code }).then((res) => {
         if (!res.ok) {
-          setInitError(res.error.message);
+          // Nếu không vào được phòng -> Tự động tạo bàn mới với mã code này
+          emitAction('room:create', {}).then((createRes) => {
+            if (createRes.ok) {
+              const newCode = (createRes as any).data?.code;
+              if (newCode) router.replace(`/game/${newCode}`);
+            } else {
+              setInitError(res.error.message);
+            }
+          });
         }
       });
     }

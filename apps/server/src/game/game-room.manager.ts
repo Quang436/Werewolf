@@ -179,21 +179,212 @@ export class GameRoomManager {
   }
 
   /**
-   * Tham gia phòng chơi (hoặc Reconnect nếu đã ở trong phòng)
+   * Tạo phòng với mã code định danh cụ thể (dành cho ROOM-1 hoặc code do người dùng chọn)
+   */
+  public async createRoomWithCode(
+    customCode: string,
+    hostUser: { id: string; nickname: string; avatarUrl?: string | null },
+    initialSettings?: Partial<RoomSettings>
+  ): Promise<RoomState> {
+    const code = customCode.toUpperCase();
+    const roomId = `rm_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 6)}`;
+
+    const settings = RoomSettings.parse({
+      roleConfig: {
+        WEREWOLF: 2,
+        SEER: 1,
+        BODYGUARD: 1,
+        HUNTER: 1,
+        CUPID: 1,
+        VILLAGER: 2,
+      },
+      ...initialSettings,
+    });
+
+    const hostPlayer: PlayerState = {
+      id: hostUser.id,
+      seat: 1,
+      nickname: hostUser.nickname,
+      avatarUrl: hostUser.avatarUrl || null,
+      isAlive: true,
+      connection: 'ONLINE',
+      disconnectedAt: null,
+      ready: true,
+      role: null,
+      team: null,
+      loverId: null,
+      deathInfo: null,
+      roleState: {
+        lastProtectedId: null,
+        hasHealPotion: true,
+        hasPoisonPotion: true,
+        seerResults: [],
+        hasShot: false,
+      },
+    };
+
+    const room: RoomState = {
+      id: roomId,
+      code,
+      hostId: hostUser.id,
+      phase: 'LOBBY',
+      stateVersion: 1,
+      round: 0,
+      phaseStartedAt: Date.now(),
+      phaseEndsAt: null,
+      settings,
+      players: [hostPlayer],
+      night: {
+        bodyguardTarget: null,
+        wolfVotes: {},
+        wolfTarget: null,
+        witchSave: false,
+        witchPoisonTarget: null,
+        seerTarget: null,
+      },
+      day: {
+        votes: {},
+        revoteCandidates: null,
+        revoteCount: 0,
+        readyToVote: [],
+        accusedId: null,
+        judgment: {},
+      },
+      lovers: null,
+      pendingTriggers: [],
+      afterCheckWin: 'DAY',
+      history: [],
+      winner: null,
+      createdAt: Date.now(),
+    };
+
+    await this.redis.setRoom(room);
+    await this.redis.setRoomCodeMapping(code, roomId, 7200);
+
+    return room;
+  }
+
+  /**
+   * Tạo bàn cược Liar's Bar hoàn chỉnh với 7 nhân vật đối thủ mẫu quanh bàn tròn
+   */
+  public async createLiarBarRoom(code: string = 'ROOM-1'): Promise<RoomState> {
+    const roomId = `rm_liar_bar_${code.toLowerCase()}`;
+    const opponents = [
+      { id: 'ai_01', seat: 1, nickname: 'Bác Sĩ Mỏ Quạ' },
+      { id: 'ai_02', seat: 2, nickname: 'LordVader' },
+      { id: 'ai_03', seat: 3, nickname: 'Xemesis' },
+      { id: 'ai_04', seat: 4, nickname: 'Quản Trò' },
+      { id: 'ai_05', seat: 5, nickname: 'PewPew' },
+      { id: 'ai_06', seat: 6, nickname: 'Độ Mixi' },
+      { id: 'ai_07', seat: 7, nickname: 'Mặt Nạ Vàng' },
+    ];
+
+    const players: PlayerState[] = opponents.map((op) => ({
+      id: op.id,
+      seat: op.seat,
+      nickname: op.nickname,
+      avatarUrl: null,
+      isAlive: true,
+      connection: 'ONLINE',
+      disconnectedAt: null,
+      ready: true,
+      role: 'VILLAGER' as const,
+      team: 'VILLAGE' as const,
+      loverId: null,
+      deathInfo: null,
+      roleState: {
+        lastProtectedId: null,
+        hasHealPotion: false,
+        hasPoisonPotion: false,
+        seerResults: [],
+        hasShot: false,
+      },
+    }));
+
+    const settings = RoomSettings.parse({
+      minPlayers: 6,
+      maxPlayers: 12,
+      roleConfig: {
+        WEREWOLF: 2,
+        SEER: 1,
+        BODYGUARD: 1,
+        HUNTER: 1,
+        CUPID: 1,
+        VILLAGER: 2,
+      },
+    });
+
+    const room: RoomState = {
+      id: roomId,
+      code: code.toUpperCase(),
+      hostId: 'ai_04',
+      phase: 'DAY_DISCUSSION',
+      stateVersion: 1,
+      round: 1,
+      phaseStartedAt: Date.now(),
+      phaseEndsAt: Date.now() + 120000,
+      settings,
+      players,
+      night: {
+        bodyguardTarget: null,
+        wolfVotes: {},
+        wolfTarget: null,
+        witchSave: false,
+        witchPoisonTarget: null,
+        seerTarget: null,
+      },
+      day: {
+        votes: { ai_01: 'ai_02', ai_03: 'ai_02', ai_06: 'ai_02' },
+        revoteCandidates: null,
+        revoteCount: 0,
+        readyToVote: ['ai_01', 'ai_03', 'ai_06'],
+        accusedId: 'ai_02',
+        judgment: { guilty: 3, innocent: 1 } as any,
+      },
+      lovers: null,
+      pendingTriggers: [],
+      afterCheckWin: 'DAY',
+      history: [],
+      winner: null,
+      createdAt: Date.now(),
+    };
+
+    await this.redis.setRoom(room);
+    await this.redis.setRoomCodeMapping(code.toUpperCase(), roomId, 7200);
+
+    return room;
+  }
+
+  /**
+   * Tham gia phòng chơi (hoặc Tự động tạo phòng nếu chưa có)
    */
   public async joinRoom(
     codeOrId: string,
     user: { id: string; nickname: string; avatarUrl?: string | null }
   ): Promise<{ room: RoomState; isReconnect: boolean }> {
+    const normalizedCode = codeOrId.toUpperCase();
     let roomId = codeOrId;
-    if (codeOrId.length === 6) {
-      const mapped = await this.redis.getRoomIdByCode(codeOrId);
-      if (!mapped) throw new Error('ROOM_NOT_FOUND');
+
+    const mapped = await this.redis.getRoomIdByCode(normalizedCode);
+    if (mapped) {
       roomId = mapped;
+    } else {
+      // Nếu là ROOM-1 hoặc mã bàn Liar's Bar
+      if (normalizedCode === 'ROOM-1' || normalizedCode.startsWith('ROOM')) {
+        const liarRoom = await this.createLiarBarRoom(normalizedCode);
+        roomId = liarRoom.id;
+      } else {
+        // Tự động tạo phòng mới với mã code này
+        const newRoom = await this.createRoomWithCode(normalizedCode, user);
+        return { room: newRoom, isReconnect: false };
+      }
     }
 
     const room = await this.redis.getRoom(roomId);
-    if (!room) throw new Error('ROOM_NOT_FOUND');
+    if (!room) {
+      const fallbackRoom = await this.createLiarBarRoom(normalizedCode);
+      return { room: fallbackRoom, isReconnect: false };
+    }
 
     const existingPlayer = room.players.find((p) => p.id === user.id);
     if (existingPlayer) {
@@ -205,20 +396,14 @@ export class GameRoomManager {
       return { room, isReconnect: true };
     }
 
-    // New Player Join
-    if (room.phase !== 'LOBBY') {
-      throw new Error('GAME_IN_PROGRESS');
-    }
-
-    if (room.players.length >= room.settings.maxPlayers) {
-      throw new Error('ROOM_FULL');
-    }
-
-    // Tìm ghế trống đầu tiên
+    // Ghế cho người chơi mới
     const takenSeats = new Set(room.players.map((p) => p.seat));
-    let nextSeat = 1;
-    while (takenSeats.has(nextSeat)) {
-      nextSeat++;
+    let nextSeat = 8; // Mặc định ghế số 8 là người chơi chính diện POV
+    if (takenSeats.has(nextSeat)) {
+      nextSeat = 1;
+      while (takenSeats.has(nextSeat)) {
+        nextSeat++;
+      }
     }
 
     const newPlayer: PlayerState = {
@@ -229,16 +414,16 @@ export class GameRoomManager {
       isAlive: true,
       connection: 'ONLINE',
       disconnectedAt: null,
-      ready: false,
-      role: null,
-      team: null,
+      ready: true,
+      role: 'SEER', // Vai trò Tiên Tri cho người chơi
+      team: 'VILLAGE',
       loverId: null,
       deathInfo: null,
       roleState: {
         lastProtectedId: null,
         hasHealPotion: true,
         hasPoisonPotion: true,
-        seerResults: [],
+        seerResults: [{ round: 1, targetId: 'ai_02', result: 'WEREWOLF' }],
         hasShot: false,
       },
     };

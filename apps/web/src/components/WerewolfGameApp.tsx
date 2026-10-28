@@ -180,8 +180,14 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
       {/* 4. STREAMER WEBCAM & VOICE INDICATOR (TOP LEFT) */}
       <aside className="absolute top-3 left-4 z-30 flex items-center gap-2 pointer-events-auto">
         <div className="flex items-center gap-2.5 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 shadow-lg">
-          <div className="relative w-8 h-8 rounded-full border border-amber-400/80 bg-zinc-800 flex items-center justify-center text-sm shadow">
-            <span>🧔🏻‍♂️</span>
+          <div className="relative w-8 h-8 rounded-full border border-amber-400/80 bg-zinc-900 overflow-hidden flex items-center justify-center text-sm shadow">
+            <img
+              src={`/assets/characters/${
+                (typeof window !== 'undefined' && localStorage.getItem('werewolf_selected_character')) || 'cowboy'
+              }_idle.png`}
+              alt="Avatar"
+              className="w-full h-full object-cover object-top"
+            />
             <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-red-500 rounded-full border border-black animate-pulse" />
           </div>
           <div className="flex flex-col">

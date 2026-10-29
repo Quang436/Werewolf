@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { ClientRoomView } from '@werewolf/shared';
 
 // ============================================================================
-// 1. TAVERN AUDIO SYNTHESIZER (WEB AUDIO API)
+// 1. TAVERN WEB AUDIO SYNTHESIZER (IMMERSIVE SFX)
 // ============================================================================
 class TavernAudioEngine {
   private ctx: AudioContext | null = null;
@@ -16,6 +16,7 @@ class TavernAudioEngine {
     }
   }
 
+  // Tiếng lên búa súng / cocking
   public playGunCock() {
     this.init();
     if (!this.ctx) return;
@@ -24,8 +25,8 @@ class TavernAudioEngine {
     const gain = this.ctx.createGain();
     osc.type = 'triangle';
     osc.frequency.setValueAtTime(750, now);
-    osc.frequency.exponentialRampToValueAtTime(1500, now + 0.08);
-    gain.gain.setValueAtTime(0.3, now);
+    osc.frequency.exponentialRampToValueAtTime(1550, now + 0.08);
+    gain.gain.setValueAtTime(0.35, now);
     gain.gain.exponentialRampToValueAtTime(0.01, now + 0.12);
     osc.connect(gain);
     gain.connect(this.ctx.destination);
@@ -33,15 +34,16 @@ class TavernAudioEngine {
     osc.stop(now + 0.12);
   }
 
+  // Tiếng xoay ổ đạn 6 lỗ
   public playCylinderSpin() {
     this.init();
     if (!this.ctx) return;
-    for (let i = 0; i < 6; i++) {
-      const t = this.ctx.currentTime + i * 0.045;
+    for (let i = 0; i < 7; i++) {
+      const t = this.ctx.currentTime + i * 0.04;
       const osc = this.ctx.createOscillator();
       const gain = this.ctx.createGain();
       osc.type = 'square';
-      osc.frequency.setValueAtTime(1100 + i * 70, t);
+      osc.frequency.setValueAtTime(1100 + i * 65, t);
       gain.gain.setValueAtTime(0.12, t);
       gain.gain.exponentialRampToValueAtTime(0.01, t + 0.02);
       osc.connect(gain);
@@ -51,11 +53,12 @@ class TavernAudioEngine {
     }
   }
 
+  // Tiếng súng nổ vang rền quán rượu (Gunshot with Tavern Reverb)
   public playGunshot() {
     this.init();
     if (!this.ctx) return;
     const now = this.ctx.currentTime;
-    const bufferSize = this.ctx.sampleRate * 0.5;
+    const bufferSize = this.ctx.sampleRate * 0.6;
     const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
     const data = buffer.getChannelData(0);
     for (let i = 0; i < bufferSize; i++) {
@@ -64,22 +67,24 @@ class TavernAudioEngine {
     const noise = this.ctx.createBufferSource();
     noise.buffer = buffer;
 
+    // Filter trầm nổ lớn
     const filter = this.ctx.createBiquadFilter();
     filter.type = 'lowpass';
-    filter.frequency.setValueAtTime(1200, now);
-    filter.frequency.exponentialRampToValueAtTime(60, now + 0.4);
+    filter.frequency.setValueAtTime(1400, now);
+    filter.frequency.exponentialRampToValueAtTime(50, now + 0.45);
 
     const gain = this.ctx.createGain();
     gain.gain.setValueAtTime(1.0, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.55);
 
     noise.connect(filter);
     filter.connect(gain);
     gain.connect(this.ctx.destination);
     noise.start(now);
-    noise.stop(now + 0.5);
+    noise.stop(now + 0.55);
   }
 
+  // Tiếng lật / ném bài lên thảm nỉ
   public playCardFlip() {
     this.init();
     if (!this.ctx) return;
@@ -87,9 +92,9 @@ class TavernAudioEngine {
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
     osc.type = 'sine';
-    osc.frequency.setValueAtTime(320, now);
-    osc.frequency.exponentialRampToValueAtTime(560, now + 0.06);
-    gain.gain.setValueAtTime(0.25, now);
+    osc.frequency.setValueAtTime(340, now);
+    osc.frequency.exponentialRampToValueAtTime(620, now + 0.06);
+    gain.gain.setValueAtTime(0.28, now);
     gain.gain.exponentialRampToValueAtTime(0.01, now + 0.08);
     osc.connect(gain);
     gain.connect(this.ctx.destination);
@@ -101,81 +106,124 @@ class TavernAudioEngine {
 const tavernAudio = new TavernAudioEngine();
 
 // ============================================================================
-// 2. CHARACTER PRESETS (5 HEROES MATCHING REFERENCE ARTWORK)
+// 2. SPATIAL OPPONENTS CONFIGURATION
 // ============================================================================
-export interface CharacterPreset {
+export interface TableOpponent {
   id: string;
-  name: string;
-  title: string;
+  seatNumber: number;
+  nickname: string;
   roleHint: string;
-  quote: string;
-  idleSprite: string;
-  actionSprite: string;
-  seatPercentX: number;
-  seatPercentY: number;
-  scale: number;
+  isDead: boolean;
+  votes: number;
+  xPercent: number; // Tọa độ X trên ảnh nền (%)
+  yPercent: number; // Tọa độ Y trên ảnh nền (%)
+  dialogue?: string;
 }
 
-export const CHARACTER_PRESETS: CharacterPreset[] = [
+// 7 Đối thủ ngồi quanh bàn cược 8 người trong `liars_bar_bg.png`
+const EIGHT_PLAYER_OPPONENTS: TableOpponent[] = [
   {
-    id: 'cowboy',
-    name: 'Arthur Vance',
-    title: 'Thợ Săn Cao Bồi',
-    roleHint: 'Thiện xạ, phản xạ nhanh và quyết đoán',
-    quote: '"Tôi nhìn thấu từng lá bài và từng kẻ nói dối trong cái quán này."',
-    idleSprite: '/assets/characters/cowboy_idle.png',
-    actionSprite: '/assets/characters/cowboy_action.png',
-    seatPercentX: 18,
-    seatPercentY: 59,
-    scale: 1.05,
+    id: 'p1',
+    seatNumber: 1,
+    nickname: '#01 BÁC SĨ MỎ QUẠ',
+    roleHint: 'Bác Sĩ Dịch Hạch',
+    isDead: false,
+    votes: 0,
+    xPercent: 12,
+    yPercent: 48,
+    dialogue: 'Độc dược hay thuốc giải, tất cả tùy thuộc vào lá bài tiếp theo...',
   },
   {
-    id: 'plague',
-    name: 'Bác Sĩ Dịch Hạch',
-    title: 'Thầy Thuốc Mỏ Quạ',
-    roleHint: 'Bí hiểm, có khả năng cứu rỗi hoặc gieo rắc độc dược',
-    quote: '"Cái chết là phương thuốc duy nhất thanh tẩy sự dối trá."',
-    idleSprite: '/assets/characters/plague_idle.png',
-    actionSprite: '/assets/characters/plague_action.png',
-    seatPercentX: 37,
-    seatPercentY: 54,
-    scale: 0.98,
+    id: 'p2',
+    seatNumber: 2,
+    nickname: '#02 LORDVADER',
+    roleHint: 'Chó Sói Đầu Đàn',
+    isDead: false,
+    votes: 3,
+    xPercent: 27,
+    yPercent: 38,
+    dialogue: 'Tôi là Dân làng lương thiện! Có kẻ đang cố tình gài bẫy tôi!',
   },
   {
-    id: 'dog',
-    name: 'Quý Ngài Beagle',
-    title: 'Trùm Cờ Bạc Đen',
-    roleHint: 'Lão làng, bình tĩnh hút xì gà đọc vị mọi đối thủ',
-    quote: '"Một ván bài đẹp không cần may mắn, chỉ cần đối thủ sơ hở."',
-    idleSprite: '/assets/characters/dog_idle.png',
-    actionSprite: '/assets/characters/dog_action.png',
-    seatPercentX: 59,
-    seatPercentY: 54,
-    scale: 0.94,
+    id: 'p3',
+    seatNumber: 3,
+    nickname: '#03 XEMESIS',
+    roleHint: 'Cáo Lừa Đảo',
+    isDead: false,
+    votes: 0,
+    xPercent: 41,
+    yPercent: 40,
+    dialogue: 'Bài trên tay tôi không nói dối, nhưng đôi mắt các người thì có.',
   },
   {
-    id: 'wolf',
-    name: 'Fenrir Sói Xám',
-    title: 'Ma Sói Khát Máu',
-    roleHint: 'Sát thủ bóng đêm, che giấu thân phận dưới áo choàng rách',
-    quote: '"Khi ánh trăng lên, máu sẽ nhuộm đỏ mặt bàn gỗ này!"',
-    idleSprite: '/assets/characters/wolf_idle.png',
-    actionSprite: '/assets/characters/wolf_action.png',
-    seatPercentX: 74,
-    seatPercentY: 48,
-    scale: 1.02,
+    id: 'p4',
+    seatNumber: 4,
+    nickname: '#04 QUẢN TRÒ (MODERATOR)',
+    roleHint: 'Robot Trọng Tài',
+    isDead: false,
+    votes: 0,
+    xPercent: 53,
+    yPercent: 37,
+    dialogue: 'Thời gian thảo luận sắp kết thúc. Hãy đưa ra phán quyết cuối cùng!',
   },
   {
-    id: 'girl',
-    name: 'Elena Dân Làng',
-    title: 'Thiếu Nữ May Mắn',
-    roleHint: 'Trực giác nhạy bén, cảnh giác với mọi ánh nhìn',
-    quote: '"Làm ơn... tôi chỉ muốn sống sót rời khỏi quán rượu này thôi."',
-    idleSprite: '/assets/characters/girl_idle.png',
-    actionSprite: '/assets/characters/girl_action.png',
-    seatPercentX: 86,
-    seatPercentY: 60,
-    scale: 0.96,
+    id: 'p5',
+    seatNumber: 5,
+    nickname: '#05 PEWPEW',
+    roleHint: 'Kẻ Nổi Loạn (ĐÃ CHẾT)',
+    isDead: true,
+    votes: 0,
+    xPercent: 65,
+    yPercent: 41,
+    dialogue: '...',
+  },
+  {
+    id: 'p6',
+    seatNumber: 6,
+    nickname: '#06 ĐỘ MIXI',
+    roleHint: 'Trùm Heo Rừng',
+    isDead: false,
+    votes: 0,
+    xPercent: 78,
+    yPercent: 37,
+    dialogue: 'Nhìn mặt thằng #02 đi, gian không chịu được! Tôi vote treo cổ nó!',
+  },
+  {
+    id: 'p7',
+    seatNumber: 7,
+    nickname: '#07 MẶT NẠ VÀNG',
+    roleHint: 'Kẻ Giấu Mặt',
+    isDead: false,
+    votes: 0,
+    xPercent: 89,
+    yPercent: 45,
+    dialogue: 'Quán rượu này không có chỗ cho những kẻ ngây thơ.',
+  },
+];
+
+// Showdown 3 người (Tê Giác & Sói Băng Đảng UE5)
+const SHOWDOWN_OPPONENTS: TableOpponent[] = [
+  {
+    id: 'rhino',
+    seatNumber: 1,
+    nickname: '#01 TRÙM TÊ GIÁC',
+    roleHint: 'Tê Giác Mafia Hawaii',
+    isDead: false,
+    votes: 1,
+    xPercent: 43,
+    yPercent: 44,
+    dialogue: 'Hai đứa mày đừng hòng qua mặt tao. Tao có 3 lá Át!',
+  },
+  {
+    id: 'mobster_wolf',
+    seatNumber: 2,
+    nickname: '#02 SÓI BĂNG ĐẢNG',
+    roleHint: 'Sát Thủ Sói Mobster',
+    isDead: false,
+    votes: 2,
+    xPercent: 74,
+    yPercent: 44,
+    dialogue: 'Cứ thử bóp cò đi, xem đứa nào nằm xuống trước!',
   },
 ];
 
@@ -202,56 +250,60 @@ export function LiarsBar3DExperience({
   onSpinChamber,
   onPullRouletteTrigger,
 }: LiarsBar3DProps) {
-  // 1. User Selected Character
-  const [selectedCharId, setSelectedCharId] = useState<string>(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('werewolf_selected_character') || 'cowboy';
-    }
-    return 'cowboy';
-  });
-  const [charSelectOpen, setCharSelectOpen] = useState(false);
+  // 1. Chế độ Bàn Cược: 'eight_player' (Bàn 8 người truyền thống) hoặc 'showdown' (Tê giác & Sói UE5)
+  const [tableScene, setTableScene] = useState<'eight_player' | 'showdown'>('eight_player');
 
-  // 2. Weapon & Targeting States
+  // 2. Góc nhìn Parallax Camera (Tọa độ chuột làm nghiêng tầm mắt 3D thực tế)
+  const [cameraPan, setCameraPan] = useState({ x: 0, y: 0 });
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // 3. Trạng thái Súng & Tác Chiến
   const [isAimingGun, setIsAimingGun] = useState(false);
   const [hoveredTargetId, setHoveredTargetId] = useState<string | null>(null);
   const [revolverFired, setRevolverFired] = useState(false);
+  const [recoilKick, setRecoilKick] = useState(false);
   const [shotTargetId, setShotTargetId] = useState<string | null>(null);
+
+  // 4. Cò Súng Nga (Russian Roulette 1/6)
   const [rouletteOpen, setRouletteOpen] = useState(false);
   const [chamberSlot, setChamberSlot] = useState(1);
   const [bulletLoadedSlot] = useState(() => Math.floor(Math.random() * 6) + 1);
   const [rouletteResult, setRouletteResult] = useState<string | null>(null);
 
-  // 3. Parallax Camera Coordinates (Smooth 2.5D Mouse Look)
-  const [parallax, setParallax] = useState({ x: 0, y: 0 });
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  // 4. Player Cards in Hand
+  // 5. Bài trên tay người chơi (Tarot / Poker Fan)
   const [handCards, setHandCards] = useState([
-    { id: 1, name: 'DÂN LÀNG', type: 'village', icon: '🧑‍🌾' },
-    { id: 2, name: 'TIÊN TRI', type: 'seer', icon: '🔮' },
-    { id: 3, name: 'BẢO VỆ', type: 'guard', icon: '🛡️' },
-    { id: 4, name: 'PHIẾU TRẮNG', type: 'skip', icon: '🕊️' },
-    { id: 5, name: 'QUỶ ÁM', type: 'devil', icon: '🃏' },
+    { id: 1, name: 'TIÊN TRI', sub: 'SOI ĐÊM', type: 'seer', icon: '🔮', desc: 'Tìm diệt Ma Sói trong làng' },
+    { id: 2, name: 'TREO CỔ', sub: '#02 LORDVADER', type: 'verdict', icon: '⚖️', desc: '3/5 Phiếu phán quyết' },
+    { id: 3, name: 'DÂN LÀNG', sub: 'LƯƠNG THIỆN', type: 'village', icon: '🧑‍🌾', desc: 'Bầu chọn treo cổ kẻ ác' },
+    { id: 4, name: 'PHIẾU TRẮNG', sub: 'TRUNG LẬP', type: 'skip', icon: '🕊️', desc: 'Từ chối phán quyết' },
   ]);
-  const [inspectedCard, setInspectedCard] = useState<number | null>(null);
-  const [playedCards, setPlayedCards] = useState<Array<{ id: number; name: string; x: number; y: number; rot: number }>>([]);
+  const [inspectedCardId, setInspectedCardId] = useState<number | null>(null);
 
-  // Active Accused / Target in Room
-  const accusedId = room?.day?.accusedId || null;
+  // 6. Bài đã đánh ra giữa bàn (Placed Cards on Table Felt)
+  const [playedCards, setPlayedCards] = useState<Array<{ id: number; name: string; x: number; y: number; rot: number }>>([
+    { id: 101, name: 'HỘI ĐỒNG MA SÓI', x: -45, y: -15, rot: -8 },
+    { id: 102, name: 'PHÁN QUYẾT TREO CỔ', x: 0, y: -22, rot: 3 },
+    { id: 103, name: 'TIÊN TRI SOI ĐÊM', x: 50, y: -12, rot: 12 },
+  ]);
 
-  // Handle Mouse Parallax
+  // Đối thủ đang active
+  const activeOpponents = tableScene === 'eight_player' ? EIGHT_PLAYER_OPPONENTS : SHOWDOWN_OPPONENTS;
+  const accusedId = room?.day?.accusedId || 'p2'; // Mặc định #02 LordVader đang bị nghi ngờ
+
+  // Xử lý di chuột xoay góc nhìn 3D (FPS Mouse Look Parallax)
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!containerRef.current) return;
     const rect = containerRef.current.getBoundingClientRect();
     const normX = (e.clientX - rect.left) / rect.width - 0.5; // -0.5 -> 0.5
     const normY = (e.clientY - rect.top) / rect.height - 0.5; // -0.5 -> 0.5
-    setParallax({
-      x: normX * 24, // max 24px pan
-      y: normY * 16, // max 16px tilt
+
+    setCameraPan({
+      x: normX * 28, // Max 28px pan ngang
+      y: normY * 18, // Max 18px tilt dọc
     });
   };
 
-  // Keyboard shortcut [R] to toggle gun
+  // Phím tắt [R] giơ / hạ súng
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
@@ -264,34 +316,33 @@ export function LiarsBar3DExperience({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  // Trigger Revolver Shot on a character
-  const handleShootAtTarget = (targetChar: CharacterPreset) => {
+  // Bắn súng vào đối thủ
+  const handleFireAtOpponent = (target: TableOpponent) => {
+    if (target.isDead) return;
+
     tavernAudio.playGunCock();
     setTimeout(() => {
       tavernAudio.playGunshot();
       setRevolverFired(true);
-      setShotTargetId(targetChar.id);
+      setRecoilKick(true);
+      setShotTargetId(target.id);
 
-      setTimeout(() => {
-        setRevolverFired(false);
-      }, 150);
-
-      setTimeout(() => {
-        setShotTargetId(null);
-      }, 800);
+      setTimeout(() => setRevolverFired(false), 90);
+      setTimeout(() => setRecoilKick(false), 240);
+      setTimeout(() => setShotTargetId(null), 1200);
 
       if (onShootPlayer) {
-        onShootPlayer(targetChar.id, targetChar.name);
+        onShootPlayer(target.id, target.nickname);
       }
-    }, 100);
+    }, 80);
   };
 
-  // Play card to table
-  const handlePlayCard = (card: { id: number; name: string }) => {
+  // Đánh bài ra giữa bàn
+  const handlePlayCardToTable = (card: { id: number; name: string }) => {
     tavernAudio.playCardFlip();
-    const randX = (Math.random() - 0.5) * 120;
-    const randY = (Math.random() - 0.5) * 40;
-    const randRot = (Math.random() - 0.5) * 45;
+    const randX = (Math.random() - 0.5) * 80;
+    const randY = (Math.random() - 0.5) * 35;
+    const randRot = (Math.random() - 0.5) * 35;
 
     setPlayedCards((prev) => [
       ...prev,
@@ -300,7 +351,7 @@ export function LiarsBar3DExperience({
     if (onPlayCard) onPlayCard(card.name);
   };
 
-  // Russian Roulette Trigger
+  // Kéo cò súng Nga (Russian Roulette)
   const handlePullRouletteTrigger = () => {
     tavernAudio.playGunCock();
     setTimeout(() => {
@@ -308,213 +359,214 @@ export function LiarsBar3DExperience({
         tavernAudio.playGunshot();
         setRouletteResult('💥 BANG! BẠN ĐÃ TRÚNG ĐẠN!');
         setRevolverFired(true);
-        setTimeout(() => setRevolverFired(false), 200);
+        setRecoilKick(true);
+        setTimeout(() => {
+          setRevolverFired(false);
+          setRecoilKick(false);
+        }, 220);
       } else {
         tavernAudio.playGunCock();
-        setRouletteResult('🕊️ CLICK! Ổ đạn rỗng, bạn an toàn!');
+        setRouletteResult('🕊️ CLICK! Ổ đạn rỗng, bạn may mắn sống sót!');
         setChamberSlot((prev) => (prev % 6) + 1);
       }
-    }, 160);
+    }, 150);
   };
-
-  // Characters shown at the table
-  // In 1ST POV: All characters except your selected one (or all 5 if you want to see the complete artwork circle)
-  // In 2ND POV: All 5 characters seated together around the table!
-  const tableOpponents = useMemo(() => {
-    if (isPov2) return CHARACTER_PRESETS;
-    // In 1st POV, show the other 4 characters sitting opposite you
-    return CHARACTER_PRESETS;
-  }, [isPov2]);
 
   return (
     <div
       ref={containerRef}
       onMouseMove={handleMouseMove}
-      className="relative w-screen h-screen overflow-hidden bg-[#06080d] select-none cursor-default font-geist"
+      className="relative w-screen h-screen overflow-hidden bg-[#05070c] select-none cursor-default font-geist"
     >
-      {/* ==================== 1. TAVERN PARALLAX BACKGROUND (EMPTY TABLE) ==================== */}
+      {/* ==================== 1. FPS 3D VIEWPORT (TABLE & CHARACTERS) ==================== */}
       <div
-        className="absolute inset-0 w-full h-full pointer-events-none transition-transform duration-100 ease-out"
+        className={`absolute inset-0 w-full h-full pointer-events-none transition-transform duration-100 ease-out ${
+          recoilKick ? '-translate-y-6 rotate-1 scale-[1.04]' : ''
+        }`}
         style={{
-          transform: `scale(1.08) translate(${-parallax.x * 0.4}px, ${-parallax.y * 0.4}px)`,
+          transform: `perspective(1000px) rotateX(${cameraPan.y * 0.25}deg) rotateY(${
+            -cameraPan.x * 0.25
+          }deg) scale(${isPov2 ? 1.12 : 1.05}) translate3d(${cameraPan.x * -0.3}px, ${
+            cameraPan.y * -0.2
+          }px, 0)`,
+          transformOrigin: 'center center',
         }}
       >
+        {/* Layer 0: High-Resolution Unreal Engine 5 FPS Table View Scene */}
         <img
-          src="/assets/tavern_bg.jpg"
-          alt="Bàn cược Quán rượu Liar's Bar"
-          className="w-full h-full object-cover object-center filter brightness-[0.95] contrast-[1.08]"
+          src={
+            tableScene === 'eight_player'
+              ? '/assets/liars_bar_bg.png'
+              : '/assets/liars_bar_rhino_wolf.jpg'
+          }
+          alt="Bàn cược Liar's Bar FPS View"
+          className="w-full h-full object-cover object-center filter brightness-[0.96] contrast-[1.12] drop-shadow-2xl"
         />
 
-        {/* Ambient Lantern Glow Pulsing in Center */}
+        {/* Layer 1: Volumetric Swinging Lamp Light Cone */}
         <div
-          className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[500px] rounded-full pointer-events-none"
+          className="absolute top-0 left-1/2 -translate-x-1/2 w-[720px] h-[580px] pointer-events-none rounded-full"
           style={{
             background:
-              'radial-gradient(circle at 50% 25%, rgba(251, 191, 36, 0.28) 0%, rgba(217, 119, 6, 0.12) 40%, transparent 70%)',
-            animation: 'pulse 3.5s ease-in-out infinite alternate',
+              'radial-gradient(circle at 50% 28%, rgba(251, 191, 36, 0.26) 0%, rgba(217, 119, 6, 0.09) 45%, transparent 72%)',
+            animation: 'lampFlicker 4s ease-in-out infinite alternate',
+            transform: `translate(${cameraPan.x * 0.4}px, ${cameraPan.y * 0.3}px)`,
           }}
         />
-      </div>
 
-      {/* ==================== 2. SEATED CHARACTERS WITH REAL GAMEPLAY STATES ==================== */}
-      <div
-        className="absolute inset-0 w-full h-full pointer-events-none"
-        style={{
-          transform: `translate(${-parallax.x * 0.7}px, ${-parallax.y * 0.7}px)`,
-        }}
-      >
-        {tableOpponents.map((char, idx) => {
-          const isTargeted = hoveredTargetId === char.id;
-          const isAccused = accusedId === char.id || (idx === 1 && !accusedId); // #02 LordVader demo
-          const isShot = shotTargetId === char.id;
-          const isMe = char.id === selectedCharId;
+        {/* Dynamic Ceiling Lamp Swing Element */}
+        <div
+          className="absolute top-4 left-1/2 -translate-x-1/2 w-28 h-36 pointer-events-none"
+          style={{
+            transform: `rotate(${Math.sin(Date.now() / 1400) * 2.5 + cameraPan.x * 0.05}deg)`,
+            transformOrigin: 'top center',
+          }}
+        >
+          <div className="w-1 h-16 bg-gradient-to-b from-stone-900 to-amber-700 mx-auto" />
+          <div className="w-16 h-10 rounded-full bg-amber-500/75 blur-md mx-auto" />
+        </div>
 
-          // Switch between Idle Sprite and Action Sprite based on game events
-          const currentSprite =
-            isTargeted && isAimingGun
-              ? char.actionSprite
-              : isAccused
-              ? char.actionSprite
-              : char.idleSprite;
+        {/* Layer 2: Interactive Spatial Opponents Colliders & Status Indicators */}
+        {activeOpponents.map((opp) => {
+          const isTargeted = hoveredTargetId === opp.id;
+          const isAccused = accusedId === opp.id;
+          const isShot = shotTargetId === opp.id;
 
           return (
             <div
-              key={char.id}
+              key={opp.id}
               onClick={() => {
-                setHoveredTargetId(char.id);
+                setHoveredTargetId(opp.id);
                 if (isAimingGun) {
-                  handleShootAtTarget(char);
+                  handleFireAtOpponent(opp);
                 } else if (onAimAtPlayer) {
-                  onAimAtPlayer(char.id, char.name);
+                  onAimAtPlayer(opp.id, opp.nickname);
                 }
               }}
-              onMouseEnter={() => setHoveredTargetId(char.id)}
+              onMouseEnter={() => {
+                setHoveredTargetId(opp.id);
+                tavernAudio.playCardFlip();
+              }}
               onMouseLeave={() => setHoveredTargetId(null)}
-              className="absolute pointer-events-auto cursor-pointer group transition-all duration-300"
+              className="absolute pointer-events-auto cursor-pointer group"
               style={{
-                left: `${char.seatPercentX}%`,
-                top: `${char.seatPercentY}%`,
-                transform: `translate(-50%, -50%) scale(${
-                  char.scale * (isTargeted ? 1.05 : 1) * (isShot ? 0.94 : 1)
-                })`,
-                zIndex: Math.round(char.seatPercentY * 10),
+                left: `${opp.xPercent}%`,
+                top: `${opp.yPercent}%`,
+                transform: 'translate(-50%, -50%)',
+                width: tableScene === 'eight_player' ? '140px' : '220px',
+                height: tableScene === 'eight_player' ? '200px' : '280px',
               }}
             >
-              {/* Target Reticle when Gun is Aimed */}
-              {isAimingGun && isTargeted && (
-                <div className="absolute inset-0 -m-8 border-2 border-dashed border-red-500 rounded-full animate-spin pointer-events-none shadow-[0_0_30px_rgba(239,68,68,0.9)]" />
-              )}
-
-              {/* Shot Blood/Flinch Effect */}
-              {isShot && (
-                <div className="absolute inset-0 bg-red-600/40 rounded-full animate-ping pointer-events-none" />
-              )}
-
-              {/* Character Floating Name & Status Badge */}
+              {/* Highlight Aura when hovered or targeted */}
               <div
-                className={`absolute -top-16 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-xl backdrop-blur-md border text-center transition-all shadow-2xl whitespace-nowrap ${
-                  isAccused
+                className={`absolute inset-0 rounded-3xl transition-all duration-300 ${
+                  isTargeted
+                    ? 'border-2 border-amber-400 bg-amber-500/10 shadow-[0_0_35px_rgba(251,191,36,0.5)] scale-105'
+                    : isAccused
+                    ? 'border border-red-500/80 bg-red-950/20 shadow-[0_0_25px_rgba(239,68,68,0.4)] animate-pulse'
+                    : 'border border-transparent hover:border-white/20'
+                }`}
+              />
+
+              {/* Laser Reticle when Gun is Aimed */}
+              {isAimingGun && isTargeted && !opp.isDead && (
+                <div className="absolute inset-0 -m-6 border-2 border-dashed border-red-500 rounded-full animate-spin pointer-events-none shadow-[0_0_30px_rgba(239,68,68,0.9)]" />
+              )}
+
+              {/* Flinch / Blood Impact Decal when Shot */}
+              {isShot && (
+                <div className="absolute inset-0 flex items-center justify-center animate-ping pointer-events-none">
+                  <div className="w-16 h-16 rounded-full bg-red-600/70 blur-sm" />
+                </div>
+              )}
+
+              {/* Opponent Status Tag (Pinned right above their head) */}
+              <div
+                className={`absolute -top-8 left-1/2 -translate-x-1/2 px-2.5 py-1 rounded-xl backdrop-blur-md border text-center transition-all whitespace-nowrap shadow-2xl ${
+                  opp.isDead
+                    ? 'bg-stone-900/90 border-stone-700 text-stone-500 line-through opacity-75'
+                    : isAccused
                     ? 'bg-red-950/95 border-red-500 text-red-200 animate-pulse shadow-[0_0_20px_rgba(239,68,68,0.8)]'
                     : isTargeted
-                    ? 'bg-amber-950/95 border-amber-400 text-amber-200 scale-110 shadow-[0_0_25px_rgba(251,191,36,0.6)]'
-                    : isMe
-                    ? 'bg-emerald-950/90 border-emerald-400 text-emerald-200'
-                    : 'bg-[#0f141f]/85 border-[#334155]/60 text-slate-200'
+                    ? 'bg-amber-950/95 border-amber-400 text-amber-200 scale-105 shadow-[0_0_25px_rgba(251,191,36,0.6)]'
+                    : 'bg-[#0b0f17]/90 border-white/15 text-slate-200'
                 }`}
               >
                 <div className="flex items-center justify-center gap-1.5">
                   <span
                     className={`w-2 h-2 rounded-full ${
-                      isAccused
+                      opp.isDead
+                        ? 'bg-stone-500'
+                        : isAccused
                         ? 'bg-red-500 animate-ping'
-                        : isMe
-                        ? 'bg-emerald-400'
-                        : 'bg-amber-400'
+                        : isTargeted
+                        ? 'bg-amber-400'
+                        : 'bg-emerald-400'
                     }`}
                   />
-                  <span className="font-space font-bold text-xs uppercase tracking-wider">
-                    {char.name}
+                  <span className="font-space font-bold text-[11px] uppercase tracking-wider">
+                    {opp.nickname}
                   </span>
-                  {isMe && (
-                    <span className="px-1.5 py-0.2 rounded bg-emerald-700/80 text-[9px] font-bold text-white">
-                      BẠN
+                  {opp.votes > 0 && (
+                    <span className="px-1.5 py-0.2 rounded bg-red-600 text-white font-mono font-bold text-[9px]">
+                      {opp.votes} PHIẾU
                     </span>
                   )}
                 </div>
-                <span className="font-geist text-[10px] text-amber-300/80 block mt-0.5">
-                  {char.title}
+                <span className="font-geist text-[9px] text-amber-300/80 block mt-0.5">
+                  {opp.roleHint}
                 </span>
 
-                {isAimingGun && isTargeted && (
+                {isAimingGun && isTargeted && !opp.isDead && (
                   <span className="mt-1 px-2 py-0.5 rounded bg-red-600 text-white font-space text-[9px] font-bold block animate-bounce">
                     CLICK ĐỂ BẮN 💥
                   </span>
                 )}
               </div>
 
-              {/* Accusation / Chat Dialogue Bubble */}
-              {isAccused && (
-                <div className="absolute -top-32 left-1/2 -translate-x-1/2 w-56 p-2.5 rounded-2xl bg-black/90 border border-red-500/80 text-white text-[11px] shadow-2xl font-geist text-center animate-bounce">
-                  <span className="text-amber-400 font-bold block text-[10px] uppercase font-space">
-                    ⚠️ ĐANG BỊ BUỘC TỘI
+              {/* Speech / Defense Dialogue Bubble */}
+              {isAccused && opp.dialogue && (
+                <div className="absolute -top-24 left-1/2 -translate-x-1/2 w-52 p-2 rounded-xl bg-black/95 border border-red-500/90 text-white text-[10px] shadow-2xl font-geist text-center animate-bounce">
+                  <span className="text-amber-400 font-bold block text-[9px] uppercase font-space">
+                    🗣️ BÀO CHỮA
                   </span>
-                  {char.quote}
-                  <div className="absolute bottom-[-6px] left-1/2 -translate-x-1/2 w-3 h-3 bg-black border-r border-b border-red-500 rotate-45" />
+                  "{opp.dialogue}"
+                  <div className="absolute bottom-[-5px] left-1/2 -translate-x-1/2 w-2.5 h-2.5 bg-black border-r border-b border-red-500 rotate-45" />
                 </div>
               )}
-
-              {/* REAL HIGH-QUALITY CHARACTER SPRITE */}
-              <div
-                className="relative select-none"
-                style={{
-                  animation: `characterBreathe ${3 + idx * 0.4}s ease-in-out infinite alternate`,
-                }}
-              >
-                <img
-                  src={currentSprite}
-                  alt={char.name}
-                  className={`w-auto h-[380px] object-contain drop-shadow-[0_15px_30px_rgba(0,0,0,0.9)] transition-all duration-200 ${
-                    isShot ? 'brightness-150 contrast-125 saturate-200' : ''
-                  }`}
-                  draggable={false}
-                />
-              </div>
             </div>
           );
         })}
+
+        {/* Layer 3: Interactive Played Cards on the Green Table Felt */}
+        <div className="absolute left-1/2 top-[58%] -translate-x-1/2 -translate-y-1/2 pointer-events-none">
+          {playedCards.map((c) => (
+            <div
+              key={c.id}
+              className="absolute w-20 h-28 -translate-x-1/2 -translate-y-1/2 rounded-xl bg-gradient-to-b from-amber-950 via-stone-950 to-black border border-amber-500/80 shadow-[0_12px_30px_rgba(0,0,0,0.9)] flex flex-col items-center justify-between p-2 animate-fadeIn pointer-events-auto cursor-pointer hover:scale-110 transition-transform"
+              style={{
+                left: `${c.x}px`,
+                top: `${c.y}px`,
+                transform: `rotate(${c.rot}deg)`,
+              }}
+              onClick={() => tavernAudio.playCardFlip()}
+            >
+              <span className="text-amber-400 text-xs font-space font-bold">★</span>
+              <span className="text-xl">📜</span>
+              <span className="font-space text-[8px] font-bold text-amber-200 text-center uppercase leading-tight">
+                {c.name}
+              </span>
+            </div>
+          ))}
+        </div>
       </div>
 
-      {/* ==================== 3. FOREGROUND PLAYED CARDS ON WOODEN TABLE ==================== */}
-      <div
-        className="absolute left-1/2 top-[66%] -translate-x-1/2 -translate-y-1/2 pointer-events-none z-20"
-        style={{
-          transform: `translate(calc(-50% - ${parallax.x * 0.9}px), calc(-50% - ${parallax.y * 0.9}px))`,
-        }}
-      >
-        {playedCards.map((c) => (
-          <div
-            key={c.id}
-            className="absolute w-20 h-28 -translate-x-1/2 -translate-y-1/2 rounded-xl bg-gradient-to-b from-amber-900 via-stone-950 to-black border border-amber-500/90 shadow-[0_10px_30px_rgba(0,0,0,0.9)] flex flex-col items-center justify-center p-2 animate-fadeIn"
-            style={{
-              left: `${c.x}px`,
-              top: `${c.y}px`,
-              transform: `rotate(${c.rot}deg)`,
-            }}
-          >
-            <span className="text-2xl">📜</span>
-            <span className="font-space text-[10px] font-bold text-amber-300 text-center uppercase mt-1">
-              {c.name}
-            </span>
-          </div>
-        ))}
-      </div>
-
-      {/* ==================== 4. MUZZLE FLASH ON SHOT ==================== */}
+      {/* ==================== 2. MUZZLE FLASH ON GUNSHOT ==================== */}
       {revolverFired && (
-        <div className="fixed inset-0 z-50 bg-white/45 pointer-events-none animate-ping" />
+        <div className="fixed inset-0 z-50 bg-white/50 pointer-events-none animate-ping" />
       )}
 
-      {/* ==================== 5. RETICLE WHEN AIMING GUN ==================== */}
+      {/* ==================== 3. FPS AIMING RETICLE ==================== */}
       {isAimingGun && (
         <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none z-40 flex items-center justify-center">
           <div className="w-10 h-10 rounded-full border-2 border-red-500/90 flex items-center justify-center shadow-[0_0_20px_rgba(239,68,68,0.9)]">
@@ -525,57 +577,60 @@ export function LiarsBar3DExperience({
         </div>
       )}
 
-      {/* ==================== 6. BOTTOM HUD: TAROT CARDS ON HAND & WEAPON ==================== */}
-      <div className="absolute bottom-0 left-0 right-0 z-30 pointer-events-none flex items-end justify-between px-8 pb-3">
+      {/* ==================== 4. FIRST-PERSON INTERACTIVE CARDS ON HAND ==================== */}
+      <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-30 pointer-events-none flex items-end justify-center">
         {/* CARDS FAN ON HAND */}
         <div className="pointer-events-auto relative flex items-end -space-x-8 mb-2">
           {handCards.map((card, idx) => {
-            const isHovered = inspectedCard === card.id;
-            const tilt = (idx - 2) * 6;
-            const translateY = isHovered ? -40 : 0;
+            const isHovered = inspectedCardId === card.id;
+            const tilt = (idx - 1.5) * 6; // -9, -3, 3, 9
+            const translateY = isHovered ? -42 : 0;
 
             return (
               <div
                 key={card.id}
                 onMouseEnter={() => {
-                  setInspectedCard(card.id);
+                  setInspectedCardId(card.id);
                   tavernAudio.playCardFlip();
                 }}
-                onMouseLeave={() => setInspectedCard(null)}
-                onClick={() => handlePlayCard(card)}
+                onMouseLeave={() => setInspectedCardId(null)}
+                onClick={() => handlePlayCardToTable(card)}
                 className="relative cursor-pointer transition-all duration-300 ease-out group"
                 style={{
                   transform: `translateY(${translateY}px) rotate(${tilt}deg) scale(${
-                    isHovered ? 1.15 : 1
+                    isHovered ? 1.18 : 1
                   })`,
                   transformOrigin: 'bottom center',
-                  zIndex: isHovered ? 50 : idx + 10,
+                  zIndex: isHovered ? 60 : idx + 10,
                 }}
               >
                 <div
-                  className={`w-32 h-48 rounded-2xl p-3 border flex flex-col justify-between backdrop-blur-xl transition-all shadow-2xl ${
+                  className={`w-32 h-48 rounded-2xl p-2.5 border flex flex-col justify-between backdrop-blur-xl transition-all shadow-2xl ${
                     isHovered
-                      ? 'bg-gradient-to-t from-amber-950 via-slate-900 to-amber-900/90 border-amber-400 shadow-[0_0_35px_rgba(245,158,11,0.6)]'
-                      : 'bg-gradient-to-t from-slate-950 via-slate-900 to-slate-800/90 border-slate-700/80 text-slate-300'
+                      ? 'bg-gradient-to-t from-amber-950 via-slate-900 to-amber-900/95 border-amber-400 shadow-[0_0_35px_rgba(245,158,11,0.7)]'
+                      : 'bg-gradient-to-t from-slate-950/95 via-slate-900/95 to-slate-800/90 border-slate-700/80 text-slate-300'
                   }`}
                 >
-                  <div className="flex items-center justify-between text-[11px] font-space font-bold uppercase text-amber-400">
+                  <div className="flex items-center justify-between text-[10px] font-space font-bold uppercase text-amber-400">
                     <span>{card.type}</span>
                     <span>{card.icon}</span>
                   </div>
 
                   <div className="text-center my-auto">
-                    <span className="text-4xl block group-hover:scale-125 transition-transform">
+                    <span className="text-3xl block group-hover:scale-125 transition-transform">
                       {card.icon}
                     </span>
-                    <span className="font-space font-bold text-xs uppercase tracking-wider block mt-2 text-white">
+                    <span className="font-space font-bold text-xs uppercase tracking-wider block mt-1.5 text-white">
                       {card.name}
+                    </span>
+                    <span className="text-[9px] font-mono text-amber-300/80 block mt-0.5">
+                      {card.sub}
                     </span>
                   </div>
 
                   <div className="text-center">
-                    <span className="text-[9px] font-geist text-slate-400 block group-hover:text-amber-300">
-                      {isHovered ? 'CLICK ĐỂ ĐÁNH' : 'LÁ BÀI TRÊN TAY'}
+                    <span className="text-[8px] font-geist text-slate-400 block group-hover:text-amber-300">
+                      {isHovered ? 'CLICK ĐỂ ĐÁNH BÀI' : card.desc}
                     </span>
                   </div>
                 </div>
@@ -583,123 +638,52 @@ export function LiarsBar3DExperience({
             );
           })}
         </div>
-
-        {/* CONTROLS: CHARACTER SELECTION, ROULETTE, REVOLVER */}
-        <div className="pointer-events-auto flex items-center gap-3">
-          {/* Change Character Button */}
-          <button
-            onClick={() => setCharSelectOpen(true)}
-            className="px-4 py-3 rounded-xl bg-stone-900/90 hover:bg-stone-800 border border-amber-500/80 text-amber-300 font-space font-bold text-xs uppercase tracking-wider flex items-center gap-2 shadow-xl transition-all hover:scale-105 active:scale-95"
-          >
-            <span>🎭</span>
-            <span>ĐỔI NHÂN VẬT</span>
-          </button>
-
-          {/* Russian Roulette Button */}
-          <button
-            onClick={() => {
-              tavernAudio.playCylinderSpin();
-              setRouletteOpen(true);
-            }}
-            className="px-5 py-3 rounded-xl bg-gradient-to-r from-red-950 to-stone-900 border border-red-500/80 hover:border-red-400 text-red-200 hover:text-white font-space font-bold text-xs uppercase tracking-wider flex items-center gap-2 shadow-[0_0_25px_rgba(220,38,38,0.4)] transition-all hover:scale-105 active:scale-95"
-          >
-            <span>🎲</span>
-            <span>CÒ SÚNG NGA (1/6)</span>
-          </button>
-
-          {/* Raise / Lower Revolver */}
-          <button
-            onClick={() => {
-              tavernAudio.playGunCock();
-              setIsAimingGun((prev) => !prev);
-            }}
-            className={`px-6 py-3 rounded-xl border font-space font-bold text-xs uppercase tracking-wider flex items-center gap-2 shadow-2xl transition-all hover:scale-105 active:scale-95 ${
-              isAimingGun
-                ? 'bg-red-600 border-red-400 text-white shadow-[0_0_30px_rgba(239,68,68,0.8)] animate-pulse'
-                : 'bg-stone-900/90 border-amber-500/80 text-amber-300 hover:border-amber-400 hover:bg-stone-800'
-            }`}
-          >
-            <span>🔫</span>
-            <span>{isAimingGun ? 'HẠ SÚNG [R]' : 'RÚT SÚNG [R]'}</span>
-          </button>
-        </div>
       </div>
 
-      {/* ==================== 7. CHARACTER SELECTION MODAL ==================== */}
-      {charSelectOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-fadeIn">
-          <div className="relative w-full max-w-4xl bg-stone-950 border border-amber-500/80 rounded-2xl p-6 shadow-[0_0_80px_rgba(245,158,11,0.4)] font-geist">
-            <div className="flex items-center justify-between border-b border-white/10 pb-4 mb-6">
-              <div>
-                <h3 className="font-space font-black text-2xl text-amber-400 uppercase tracking-wider">
-                  🎭 CHỌN NHÂN VẬT CỦA BẠN
-                </h3>
-                <p className="text-xs text-slate-400 mt-1">
-                  Chọn nhân vật đại diện cho bạn tại bàn cược Liar's Bar
-                </p>
-              </div>
-              <button
-                onClick={() => setCharSelectOpen(false)}
-                className="w-8 h-8 rounded-full bg-stone-800 hover:bg-stone-700 text-slate-300 flex items-center justify-center font-bold"
-              >
-                ✕
-              </button>
-            </div>
+      {/* ==================== 5. BOTTOM CONTROLS & WEAPON ACTIONS ==================== */}
+      <div className="absolute bottom-4 right-6 z-30 pointer-events-auto flex items-center gap-2.5">
+        {/* Đổi Bàn Chơi (8 Người vs 1v1 UE5) */}
+        <button
+          onClick={() => {
+            tavernAudio.playCardFlip();
+            setTableScene((prev) => (prev === 'eight_player' ? 'showdown' : 'eight_player'));
+          }}
+          className="px-3.5 py-2.5 rounded-xl bg-stone-900/90 hover:bg-stone-800 border border-white/20 text-slate-300 hover:text-white font-space font-bold text-[11px] uppercase tracking-wider flex items-center gap-1.5 shadow-xl transition-all"
+        >
+          <span>🔄</span>
+          <span>{tableScene === 'eight_player' ? 'BÀN ĐỐI ĐẦU 1V1' : 'BÀN ĐẤU 8 NGƯỜI'}</span>
+        </button>
 
-            <div className="grid grid-cols-5 gap-3">
-              {CHARACTER_PRESETS.map((char) => {
-                const isSelected = selectedCharId === char.id;
-                return (
-                  <div
-                    key={char.id}
-                    onClick={() => {
-                      setSelectedCharId(char.id);
-                      if (typeof window !== 'undefined') {
-                        localStorage.setItem('werewolf_selected_character', char.id);
-                      }
-                      tavernAudio.playCardFlip();
-                      setCharSelectOpen(false);
-                    }}
-                    className={`cursor-pointer rounded-2xl border p-3 flex flex-col items-center justify-between text-center transition-all duration-300 group hover:scale-105 ${
-                      isSelected
-                        ? 'bg-gradient-to-t from-amber-950 to-stone-900 border-amber-400 shadow-[0_0_30px_rgba(245,158,11,0.6)]'
-                        : 'bg-stone-900/60 border-stone-800 hover:border-amber-500/60 hover:bg-stone-900'
-                    }`}
-                  >
-                    <div className="w-full h-44 overflow-hidden rounded-xl bg-black/40 mb-3 flex items-center justify-center">
-                      <img
-                        src={char.idleSprite}
-                        alt={char.name}
-                        className="w-full h-full object-contain filter group-hover:brightness-110 transition-all"
-                      />
-                    </div>
-                    <span className="font-space font-bold text-xs text-white uppercase block">
-                      {char.name}
-                    </span>
-                    <span className="text-[10px] text-amber-400 font-semibold block mb-2">
-                      {char.title}
-                    </span>
-                    <p className="text-[9px] text-slate-400 leading-tight mb-3">
-                      {char.roleHint}
-                    </p>
-                    <span
-                      className={`w-full py-1.5 rounded-lg font-space text-[10px] font-bold uppercase transition-all ${
-                        isSelected
-                          ? 'bg-amber-500 text-black shadow'
-                          : 'bg-stone-800 group-hover:bg-amber-600 group-hover:text-white text-slate-300'
-                      }`}
-                    >
-                      {isSelected ? '✓ ĐANG CHỌN' : 'CHỌN'}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      )}
+        {/* Nút Cò Súng Nga */}
+        <button
+          onClick={() => {
+            tavernAudio.playCylinderSpin();
+            setRouletteOpen(true);
+          }}
+          className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-red-950 to-stone-900 border border-red-500/80 hover:border-red-400 text-red-200 hover:text-white font-space font-bold text-[11px] uppercase tracking-wider flex items-center gap-1.5 shadow-[0_0_20px_rgba(220,38,38,0.4)] transition-all hover:scale-105 active:scale-95"
+        >
+          <span>🎲</span>
+          <span>CÒ SÚNG NGA (1/6)</span>
+        </button>
 
-      {/* ==================== 8. RUSSIAN ROULETTE MODAL ==================== */}
+        {/* Nút Rút / Hạ Súng */}
+        <button
+          onClick={() => {
+            tavernAudio.playGunCock();
+            setIsAimingGun((prev) => !prev);
+          }}
+          className={`px-5 py-2.5 rounded-xl border font-space font-bold text-[11px] uppercase tracking-wider flex items-center gap-1.5 shadow-2xl transition-all hover:scale-105 active:scale-95 ${
+            isAimingGun
+              ? 'bg-red-600 border-red-400 text-white shadow-[0_0_30px_rgba(239,68,68,0.8)] animate-pulse'
+              : 'bg-stone-900/90 border-amber-500/80 text-amber-300 hover:border-amber-400 hover:bg-stone-800'
+          }`}
+        >
+          <span>🔫</span>
+          <span>{isAimingGun ? 'HẠ SÚNG [R]' : 'RÚT SÚNG [R]'}</span>
+        </button>
+      </div>
+
+      {/* ==================== 6. RUSSIAN ROULETTE MODAL ==================== */}
       {rouletteOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-fadeIn">
           <div className="relative w-full max-w-md bg-stone-950 border border-red-600/80 rounded-2xl p-6 shadow-[0_0_60px_rgba(220,38,38,0.5)] text-center font-geist">
@@ -710,6 +694,7 @@ export function LiarsBar3DExperience({
               Ổ đạn 6 lỗ có đúng 1 viên đạn. Thử vận may của bạn!
             </p>
 
+            {/* Cylinder Graphic */}
             <div className="relative w-44 h-44 mx-auto mb-6 flex items-center justify-center">
               <div className="w-36 h-36 rounded-full bg-stone-900 border-2 border-stone-700 flex items-center justify-center relative">
                 {[1, 2, 3, 4, 5, 6].map((slot) => {
@@ -776,14 +761,17 @@ export function LiarsBar3DExperience({
         </div>
       )}
 
-      {/* CSS Keyframe Animations for Natural Breathing */}
+      {/* Style Animations */}
       <style jsx global>{`
-        @keyframes characterBreathe {
+        @keyframes lampFlicker {
           0% {
-            transform: translateY(0px) scale(1);
+            opacity: 0.85;
+          }
+          50% {
+            opacity: 1;
           }
           100% {
-            transform: translateY(-4px) scale(1.008);
+            opacity: 0.9;
           }
         }
       `}</style>

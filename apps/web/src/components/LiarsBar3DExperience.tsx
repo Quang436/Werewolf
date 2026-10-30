@@ -421,22 +421,67 @@ export function LiarsBar3DExperience({
   const [screenPos, setScreenPos] = useState<{ [id: string]: { x: number; y: number; visible: boolean } }>({});
 
   // 1. DYNAMIC PLAYER LIST RESOLUTION
-  // Extract actual players from room or fallback to 8-player council
+  // Extract actual players from room or fill empty seats with council members
+  // so the 3D room is NEVER empty and always shows characters sitting at chairs!
   const playersList: PublicPlayerView[] = useMemo(() => {
-    if (room?.players && room.players.length > 0) {
-      return room.players;
+    const rawPlayers = room?.players && room.players.length > 0 ? room.players : [];
+    const targetCapacity = Math.max(room?.settings?.maxPlayers || 8, rawPlayers.length, 6);
+
+    if (rawPlayers.length === 0) {
+      return [
+        { id: 'p1', seat: 1, nickname: 'Bác Sĩ', avatarUrl: null, isHost: false, isAlive: true, ready: true, connection: 'ONLINE' },
+        { id: 'p2', seat: 2, nickname: 'LordVader', avatarUrl: null, isHost: false, isAlive: true, ready: true, connection: 'ONLINE' },
+        { id: 'p3', seat: 3, nickname: 'Xemesis', avatarUrl: null, isHost: false, isAlive: true, ready: true, connection: 'ONLINE' },
+        { id: 'p4', seat: 4, nickname: 'Quản Trò', avatarUrl: null, isHost: true, isAlive: true, ready: true, connection: 'ONLINE' },
+        { id: 'p5', seat: 5, nickname: 'PewPew', avatarUrl: null, isHost: false, isAlive: false, ready: true, connection: 'ONLINE' },
+        { id: 'p6', seat: 6, nickname: 'Độ Mixi', avatarUrl: null, isHost: false, isAlive: true, ready: true, connection: 'ONLINE' },
+        { id: 'p7', seat: 7, nickname: 'Mặt Nạ', avatarUrl: null, isHost: false, isAlive: true, ready: true, connection: 'ONLINE' },
+        { id: 'p8', seat: 8, nickname: 'Bạn', avatarUrl: null, isHost: false, isAlive: true, ready: true, connection: 'ONLINE' },
+      ].slice(0, targetCapacity);
     }
-    return [
-      { id: 'p1', seat: 1, nickname: 'Bác Sĩ', avatarUrl: null, isHost: false, isAlive: true, ready: true, connection: 'ONLINE' },
-      { id: 'p2', seat: 2, nickname: 'LordVader', avatarUrl: null, isHost: false, isAlive: true, ready: true, connection: 'ONLINE' },
-      { id: 'p3', seat: 3, nickname: 'Xemesis', avatarUrl: null, isHost: false, isAlive: true, ready: true, connection: 'ONLINE' },
-      { id: 'p4', seat: 4, nickname: 'Quản Trò', avatarUrl: null, isHost: true, isAlive: true, ready: true, connection: 'ONLINE' },
-      { id: 'p5', seat: 5, nickname: 'PewPew', avatarUrl: null, isHost: false, isAlive: false, ready: true, connection: 'ONLINE' },
-      { id: 'p6', seat: 6, nickname: 'Độ Mixi', avatarUrl: null, isHost: false, isAlive: true, ready: true, connection: 'ONLINE' },
-      { id: 'p7', seat: 7, nickname: 'Mặt Nạ', avatarUrl: null, isHost: false, isAlive: true, ready: true, connection: 'ONLINE' },
-      { id: 'p8', seat: 8, nickname: 'Bạn', avatarUrl: null, isHost: false, isAlive: true, ready: true, connection: 'ONLINE' },
+
+    if (rawPlayers.length >= targetCapacity) {
+      return rawPlayers;
+    }
+
+    // Fill remaining empty seats with council member bots so the room is NEVER empty
+    const result: PublicPlayerView[] = [...rawPlayers];
+    const usedSeats = new Set(rawPlayers.map((p: any) => p.seat));
+    const sampleBots = [
+      { id: 'bot_2', seat: 2, nickname: 'LordVader', isHost: false, isAlive: true, ready: true, connection: 'ONLINE' },
+      { id: 'bot_3', seat: 3, nickname: 'Xemesis', isHost: false, isAlive: true, ready: true, connection: 'ONLINE' },
+      { id: 'bot_4', seat: 4, nickname: 'Quản Trò', isHost: false, isAlive: true, ready: true, connection: 'ONLINE' },
+      { id: 'bot_5', seat: 5, nickname: 'PewPew', isHost: false, isAlive: false, ready: true, connection: 'ONLINE' },
+      { id: 'bot_6', seat: 6, nickname: 'Độ Mixi', isHost: false, isAlive: true, ready: true, connection: 'ONLINE' },
+      { id: 'bot_7', seat: 7, nickname: 'Mặt Nạ', isHost: false, isAlive: true, ready: true, connection: 'ONLINE' },
+      { id: 'bot_8', seat: 8, nickname: 'Thầy Bói', isHost: false, isAlive: true, ready: true, connection: 'ONLINE' },
+      { id: 'bot_9', seat: 9, nickname: 'Thợ Săn', isHost: false, isAlive: true, ready: true, connection: 'ONLINE' },
+      { id: 'bot_10', seat: 10, nickname: 'Bác Sĩ', isHost: false, isAlive: true, ready: true, connection: 'ONLINE' },
+      { id: 'bot_11', seat: 11, nickname: 'Bảo Vệ', isHost: false, isAlive: true, ready: true, connection: 'ONLINE' },
+      { id: 'bot_12', seat: 12, nickname: 'Phù Thủy', isHost: false, isAlive: true, ready: true, connection: 'ONLINE' },
     ];
-  }, [room?.players]);
+
+    let bIdx = 0;
+    for (let s = 1; s <= targetCapacity; s++) {
+      if (result.length >= targetCapacity) break;
+      if (usedSeats.has(s)) continue;
+      const bot = sampleBots[bIdx % sampleBots.length];
+      bIdx++;
+      result.push({
+        id: `bot_${s}_${bot.id}`,
+        seat: s,
+        nickname: bot.nickname,
+        avatarUrl: null,
+        isHost: false,
+        isAlive: bot.isAlive,
+        ready: true,
+        connection: 'ONLINE',
+      });
+      usedSeats.add(s);
+    }
+
+    return result.sort((a, b) => a.seat - b.seat);
+  }, [room?.players, room?.settings?.maxPlayers]);
 
   const totalSeats = playersList.length;
 
@@ -444,6 +489,7 @@ export function LiarsBar3DExperience({
   const localPlayer = useMemo(() => {
     return (
       playersList.find((p) => p.id === currentPlayerId || p.id === room?.me?.id) ||
+      playersList.find((p) => !p.id.startsWith('bot_')) ||
       playersList[playersList.length - 1]
     );
   }, [playersList, currentPlayerId, room?.me?.id]);
@@ -1064,14 +1110,14 @@ export function LiarsBar3DExperience({
         char.root.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), 0.12);
       });
 
-      // 4.5. Card Dealing Flight Animation across Council Table (Slow, Majestic & Smooth ~3.5s)
+      // 4.5. Card Dealing Flight Animation across Council Table (Slow, Majestic & Smooth ~4.6s)
       if (isDealingRef.current) {
         if (dealStartTime === null) {
           dealStartTime = t;
         }
         const dealElapsed = t - dealStartTime;
-        const totalDealTime = 3.2; // 3.2s total flight window
-        const flightDuration = 0.85; // 0.85s per card smooth flight
+        const totalDealTime = 4.6; // 4.6s total flight window
+        const flightDuration = 1.15; // 1.15s per card slow, smooth flight
 
         seatCards.forEach(({ mesh, targetPos, targetRotY, seatIdx }) => {
           // Stagger card launch times sequentially around the table
@@ -1090,9 +1136,9 @@ export function LiarsBar3DExperience({
             const ease = 1 - Math.pow(1 - progress, 3);
             mesh.position.x = THREE.MathUtils.lerp(0, targetPos.x, ease);
             mesh.position.z = THREE.MathUtils.lerp(0, targetPos.z, ease);
-            mesh.position.y = THREE.MathUtils.lerp(1.10, targetPos.y, ease) + Math.sin(progress * Math.PI) * 0.35;
-            mesh.rotation.y = targetRotY + (1 - progress) * Math.PI * 1.5;
-            mesh.rotation.z = Math.sin(progress * Math.PI) * 0.15;
+            mesh.position.y = THREE.MathUtils.lerp(1.10, targetPos.y, ease) + Math.sin(progress * Math.PI) * 0.42;
+            mesh.rotation.y = targetRotY + (1 - progress) * Math.PI * 2.0;
+            mesh.rotation.z = Math.sin(progress * Math.PI) * 0.22;
           } else {
             mesh.visible = true;
             mesh.scale.set(1, 1, 1);

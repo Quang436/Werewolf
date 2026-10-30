@@ -110,12 +110,57 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
   }, [onEmitAction, selectedTargetId, store]);
 
   // Dynamic players list resolution (from live room or demo council size)
+  // Combines real joined human players with council member seats up to room capacity
+  // so the table is NEVER empty and always has full 3D characters sitting at all seats!
   const activePlayers: PublicPlayerView[] = useMemo(() => {
-    if (state.room?.players && state.room.players.length > 0) {
-      return state.room.players;
+    const realPlayers = state.room?.players || [];
+    const targetCapacity = Math.max(
+      state.room?.settings?.maxPlayers || 8,
+      realPlayers.length,
+      demoCouncilSize || 8,
+      6
+    );
+
+    // If no real room or no real players, use sample players
+    if (!state.room || realPlayers.length === 0) {
+      return ALL_SAMPLE_PLAYERS.slice(0, targetCapacity);
     }
-    return ALL_SAMPLE_PLAYERS.slice(0, demoCouncilSize);
-  }, [state.room?.players, demoCouncilSize]);
+
+    // When real players exist in room:
+    // Take real players, and fill remaining seats with council members from ALL_SAMPLE_PLAYERS
+    const result: PublicPlayerView[] = [...realPlayers];
+    const usedSeats = new Set(realPlayers.map((p) => p.seat));
+    const usedIds = new Set(realPlayers.map((p) => p.id));
+
+    let sampleIdx = 0;
+    for (let seatNum = 1; seatNum <= targetCapacity; seatNum++) {
+      if (result.length >= targetCapacity) break;
+      if (usedSeats.has(seatNum)) continue;
+
+      // Find an unused sample player
+      while (
+        sampleIdx < ALL_SAMPLE_PLAYERS.length &&
+        usedIds.has(ALL_SAMPLE_PLAYERS[sampleIdx].id)
+      ) {
+        sampleIdx++;
+      }
+
+      const sample = ALL_SAMPLE_PLAYERS[sampleIdx % ALL_SAMPLE_PLAYERS.length];
+      sampleIdx++;
+
+      result.push({
+        ...sample,
+        id: `bot_${seatNum}_${sample.id}`,
+        seat: seatNum,
+        nickname: `${sample.nickname}`,
+        connection: 'ONLINE',
+      });
+      usedSeats.add(seatNum);
+    }
+
+    // Sort by seat number so seating arrangement is perfectly ordered around table
+    return result.sort((a, b) => a.seat - b.seat);
+  }, [state.room, demoCouncilSize]);
 
   // Dynamic effective room object
   const effectiveRoom = useMemo(() => {
@@ -147,7 +192,14 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
     };
   }, [state.room, activePlayers, demoPhase, demoCouncilSize]);
 
-  const myPlayerInfo = activePlayers.find((p) => p.id === effectiveRoom.me?.id) || activePlayers[activePlayers.length - 1];
+  const myPlayerInfo = useMemo(() => {
+    return (
+      activePlayers.find((p) => p.id === effectiveRoom.me?.id) ||
+      activePlayers.find((p) => !p.id.startsWith('bot_')) ||
+      activePlayers[0]
+    );
+  }, [activePlayers, effectiveRoom.me?.id]);
+
   const myNickname =
     myPlayerInfo?.nickname ||
     (typeof window !== 'undefined' ? sessionStorage.getItem('werewolf_nickname') || 'Thợ Săn Bạn' : 'Thợ Săn Bạn');
@@ -166,50 +218,68 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
     }
   }, [state.assignedRole, effectiveRoom.phase, effectiveRoom.me]);
 
-  // Trigger dealing animation automatically when game phase enters ASSIGN_ROLES (only once per phase entry)
-  const lastPhaseRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (effectiveRoom.phase === 'ASSIGN_ROLES' && lastPhaseRef.current !== 'ASSIGN_ROLES') {
-      lastPhaseRef.current = 'ASSIGN_ROLES';
-      setIsDealingSequence(true);
-      setHasDealt(false);
-      setIsCenterRevealOpen(false);
-
-      const count = activePlayers.length;
-      for (let i = 0; i < count; i++) {
-        const delay = (i / count) * 2400;
-        setTimeout(() => {
-          werewolfAudio.playCardDeal();
-        }, delay);
-      }
-
-      const timer = setTimeout(() => {
-        setIsDealingSequence(false);
-        setHasDealt(true);
-        setIsCenterRevealOpen(true);
-      }, 3500);
-      return () => clearTimeout(timer);
-    } else if (effectiveRoom.phase !== 'ASSIGN_ROLES') {
-      lastPhaseRef.current = effectiveRoom.phase;
-    }
-  }, [effectiveRoom.phase, activePlayers.length]);
-
-  const handleRandomDeal = useCallback(() => {
-    if (isDealingSequence) return;
-    // 1. Play dealing audio and trigger 3D table card flight
+  // Unified Majestic 5.0-Second Dealing Sequence Function
+  const runDealingSequence = useCallback(() => {
     setIsDealingSequence(true);
     setHasDealt(false);
     setIsCenterRevealOpen(false);
 
     const count = activePlayers.length;
-    // Play sequential card deal swooshes synchronized with 3D card flight
+    setDealNotification(`🎴 Quản Trò đang chia bài ngẫu nhiên cho ${count} thành viên Hội Đồng...`);
+
+    // Sequential audio swooshes synchronized with 3D card flight (0 to 3.6s)
+    const launchDuration = 3600;
     for (let i = 0; i < count; i++) {
-      const delay = (i / count) * 2400;
+      const delay = (i / count) * launchDuration;
       setTimeout(() => {
         werewolfAudio.playCardDeal();
       }, delay);
     }
 
+    // At 5.0 seconds: all cards land smoothly, secret role modal opens in center of screen
+    const timer = setTimeout(() => {
+      setIsDealingSequence(false);
+      setHasDealt(true);
+      werewolfAudio.playCardDeal();
+      setIsCenterRevealOpen(true);
+      setDealNotification(`✨ Lá bài định mệnh đã được phát! Hãy đọc kỹ năng vai trò của bạn.`);
+      setTimeout(() => setDealNotification(null), 5000);
+    }, 5000);
+
+    return () => clearTimeout(timer);
+  }, [activePlayers.length]);
+
+  // 1. Listen for room broadcast dealing event via socket (state.dealNonce)
+  const lastDealNonceRef = useRef(0);
+  useEffect(() => {
+    if (state.dealNonce && state.dealNonce > lastDealNonceRef.current) {
+      lastDealNonceRef.current = state.dealNonce;
+      runDealingSequence();
+    }
+  }, [state.dealNonce, runDealingSequence]);
+
+  // 2. Trigger dealing animation automatically when game phase enters ASSIGN_ROLES (only once per phase entry)
+  const lastPhaseRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (effectiveRoom.phase === 'ASSIGN_ROLES' && lastPhaseRef.current !== 'ASSIGN_ROLES') {
+      lastPhaseRef.current = 'ASSIGN_ROLES';
+      runDealingSequence();
+    } else if (effectiveRoom.phase !== 'ASSIGN_ROLES') {
+      lastPhaseRef.current = effectiveRoom.phase;
+    }
+  }, [effectiveRoom.phase, runDealingSequence]);
+
+  // 3. User clicks "Phát Bài Ngẫu Nhiên" button (Host or local testing)
+  const handleRandomDeal = useCallback(() => {
+    if (isDealingSequence) return;
+
+    // A. If connected to a multiplayer room, broadcast to ALL other players via socket!
+    if (state.room) {
+      onEmitAction('room:deal', {});
+    }
+
+    // B. Generate balanced roles locally as fallback or for local simulation
+    const count = activePlayers.length;
     const balancedDeck = generateBalancedDeck(count);
     const shuffled = shuffleArray(balancedDeck);
 
@@ -237,22 +307,9 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
     });
     store.setCardRevealed(true);
 
-    setDealNotification(
-      `🎴 Đang chia bài cho ${count} thành viên Hội Đồng...`
-    );
-
-    // 2. After 3.5s slow & smooth dealing animation across table, grand reveal in center of screen
-    setTimeout(() => {
-      setIsDealingSequence(false);
-      setHasDealt(true);
-      setIsCenterRevealOpen(true);
-
-      setDealNotification(
-        `✨ Bạn nhận lá bài: ${myRoleInfo.nameVN} (${myRoleInfo.categoryLabel})`
-      );
-      setTimeout(() => setDealNotification(null), 4000);
-    }, 3500);
-  }, [activePlayers, isDealingSequence, myPlayerInfo?.id, store]);
+    // C. Run 5.0-second dealing sequence
+    runDealingSequence();
+  }, [activePlayers, isDealingSequence, myPlayerInfo?.id, onEmitAction, runDealingSequence, state.room, store]);
 
   const isNight = effectiveRoom.phase.includes('NIGHT');
   const remainingSeconds = Math.max(0, Math.ceil(state.remainingMs ? state.remainingMs / 1000 : 45));
@@ -428,10 +485,49 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
         </div>
       </header>
 
-      {/* Random Deal Notification Banner */}
-      {dealNotification && (
+      {/* 2.5. GRAND CINEMATIC 5.0S DEALING SEQUENCE OVERLAY */}
+      {isDealingSequence && (
+        <div className="absolute inset-0 z-50 pointer-events-none flex flex-col items-center justify-center bg-black/60 backdrop-blur-[3px] transition-all duration-300 animate-fadeIn">
+          <div className="flex flex-col items-center gap-3.5 bg-gradient-to-b from-zinc-900/95 via-black/95 to-zinc-950/95 border-2 border-amber-500/80 px-8 py-6 rounded-3xl shadow-[0_0_60px_rgba(245,158,11,0.65)] max-w-lg text-center pointer-events-auto">
+            {/* Animated Dealing Icon */}
+            <div className="relative">
+              <div className="w-16 h-16 rounded-2xl bg-amber-500/20 border border-amber-400 flex items-center justify-center text-4xl shadow-[0_0_25px_rgba(245,158,11,0.6)] animate-bounce">
+                🎴
+              </div>
+              <span className="absolute -top-1 -right-1 w-4 h-4 bg-amber-400 rounded-full animate-ping" />
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <h3 className="font-display font-black text-xl text-amber-200 tracking-wider uppercase drop-shadow-[0_2px_10px_rgba(0,0,0,0.8)]">
+                QUẢN TRÒ ĐANG PHÁT BÀI ĐỊNH MỆNH
+              </h3>
+              <p className="font-sans text-xs text-stone-300 max-w-sm leading-relaxed">
+                Các lá bài bí mật đang lần lượt bay đến vị trí của <span className="text-amber-400 font-bold">{activePlayers.length} thành viên</span> tại bàn Hội Đồng...
+              </p>
+            </div>
+
+            {/* Glowing Dealing Progress Bar (5.0s animation) */}
+            <div className="w-full bg-zinc-800/90 h-2.5 rounded-full overflow-hidden border border-amber-500/40 mt-1 shadow-inner">
+              <div
+                className="h-full bg-gradient-to-r from-amber-600 via-amber-300 to-amber-500 rounded-full shadow-[0_0_15px_rgba(245,158,11,0.9)]"
+                style={{
+                  animation: 'dealingProgress 5s cubic-bezier(0.2, 0, 0.4, 1) forwards',
+                }}
+              />
+            </div>
+
+            <div className="flex items-center justify-between w-full text-[10px] font-mono text-amber-400/90 px-1 font-bold">
+              <span>🐺 LIAR&apos;S BAR • MA SÓI</span>
+              <span>ĐANG PHÁT BÀI... 5.0S</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Floating Status Pill when not in dealing sequence */}
+      {!isDealingSequence && dealNotification && (
         <div className="absolute top-14 left-1/2 -translate-x-1/2 z-40 bg-gradient-to-r from-amber-950 via-zinc-950 to-amber-950 border-2 border-amber-500/80 px-6 py-2 rounded-2xl shadow-[0_0_35px_rgba(245,158,11,0.7)] flex items-center gap-3 animate-fadeIn">
-          <span className="text-2xl animate-bounce">🎴</span>
+          <span className="text-xl animate-bounce">🎴</span>
           <span className="text-xs font-display font-black text-amber-200 tracking-wide uppercase">
             {dealNotification}
           </span>
@@ -488,7 +584,7 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
               const isSelected = selectedTargetId === p.id;
               const isAccused = accusedPlayerId === p.id;
               const voteCount = effectiveTally[p.id] || 0;
-              const isMe = p.id === myPlayerInfo?.id || p.id === 'p8' || p.seat === activePlayers.length;
+              const isMe = p.id === myPlayerInfo?.id || (!myPlayerInfo && p.seat === 1);
 
               return (
                 <div

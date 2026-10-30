@@ -496,3 +496,11 @@ body {
 .ember-p4 { animation: emberRise2 6.5s ease-in infinite 3.5s; }
 .ember-p5 { animation: emberRise1 5.1s ease-in infinite 0.7s; }
 
+@keyframes dealingProgress {
+  0% {
+    width: 0%;
+  }
+  100% {
+    width: 100%;
+  }
+}

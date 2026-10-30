@@ -212,6 +212,7 @@ async function bootstrap() {
     socket.on('room:create', (payload, ack) => gateway.onRoomCreate(socket as any, payload).then(ack));
     socket.on('room:join', (payload, ack) => gateway.onRoomJoin(socket as any, payload).then(ack));
     socket.on('room:leave', (_payload, ack) => gateway.onRoomLeave(socket as any).then(ack));
+    socket.on('room:deal', (_payload, ack) => gateway.onRoomDeal(socket as any).then(ack));
     socket.on('game:start', (_payload, ack) => gateway.onGameStart(socket as any).then(ack));
 
     // Night Actions

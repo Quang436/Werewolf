@@ -74,6 +74,10 @@ export function useWerewolfSocket({
       store.setAssignedRole(p.data);
     });
 
+    socket.on('room:deal_started', (p?: { duration?: number }) => {
+      store.triggerDealingAnimation(p?.duration || 5000);
+    });
+
     socket.on('phase:changed', (p: ServerPacket<{ phase: any; phaseEndsAt: number | null }>) => {
       store.updatePhase(p.data.phase, p.data.phaseEndsAt);
     });

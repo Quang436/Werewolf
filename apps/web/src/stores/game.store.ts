@@ -52,6 +52,7 @@ export interface GameState {
   wolfTeammates: Array<{ id: string; nickname: string }>;
   isCardRevealed: boolean;
   isRoleModalOpen: boolean;
+  dealNonce: number;
 
   // Actions
   setRoomSnapshot: (snapshot: ClientRoomView) => void;
@@ -66,6 +67,7 @@ export interface GameState {
   toggleCardReveal: () => void;
   setCardRevealed: (revealed: boolean) => void;
   setRoleModalOpen: (open: boolean) => void;
+  triggerDealingAnimation: (duration?: number) => void;
   resetGame: () => void;
 }
 
@@ -83,6 +85,7 @@ export function createInitialGameState(): Omit<
   | 'toggleCardReveal'
   | 'setCardRevealed'
   | 'setRoleModalOpen'
+  | 'triggerDealingAnimation'
   | 'resetGame'
 > {
   return {
@@ -105,6 +108,7 @@ export function createInitialGameState(): Omit<
     wolfTeammates: [],
     isCardRevealed: true,
     isRoleModalOpen: false,
+    dealNonce: 0,
   };
 }
 
@@ -128,8 +132,14 @@ export class GameStateManager {
       toggleCardReveal: () => this.toggleCardReveal(),
       setCardRevealed: (revealed) => this.setCardRevealed(revealed),
       setRoleModalOpen: (open) => this.setRoleModalOpen(open),
+      triggerDealingAnimation: (duration) => this.triggerDealingAnimation(duration),
       resetGame: () => this.resetGame(),
     };
+  }
+
+  public triggerDealingAnimation(_duration = 5000): void {
+    this.state.dealNonce = (this.state.dealNonce || 0) + 1;
+    this.notify();
   }
 
   public getState(): GameState {

@@ -164,12 +164,31 @@ export class GameGateway {
     }
   }
 
+  public async onRoomDeal(socket: ClientSocket): Promise<Ack> {
+    const { roomId } = socket.data;
+    if (!roomId) return { ok: false, error: { code: 'ROOM_NOT_FOUND', message: 'Chưa vào phòng' } };
+
+    // Phát sóng hoạt ảnh phát bài 5.0 giây đồng bộ cho mọi người chơi trong phòng
+    this.io.to(`room:${roomId}`).emit('room:deal_started', {
+      startedAt: Date.now(),
+      duration: 5000,
+    });
+
+    return { ok: true };
+  }
+
   public async onGameStart(socket: ClientSocket): Promise<Ack> {
     const { roomId, userId } = socket.data;
     if (!roomId) return { ok: false, error: { code: 'ROOM_NOT_FOUND', message: 'Chưa vào phòng' } };
 
     try {
       const room = await this.gameLoop.startGame(roomId, userId);
+
+      // Phát sóng hoạt ảnh phát bài đồng bộ cho mọi người chơi trong phòng
+      this.io.to(`room:${roomId}`).emit('room:deal_started', {
+        startedAt: Date.now(),
+        duration: 5000,
+      });
 
       // Tham gia các room con tương ứng
       for (const p of room.players) {

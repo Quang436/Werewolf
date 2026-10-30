@@ -180,7 +180,7 @@ export function LiarsBar3DExperience({
       votes: 1,
       dialogue: 'Đừng có giở trò với tao. Tao đã thấy ngươi rút bài gian lận!',
       modelFile: '/models/cowboy_mobster.glb',
-      scale: 0.42,
+      scale: 92.0,
     },
     {
       id: 'mobster',
@@ -191,7 +191,7 @@ export function LiarsBar3DExperience({
       votes: 0,
       dialogue: 'Cứ bình tĩnh... Hãy đặt cược số phận của các ngươi lên bàn poker này.',
       modelFile: '/models/suit_mobster.glb',
-      scale: 0.42,
+      scale: 92.0,
     },
     {
       id: 'girl',
@@ -202,7 +202,7 @@ export function LiarsBar3DExperience({
       votes: 0,
       dialogue: 'Làm ơn tin tôi đi, tôi thực sự chỉ là dân làng thôi mà...',
       modelFile: '/models/village_girl.glb',
-      scale: 0.42,
+      scale: 92.0,
     },
     {
       id: 'punk',
@@ -213,7 +213,7 @@ export function LiarsBar3DExperience({
       votes: 2,
       dialogue: 'Cứ thử bóp cò đi! Xem đứa nào nằm xuống trước!',
       modelFile: '/models/punk_mobster.glb',
-      scale: 0.42,
+      scale: 92.0,
     },
   ]);
 
@@ -570,70 +570,47 @@ export function LiarsBar3DExperience({
       });
 
       const chairConfigs = [
-        { pos: [-1.65, 0, -0.55], rotY: Math.PI / 3 + 0.1 },
-        { pos: [-0.65, 0, -1.65], rotY: Math.PI / 8 },
-        { pos: [0.65, 0, -1.65], rotY: -Math.PI / 8 },
-        { pos: [1.65, 0, -0.55], rotY: -Math.PI / 3 - 0.1 },
+        { pos: [-1.45, 0, -0.65], rotY: Math.PI / 3 },
+        { pos: [-0.60, 0, -1.60], rotY: Math.PI / 8 },
+        { pos: [0.60, 0, -1.60], rotY: -Math.PI / 8 },
+        { pos: [1.45, 0, -0.65], rotY: -Math.PI / 3 },
       ];
 
       chairConfigs.forEach((c) => {
         const chair = chairModel.clone();
-        chair.scale.set(0.65, 0.65, 0.65);
+        chair.scale.set(48.0, 48.0, 48.0);
         chair.position.set(...(c.pos as [number, number, number]));
         chair.rotation.y = c.rotY;
         scene.add(chair);
       });
     });
 
-    // 2. Pose Helper: Makes any humanoid character sit realistically in the chair
-    const applySittingPose = (model: THREE.Object3D) => {
-      const upperLegL = model.getObjectByName('UpperLeg.L');
-      const upperLegR = model.getObjectByName('UpperLeg.R');
-      const lowerLegL = model.getObjectByName('LowerLeg.L');
-      const lowerLegR = model.getObjectByName('LowerLeg.R');
-      const upperArmL = model.getObjectByName('UpperArm.L');
-      const upperArmR = model.getObjectByName('UpperArm.R');
-      const lowerArmL = model.getObjectByName('LowerArm.L');
-      const lowerArmR = model.getObjectByName('LowerArm.R');
-      const hips = model.getObjectByName('Hips');
-
-      if (upperLegL) upperLegL.rotation.x = -Math.PI / 2.15;
-      if (upperLegR) upperLegR.rotation.x = -Math.PI / 2.15;
-      if (lowerLegL) lowerLegL.rotation.x = Math.PI / 2.05;
-      if (lowerLegR) lowerLegR.rotation.x = Math.PI / 2.05;
-      if (upperArmL) upperArmL.rotation.x = -Math.PI / 3.4;
-      if (upperArmR) upperArmR.rotation.x = -Math.PI / 3.4;
-      if (lowerArmL) lowerArmL.rotation.x = -Math.PI / 3.2;
-      if (lowerArmR) lowerArmR.rotation.x = -Math.PI / 3.2;
-      if (hips) hips.position.y = 0.52;
-    };
-
-    // 3. Load 4 Real 3D Characters
+    // 2. Load 4 Real 3D Characters at true 1.7m human scale
     const charSeatData = [
       {
         id: 'cowboy',
         file: '/models/cowboy_mobster.glb',
-        pos: [-1.55, 0.42, -0.65] as [number, number, number],
+        pos: [-1.45, 0.0, -0.65] as [number, number, number],
         rotY: Math.PI / 3,
-        scale: 0.42,
+        scale: 92.0,
         colorMap: {
-          Brown: 0x6e472a,
+          Brown: 0x784f30,
           Brown2: 0x5a3820,
           Skin: 0xd4a373,
-          Green: 0x24303e,
+          Green: 0x334155,
           Black: 0x18181b,
         },
       },
       {
         id: 'mobster',
         file: '/models/suit_mobster.glb',
-        pos: [-0.62, 0.42, -1.62] as [number, number, number],
+        pos: [-0.60, 0.0, -1.60] as [number, number, number],
         rotY: Math.PI / 8,
-        scale: 0.42,
+        scale: 92.0,
         colorMap: {
-          Suit: 0x1e293b,
+          Suit: 0x253347,
           Tie: 0xdc2626,
-          White: 0xf8fafc,
+          White: 0xffffff,
           Skin: 0xd4a373,
           Black: 0x0f172a,
         },
@@ -641,23 +618,24 @@ export function LiarsBar3DExperience({
       {
         id: 'girl',
         file: '/models/village_girl.glb',
-        pos: [0.62, 0.42, -1.62] as [number, number, number],
+        pos: [0.60, 0.0, -1.60] as [number, number, number],
         rotY: -Math.PI / 8,
-        scale: 0.42,
+        scale: 92.0,
         colorMap: {
           Skin: 0xf5d0b0,
           Hair: 0x5c3014,
+          White: 0xf8fafc,
         },
       },
       {
         id: 'punk',
         file: '/models/punk_mobster.glb',
-        pos: [1.55, 0.42, -0.65] as [number, number, number],
+        pos: [1.45, 0.0, -0.65] as [number, number, number],
         rotY: -Math.PI / 3,
-        scale: 0.42,
+        scale: 92.0,
         colorMap: {
-          Black: 0x18181b,
-          Red: 0x991b1b,
+          Black: 0x1e293b,
+          Red: 0xdc2626,
           Skin: 0xdeb887,
         },
       },
@@ -671,10 +649,7 @@ export function LiarsBar3DExperience({
         model.rotation.y = seat.rotY;
         model.name = seat.id;
 
-        // Apply sitting pose to humanoid skeleton
-        applySittingPose(model);
-
-        // Adjust materials and colors
+        // Adjust materials and colors for high visibility
         model.traverse((node: any) => {
           if (node.isMesh) {
             node.castShadow = true;
@@ -802,7 +777,7 @@ export function LiarsBar3DExperience({
         }
 
         // Slight scale emphasis when hovered
-        const targetScale = isHovered ? 0.44 : 0.42;
+        const targetScale = isHovered ? 96.0 : 92.0;
         char.root.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), 0.12);
       });
 
@@ -825,7 +800,7 @@ export function LiarsBar3DExperience({
         if (!root) return { x: 0, y: 0, visible: false };
         const v = new THREE.Vector3();
         root.getWorldPosition(v);
-        v.y += 0.85; // above 3D character head
+        v.y += 1.85; // above 3D character head
         v.project(camera);
         const sx = ((v.x + 1) * width) / 2;
         const sy = ((-v.y + 1) * height) / 2;

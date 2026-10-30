@@ -225,7 +225,7 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
     setIsCenterRevealOpen(false);
 
     const count = activePlayers.length;
-    setDealNotification(`🎴 Quản Trò đang chia bài ngẫu nhiên cho ${count} thành viên Hội Đồng...`);
+    setDealNotification(null);
 
     // Sequential audio swooshes synchronized with 3D card flight (0 to 3.6s)
     const launchDuration = 3600;
@@ -485,18 +485,13 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
         </div>
       </header>
 
-      {/* Discreet Top Status Pill during dealing (Clean & Unobstructed 3D Table View) */}
-      {(isDealingSequence || dealNotification) && (
+      {/* Status Notification Pill (Only shown when NOT dealing, leaving 3D table completely unobstructed) */}
+      {!isDealingSequence && dealNotification && (
         <div className="absolute top-14 left-1/2 -translate-x-1/2 z-40 bg-zinc-950/85 backdrop-blur-md border border-amber-500/50 px-5 py-1.5 rounded-full shadow-[0_0_20px_rgba(245,158,11,0.35)] flex items-center gap-2.5 animate-fadeIn pointer-events-none">
           <span className="text-base animate-bounce">🎴</span>
           <span className="text-[11px] font-display font-bold text-amber-200 tracking-wider uppercase">
-            {isDealingSequence
-              ? `Quản Trò đang chia bài cho ${activePlayers.length} thành viên Hội Đồng...`
-              : dealNotification}
+            {dealNotification}
           </span>
-          {isDealingSequence && (
-            <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping ml-1" />
-          )}
         </div>
       )}
 
@@ -812,40 +807,6 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
         </div>
       )}
 
-      {/* 8. DEALING ANIMATION BANNER (3.5S SMOOTH PROGRESSION) */}
-      {isDealingSequence && (
-        <div className="fixed inset-0 z-40 pointer-events-none flex flex-col items-center justify-center bg-black/60 backdrop-blur-[3px] animate-fadeIn">
-          <style>{`
-            @keyframes dealingProgressBar {
-              0% { width: 0%; }
-              100% { width: 100%; }
-            }
-          `}</style>
-          <div className="bg-zinc-950/95 border-2 border-amber-500/90 px-8 py-5 rounded-3xl shadow-[0_0_60px_rgba(245,158,11,0.7)] flex flex-col items-center gap-3.5 max-w-md w-full mx-4 text-center animate-pulse">
-            <div className="flex items-center gap-3.5">
-              <span className="text-4xl animate-bounce">🎴</span>
-              <div className="text-left">
-                <span className="text-sm font-display font-black text-amber-300 tracking-wider uppercase block">
-                  QUẢN TRÒ ĐANG CHIA BÀI CHO HỘI ĐỒNG...
-                </span>
-                <span className="text-xs font-mono text-stone-300 block mt-0.5">
-                  Lá bài số phận đang bay lướt tới từng người chơi (3.5s)
-                </span>
-              </div>
-            </div>
-
-            {/* Smooth 3.5s progress indicator bar */}
-            <div className="w-full bg-zinc-900 rounded-full h-2 overflow-hidden border border-white/10 mt-1">
-              <div
-                className="bg-gradient-to-r from-amber-600 via-amber-400 to-amber-500 h-full rounded-full shadow-[0_0_12px_rgba(245,158,11,0.9)]"
-                style={{
-                  animation: 'dealingProgressBar 3.5s linear forwards',
-                }}
-              />
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* 9. CENTER-SCREEN GRAND ROLE CARD REVEAL (100% COMPLETE UNCROPPED ARTWORK) */}
       <CenterRoleRevealModal

@@ -640,14 +640,15 @@ export function LiarsBar3DExperience({
     renderer.toneMappingExposure = 1.05;
     container.replaceChildren(renderer.domElement);
 
-    // B. SCENE & ATMOSPHERE (Deep Speakeasy Noir)
+    // B. SCENE & ATMOSPHERE (Deep Speakeasy Noir - Crystal Clear Sightlines)
     const scene = new THREE.Scene();
     const initialBgColor = isNightRef.current ? 0x05070c : 0x0a0706;
     scene.background = new THREE.Color(initialBgColor);
-    scene.fog = new THREE.Fog(initialBgColor, 6, 26);
+    // Push fog far back so characters across the table are 100% crisp, sharp, and never hazed out
+    scene.fog = new THREE.Fog(initialBgColor, 40, 80);
 
     // C. CAMERA (FPS View seated at table)
-    const camera = new THREE.PerspectiveCamera(62, width / height, 0.1, 40);
+    const camera = new THREE.PerspectiveCamera(62, width / height, 0.1, 50);
     camera.position.set(0, 1.55, dynamicTableRadius + 0.50);
     camera.lookAt(0, 1.05, -dynamicTableRadius * 0.20);
 
@@ -660,34 +661,12 @@ export function LiarsBar3DExperience({
     const hemiLight = new THREE.HemisphereLight(0x3d2417, 0x0a0705, 0.55);
     scene.add(hemiLight);
 
-    // 3. Overhead Brass Chandelier
+    // 3. Overhead Ceiling Illumination (Placed high up at ceiling - NO hanging cone/shade blocking characters)
     const lampGroup = new THREE.Group();
-    lampGroup.position.set(0, 3.6 + dynamicTableRadius * 0.15, 0);
+    lampGroup.position.set(0, 4.2, 0);
 
-    const chainMesh = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.015, 0.015, 1.2, 8),
-      new THREE.MeshStandardMaterial({ color: 0x1f1915, roughness: 0.7, metalness: 0.8 })
-    );
-    chainMesh.position.y = -0.6;
-    lampGroup.add(chainMesh);
-
-    const shadeMesh = new THREE.Mesh(
-      new THREE.ConeGeometry(0.48, 0.32, 24, 1, true),
-      new THREE.MeshStandardMaterial({ color: 0x92400e, roughness: 0.4, metalness: 0.8 })
-    );
-    shadeMesh.position.y = -1.2;
-    shadeMesh.rotation.x = Math.PI;
-    lampGroup.add(shadeMesh);
-
-    const bulbMesh = new THREE.Mesh(
-      new THREE.SphereGeometry(0.1, 16, 16),
-      new THREE.MeshBasicMaterial({ color: 0xffd27d })
-    );
-    bulbMesh.position.y = -1.25;
-    lampGroup.add(bulbMesh);
-
-    const lanternLight = new THREE.PointLight(isNightRef.current ? 0x60a5fa : 0xff9922, 5.0, 10 + dynamicTableRadius, 1.2);
-    lanternLight.position.set(0, -1.3, 0);
+    const lanternLight = new THREE.PointLight(isNightRef.current ? 0x60a5fa : 0xff9922, 5.0, 14 + dynamicTableRadius, 1.2);
+    lanternLight.position.set(0, -0.2, 0);
     lanternLight.castShadow = true;
     lampGroup.add(lanternLight);
     scene.add(lampGroup);
@@ -1011,9 +990,9 @@ export function LiarsBar3DExperience({
       );
     });
 
-    // Dedicated key lights for each seat
+    // Dedicated key lights for each seat (Crystal clear illumination on every player model)
     opponentSeats.forEach((seat) => {
-      const light = new THREE.PointLight(0xffecd2, 2.8, 4.5, 1.2);
+      const light = new THREE.PointLight(0xffecd2, 3.8, 6.0, 1.2);
       light.position.set(seat.pos[0] * 0.85, 1.70, seat.pos[2] * 0.85);
       scene.add(light);
     });

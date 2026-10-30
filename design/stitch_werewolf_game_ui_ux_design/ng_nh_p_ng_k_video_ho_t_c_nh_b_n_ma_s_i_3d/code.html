@@ -1,0 +1,408 @@
+<!DOCTYPE html><html class="dark" lang="vi"><head><meta charset="utf-8"><meta content="width=device-width, initial-scale=1.0" name="viewport"><meta content="web_standard" name="shell-type"><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"><link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;family=Syne:wght@600;700;800&amp;display=swap" rel="stylesheet"><link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700;900&amp;family=Creepster&amp;family=Nosifer&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}
+@keyframes cameraPanZoom {
+  0% { transform: scale(1.04) translate(0px, 0px); }
+  35% { transform: scale(1.12) translate(-14px, -10px); }
+  70% { transform: scale(1.16) translate(12px, -6px); }
+  100% { transform: scale(1.04) translate(0px, 0px); }
+}
+@keyframes lanternPulse {
+  0%, 100% { opacity: 0.88; transform: scale(1); }
+  25% { opacity: 0.72; transform: scale(0.97); }
+  60% { opacity: 1; transform: scale(1.03); }
+  85% { opacity: 0.8; transform: scale(0.99); }
+}
+@keyframes smokeDrift {
+  0% { transform: translate3d(0, 0, 0) scale(1); opacity: 0.18; }
+  50% { transform: translate3d(-30px, -25px, 0) scale(1.15); opacity: 0.32; }
+  100% { transform: translate3d(-60px, -50px, 0) scale(1.3); opacity: 0; }
+}
+@keyframes smokeDriftAlt {
+  0% { transform: translate3d(0, 0, 0) scale(1); opacity: 0.15; }
+  50% { transform: translate3d(35px, -30px, 0) scale(1.2); opacity: 0.35; }
+  100% { transform: translate3d(70px, -60px, 0) scale(1.35); opacity: 0; }
+}
+@keyframes emberRise1 {
+  0% { transform: translateY(0px) translateX(0px) scale(0.8); opacity: 0; }
+  20% { opacity: 0.9; }
+  80% { opacity: 0.8; }
+  100% { transform: translateY(-160px) translateX(35px) scale(1.2); opacity: 0; }
+}
+@keyframes emberRise2 {
+  0% { transform: translateY(0px) translateX(0px) scale(0.6); opacity: 0; }
+  25% { opacity: 1; }
+  85% { opacity: 0.6; }
+  100% { transform: translateY(-190px) translateX(-45px) scale(1); opacity: 0; }
+}
+@keyframes subtleFlicker {
+  0%, 100% { opacity: 0.9; }
+  33% { opacity: 0.75; }
+  66% { opacity: 1; }
+}
+.cinematic-bg-anim {
+  animation: cameraPanZoom 32s ease-in-out infinite alternate;
+  will-change: transform;
+}
+.lantern-glow-anim {
+  animation: lanternPulse 5s ease-in-out infinite;
+}
+.smoke-layer-1 {
+  animation: smokeDrift 16s linear infinite;
+}
+.smoke-layer-2 {
+  animation: smokeDriftAlt 22s linear infinite 4s;
+}
+.ember-p1 { animation: emberRise1 4.5s ease-in infinite; }
+.ember-p2 { animation: emberRise2 5.8s ease-in infinite 1.4s; }
+.ember-p3 { animation: emberRise1 4s ease-in infinite 2.2s; }
+.ember-p4 { animation: emberRise2 6.5s ease-in infinite 3.5s; }
+.ember-p5 { animation: emberRise1 5.1s ease-in infinite 0.7s; }
+</style><script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script><script id="tailwind-config">tailwind.config={"darkMode":"class","theme":{"extend":{"colors":{"primary":"#8ed5ff","secondary-fixed":"#f0dbff","error-container":"#93000a","surface-container-lowest":"#0a0e18","on-error-container":"#ffdad6","tertiary-fixed-dim":"#ffb3ad","primary-container":"#38bdf8","secondary-fixed-dim":"#ddb7ff","on-primary":"#00354a","surface-container-low":"#171b26","secondary":"#ddb7ff","primary-fixed":"#c4e7ff","inverse-primary":"#00668a","on-surface-variant":"#bdc8d1","background":"#0f131d","on-primary-container":"#004965","on-secondary-container":"d6a9ff","tertiary":"#ffbcb7","on-tertiary-fixed":"#410004","secondary-container":"#6f00be","outline":"#87929a","tertiary-fixed":"#ffdad7","surface":"#0f131d","outline-variant":"#3e484f","on-primary-fixed-variant":"#004c69","tertiary-container":"#ff938c","on-secondary-fixed-variant":"#6900b3","surface-container":"#1c1f2a","surface-bright":"#353944","on-primary-fixed":"#001e2c","surface-variant":"#313540","error":"#ffb4ab","on-secondary":"#490080","on-tertiary-fixed-variant":"#930013","on-secondary-fixed":"#2c0051","surface-container-high":"#262a35","surface-container-highest":"#313540","on-background":"#dfe2f1","inverse-on-surface":"#2c303b","on-tertiary-container":"#8d0012","surface-dim":"#0f131d","inverse-surface":"#dfe2f1","primary-fixed-dim":"#7bd0ff","on-tertiary":"#68000a","surface-tint":"#7bd0ff","on-surface":"#dfe2f1","on-error":"#690005"},"borderRadius":{"DEFAULT":"0.125rem","lg":"0.25rem","xl":"0.5rem","full":"0.75rem"},"spacing":{"space-lg":"1.5rem","space-md":"1rem","gutter":"1.25rem","space-xl":"2.5rem","space-xs":"0.25rem","margin":"2rem","space-sm":"0.5rem"},"fontFamily":{"label-sm":["Space Grotesk"],"body-sm":["Geist"],"headline-xl":["Syne"],"headline-md":["Syne"],"body-md":["Geist"],"body-lg":["Geist"],"label-lg":["Space Grotesk"],"label-md":["Space Grotesk"],"headline-sm":["Syne"],"headline-lg":["Syne"]},"fontSize":{"label-sm":["10px",{"lineHeight":"12px","letterSpacing":"0.12em","fontWeight":"700"}],"body-sm":["12px",{"lineHeight":"16px","fontWeight":"400"}],"headline-xl":["48px",{"lineHeight":"56px","letterSpacing":"-0.02em","fontWeight":"800"}],"headline-md":["24px",{"lineHeight":"32px","letterSpacing":"0em","fontWeight":"700"}],"body-md":["14px",{"lineHeight":"20px","fontWeight":"400"}],"body-lg":["16px",{"lineHeight":"24px","fontWeight":"400"}],"label-lg":["14px",{"lineHeight":"18px","letterSpacing":"0.06em","fontWeight":"600"}],"label-md":["12px",{"lineHeight":"16px","letterSpacing":"0.08em","fontWeight":"600"}],"headline-sm":["20px",{"lineHeight":"28px","letterSpacing":"0.01em","fontWeight":"600"}],"headline-lg":["36px",{"lineHeight":"44px","letterSpacing":"-0.01em","fontWeight":"700"}]}}}}</script></head><body class="bg-background font-body-md text-body-md text-on-surface antialiased selection:bg-error selection:text-on-error min-h-screen flex flex-col justify-between overflow-x-hidden">
+<!-- CINEMATIC WEREWOLF TABLE 3D CUTSCENE BACKGROUND LAYER -->
+<div class="fixed inset-0 w-full h-full pointer-events-none z-0 overflow-hidden bg-[#07090e]" id="cinematicStage">
+<!-- Main Werewolf Table Character Scene (3D Parallax & Slow Pan Zoom) -->
+<div class="absolute inset-0 w-full h-full" id="cinematicLayer" style="transform: translate3d(0.159375px, 2.85141px, 0px); transition: transform 0.4s ease-out;">
+<img alt="Bàn cược Ma Sói thời gian thực với Thợ Săn, Quạ Bác Sĩ, Chó Săn và Ma Sói" class="w-full h-full object-cover object-center cinematic-bg-anim filter brightness-[0.88] contrast-[1.12]" id="bgSceneImage" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDEYD_o8RKHjupr5p3vUomSyYsF9VuqhW2JjozCnOx1q488Lh9oplq5XM4oOXZqnxqeah9g2y96YK7hw2NsP-6FGNRP9Gibi9FQmrhJSMaLlN_Lw3EfGRYnSj1mFaWQCphhnueD4hYuePaTaOFJiagiNdDxZdBA-KAqHDUibyEmPkLY3aqMRCuZv0WNfEE2nSVt_7zN3bVDUbhkSTfDM5RWEYvqOVJi-p0W-8up2jUsF4vFTWdNpT_tAA">
+</div>
+<!-- Ambient Warm Lantern & Hearth Light Source Over Table -->
+<div class="absolute top-[8%] left-1/2 -translate-x-1/2 w-[620px] h-[620px] rounded-full bg-amber-500/20 blur-[130px] lantern-glow-anim pointer-events-none mix-blend-screen"></div>
+<!-- Flickering Crimson Werewolf / Blood Moon Occult Aura -->
+<div class="absolute top-1/3 right-1/4 w-[520px] h-[520px] rounded-full bg-error-container/25 blur-[160px] pointer-events-none mix-blend-color-dodge"></div>
+<div class="absolute bottom-16 left-1/4 w-[600px] h-[350px] rounded-full bg-secondary-container/20 blur-[140px] pointer-events-none"></div>
+<!-- Volumetric Fog / Pipe Smoke Layers -->
+<div class="absolute inset-0 pointer-events-none overflow-hidden opacity-40 mix-blend-screen">
+<div class="absolute -top-1/4 -left-1/4 w-[150%] h-[150%] bg-[radial-gradient(ellipse_at_50%_60%,rgba(240,225,200,0.18),transparent_65%)] smoke-layer-1"></div>
+<div class="absolute -top-1/3 -right-1/4 w-[160%] h-[160%] bg-[radial-gradient(ellipse_at_60%_45%,rgba(180,210,255,0.12),transparent_60%)] smoke-layer-2"></div>
+</div>
+<!-- Floating Tavern Embers & Ash Particles -->
+<div class="absolute inset-0 pointer-events-none overflow-hidden z-10" id="emberContainer">
+<div class="absolute bottom-24 left-[18%] w-1.5 h-1.5 rounded-full bg-amber-400 shadow-[0_0_8px_#f59e0b] ember-p1"></div>
+<div class="absolute bottom-36 left-[34%] w-2 h-2 rounded-full bg-error shadow-[0_0_10px_#ef4444] ember-p2"></div>
+<div class="absolute bottom-16 left-[52%] w-1 h-1 rounded-full bg-tertiary-container shadow-[0_0_6px_#ff938c] ember-p3"></div>
+<div class="absolute bottom-28 right-[28%] w-2 h-2 rounded-full bg-amber-300 shadow-[0_0_9px_#fde047] ember-p4"></div>
+<div class="absolute bottom-40 right-[14%] w-1.5 h-1.5 rounded-full bg-error shadow-[0_0_8px_#ef4444] ember-p5"></div>
+<div class="absolute top-1/2 left-[42%] w-1.5 h-1.5 rounded-full bg-amber-200/70 shadow-[0_0_6px_#fde68a] animate-pulse"></div>
+</div>
+<!-- Deep Cinematic Vignette & Edge Shadows to keep UI readable -->
+<div class="absolute inset-0 bg-gradient-to-t from-surface-container-lowest via-surface-container-lowest/40 to-surface-container-lowest/80 pointer-events-none"></div>
+<div class="absolute inset-0 bg-gradient-to-r from-surface-container-lowest/90 via-surface-container-lowest/30 to-surface-container-lowest/90 pointer-events-none"></div>
+<div class="absolute inset-0 bg-radial-gradient from-transparent via-background/45 to-surface-container-lowest/90 pointer-events-none"></div>
+</div>
+<!-- Minimalist Top Navigation Header -->
+<header class="fixed top-0 w-full z-50 bg-surface-container-lowest/80 backdrop-blur-xl border-b border-outline-variant/30"><div class="h-14 w-full px-gutter flex items-center justify-between"><div class="flex items-center gap-space-sm"><div class="w-8 h-8 rounded-lg bg-error-container flex items-center justify-center shadow-lg shadow-error-container/30"><span class="material-symbols-outlined text-error text-[20px]">nights_stay</span></div><div class="flex flex-col"><span class="font-headline-sm text-[17px] leading-tight uppercase text-on-surface tracking-wider font-bold">Ma Sói</span><span class="font-label-sm text-[10px] tracking-widest uppercase text-tertiary-container">Huyết Nguyệt</span></div></div><div class="flex items-center gap-space-md"><div class="flex items-center gap-space-xs bg-surface-container-low/90 border border-outline-variant/20 px-space-sm py-1 rounded-lg"><span class="w-2 h-2 rounded-full bg-primary animate-pulse"></span><span class="font-label-sm text-label-sm uppercase text-on-surface-variant hidden sm:inline">Máy Chủ: Ánh Trăng</span><span class="font-label-sm text-label-sm text-primary font-mono">24ms</span></div><div class="flex items-center bg-surface-container-low border border-outline-variant/20 rounded p-0.5 font-label-sm text-label-sm uppercase"><button class="px-space-sm py-0.5 rounded bg-primary text-on-primary font-bold">VIE</button><button class="px-space-sm py-0.5 text-outline hover:text-on-surface transition-colors">ENG</button></div></div></div></header>
+<main class="w-full flex-1 relative flex items-center justify-center pt-14 pb-12 overflow-hidden z-10">
+<!-- CENTERED CINEMATIC AUTHENTICATION MODAL (Gothic Glassmorphism) -->
+<div class="relative z-10 w-full max-w-[440px] mx-auto px-4 py-6">
+<div class="relative bg-surface-container-lowest/90 backdrop-blur-2xl rounded-2xl p-6 sm:p-8 border border-outline-variant/40 shadow-[0_0_60px_rgba(147,0,10,0.35)] overflow-hidden">
+<!-- Ornate Crimson Glow Crest Line -->
+<div class="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-error to-transparent"></div>
+<!-- Top Tavern Sigil Icon -->
+<div class="flex flex-col items-center text-center space-y-1 pb-4">
+<div class="relative flex items-center justify-center w-14 h-14 rounded-full bg-surface-container-low border border-outline-variant/30 shadow-inner mb-1">
+<div class="absolute inset-0 rounded-full bg-error-container/40 blur-md lantern-glow-anim"></div>
+<span class="material-symbols-outlined text-error text-[30px] relative z-10" style="font-variation-settings: 'FILL' 1;">
+            pets
+          </span>
+</div>
+<h2 class="text-[28px] sm:text-[32px] uppercase font-bold tracking-[0.18em] text-transparent bg-clip-text bg-gradient-to-b from-[#ffdad6] via-[#ff5449] to-[#8d0012] drop-shadow-[0_0_15px_rgba(255,84,73,0.7)] select-none" style="font-family: &quot;Cinzel Decorative&quot;, Nosifer, serif; text-shadow: rgba(255, 50, 50, 0.8) 0px 0px 10px, rgba(147, 0, 10, 0.9) 0px 0px 25px, rgb(0, 0, 0) 2px 2px 4px;">QUÁN RƯỢU VỰC THẲM</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+          Bàn cược sinh tử ma sói đang diễn ra
+        </p>
+</div>
+<!-- Segmented Tab Switcher: ĐĂNG NHẬP / ĐĂNG KÝ -->
+<div class="grid grid-cols-2 p-1 bg-surface-container-low/90 rounded-lg border border-outline-variant/30 mb-5">
+<button class="py-2 text-center font-label-md text-label-md uppercase tracking-wider rounded transition-all bg-error-container text-on-error font-bold shadow-md shadow-error-container/40" id="tabLogin" onclick="switchAuthTab('login')" type="button">
+          Đăng Nhập
+        </button>
+<button class="py-2 text-center font-label-md text-label-md uppercase tracking-wider rounded transition-all text-on-surface-variant hover:text-on-surface hover:bg-surface-container/50" id="tabRegister" onclick="switchAuthTab('register')" type="button">
+          Đăng Ký
+        </button>
+</div>
+<!-- FORM 1: ĐĂNG NHẬP (Login) -->
+<form class="space-y-4" id="formLogin" onsubmit="event.preventDefault(); simulateLogin();">
+<!-- Identity -->
+<div class="space-y-1">
+<label class="block font-label-sm text-label-sm uppercase text-on-surface-variant">
+            Danh Tính Thợ Săn / Email
+          </label>
+<div class="relative flex items-center bg-surface-container-low border border-outline-variant/20 rounded-lg focus-within:border-primary/60 focus-within:bg-surface-container transition-all">
+<span class="material-symbols-outlined absolute left-3 text-outline text-[18px]">theater_comedy</span>
+<input class="w-full bg-transparent pl-10 pr-3 py-2.5 font-body-md text-body-md text-on-surface placeholder:text-outline/70 focus:outline-none" id="hunterIdentity" placeholder="Tên thợ săn hoặc Email..." required="" type="text">
+</div>
+</div>
+<!-- Password -->
+<div class="space-y-1">
+<div class="flex justify-between items-center">
+<label class="font-label-sm text-label-sm uppercase text-on-surface-variant">Mật Mã Bí Mật</label>
+<a class="font-label-sm text-label-sm uppercase text-primary hover:underline" href="#">Quên mật khẩu?</a>
+</div>
+<div class="relative flex items-center bg-surface-container-low border border-outline-variant/20 rounded-lg focus-within:border-primary/60 focus-within:bg-surface-container transition-all">
+<span class="material-symbols-outlined absolute left-3 text-outline text-[18px]">key</span>
+<input class="w-full bg-transparent pl-10 pr-10 py-2.5 font-body-md text-body-md text-on-surface placeholder:text-outline/70 focus:outline-none" id="hunterPassword" placeholder="Nhập mật mã của bạn..." required="" type="password">
+<button class="absolute right-3 text-outline hover:text-error transition-colors p-0.5 flex items-center justify-center" onclick="togglePasswordVisibility('hunterPassword', 'loginEyeIcon')" title="Hiện/Ẩn mật mã" type="button">
+<span class="material-symbols-outlined text-[18px]" id="loginEyeIcon">visibility_off</span>
+</button>
+</div>
+</div>
+<!-- Remember Me Checkbox -->
+<div class="flex items-center justify-between pt-0.5">
+<label class="flex items-center gap-2 cursor-pointer group">
+<input checked="" class="w-4 h-4 rounded bg-surface-container border-outline-variant text-error accent-error cursor-pointer" id="rememberMe" type="checkbox">
+<span class="font-body-sm text-body-sm text-on-surface-variant group-hover:text-on-surface transition-colors">Ghi nhớ phiên đăng nhập</span>
+</label>
+<span class="font-label-sm text-label-sm uppercase text-outline">v1.4.2-b</span>
+</div>
+<!-- Main Submit CTA -->
+<button class="relative w-full py-3 px-4 rounded-lg bg-gradient-to-r from-error-container via-error to-error-container text-on-error font-label-lg text-label-lg uppercase tracking-wider overflow-hidden group shadow-lg shadow-error-container/40 hover:scale-[1.01] active:scale-[0.99] transition-all flex items-center justify-center gap-2" id="loginSubmitBtn" type="submit">
+<div class="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full duration-700 transition-transform"></div>
+<span class="material-symbols-outlined text-[20px]">login</span>
+<span id="loginBtnText" class="">BƯỚC VÀO QUÁN RƯỢU</span>
+<span class="text-xs opacity-75 font-mono ml-1">[ENTER]</span>
+</button>
+<!-- Ornate Separator -->
+<div class="relative my-4 flex items-center justify-center">
+<div class="w-full h-px bg-surface-container-high"></div>
+<span class="absolute bg-surface-container-lowest px-2 font-label-sm text-label-sm uppercase text-outline">Hoặc liên kết nhanh</span>
+</div>
+<!-- Social Third-party Auth -->
+<div class="grid grid-cols-3 gap-2">
+<button class="flex items-center justify-center gap-1.5 py-2 bg-surface-container-low hover:bg-surface-container-high border border-outline-variant/20 rounded-lg text-on-surface font-label-sm text-label-sm transition-all group" onclick="triggerSocialFeedback(event, 'Discord')" type="button">
+<span class="material-symbols-outlined text-[17px] text-secondary group-hover:scale-110 transition-transform">forum</span>
+<span class="">Discord</span>
+</button>
+<button class="flex items-center justify-center gap-1.5 py-2 bg-surface-container-low hover:bg-surface-container-high border border-outline-variant/20 rounded-lg text-on-surface font-label-sm text-label-sm transition-all group" onclick="triggerSocialFeedback(event, 'Steam')" type="button">
+<span class="material-symbols-outlined text-[17px] text-primary group-hover:scale-110 transition-transform">sports_esports</span>
+<span class="">Steam</span>
+</button>
+<button class="flex items-center justify-center gap-1.5 py-2 bg-surface-container-low hover:bg-surface-container-high border border-outline-variant/20 rounded-lg text-on-surface font-label-sm text-label-sm transition-all group" onclick="triggerSocialFeedback(event, 'Google')" type="button">
+<span class="material-symbols-outlined text-[17px] text-tertiary group-hover:scale-110 transition-transform">account_circle</span>
+<span class="">Google</span>
+</button>
+</div>
+<div class="text-center pt-2">
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+            Chưa có danh phận thợ săn? 
+            <button class="text-tertiary-container hover:text-error font-label-md text-label-md uppercase ml-1 underline transition-colors" onclick="switchAuthTab('register')" type="button">
+              Đăng ký ngay
+            </button>
+</p>
+</div>
+</form>
+<!-- FORM 2: ĐĂNG KÝ (Register) - Hidden by default -->
+<form class="space-y-3.5 hidden" id="formRegister" onsubmit="event.preventDefault(); simulateRegister();">
+<!-- Nickname -->
+<div class="space-y-1">
+<label class="block font-label-sm text-label-sm uppercase text-on-surface-variant">
+            Tên Thợ Săn (Biệt Hiệu Nhân Vật)
+          </label>
+<div class="relative flex items-center bg-surface-container-low border border-outline-variant/20 rounded-lg focus-within:border-tertiary-container/60 focus-within:bg-surface-container transition-all">
+<span class="material-symbols-outlined absolute left-3 text-outline text-[18px]">badge</span>
+<input class="w-full bg-transparent pl-10 pr-3 py-2 font-body-md text-body-md text-on-surface placeholder:text-outline/70 focus:outline-none" id="regHunterName" placeholder="Ví dụ: Dạ Thần 07..." required="" type="text">
+</div>
+</div>
+<!-- Email -->
+<div class="space-y-1">
+<label class="block font-label-sm text-label-sm uppercase text-on-surface-variant">
+            Email Khởi Tạo Hồn Phách
+          </label>
+<div class="relative flex items-center bg-surface-container-low border border-outline-variant/20 rounded-lg focus-within:border-tertiary-container/60 focus-within:bg-surface-container transition-all">
+<span class="material-symbols-outlined absolute left-3 text-outline text-[18px]">mail</span>
+<input class="w-full bg-transparent pl-10 pr-3 py-2 font-body-md text-body-md text-on-surface placeholder:text-outline/70 focus:outline-none" id="regEmail" placeholder="hunter@vuctham.net..." required="" type="email">
+</div>
+</div>
+<!-- Password -->
+<div class="space-y-1">
+<label class="block font-label-sm text-label-sm uppercase text-on-surface-variant">
+            Mật Mã Bí Mật
+          </label>
+<div class="relative flex items-center bg-surface-container-low border border-outline-variant/20 rounded-lg focus-within:border-tertiary-container/60 focus-within:bg-surface-container transition-all">
+<span class="material-symbols-outlined absolute left-3 text-outline text-[18px]">key</span>
+<input class="w-full bg-transparent pl-10 pr-10 py-2 font-body-md text-body-md text-on-surface placeholder:text-outline/70 focus:outline-none" id="regPassword" placeholder="Tối thiểu 6 ký tự..." required="" type="password">
+<button class="absolute right-3 text-outline hover:text-error transition-colors p-0.5 flex items-center justify-center" onclick="togglePasswordVisibility('regPassword', 'regEyeIcon')" type="button">
+<span class="material-symbols-outlined text-[18px]" id="regEyeIcon">visibility_off</span>
+</button>
+</div>
+</div>
+<!-- Confirm Password -->
+<div class="space-y-1">
+<label class="block font-label-sm text-label-sm uppercase text-on-surface-variant">
+            Xác Nhận Mật Mã
+          </label>
+<div class="relative flex items-center bg-surface-container-low border border-outline-variant/20 rounded-lg focus-within:border-tertiary-container/60 focus-within:bg-surface-container transition-all">
+<span class="material-symbols-outlined absolute left-3 text-outline text-[18px]">lock_reset</span>
+<input class="w-full bg-transparent pl-10 pr-3 py-2 font-body-md text-body-md text-on-surface placeholder:text-outline/70 focus:outline-none" id="regConfirmPassword" placeholder="Nhập lại mật mã..." required="" type="password">
+</div>
+</div>
+<!-- Agreement Terms -->
+<div class="pt-1">
+<label class="flex items-start gap-2 cursor-pointer group">
+<input class="w-4 h-4 mt-0.5 rounded bg-surface-container border-outline-variant text-tertiary-container accent-error cursor-pointer" id="agreeTerms" required="" type="checkbox">
+<span class="font-body-sm text-[12px] leading-tight text-on-surface-variant group-hover:text-on-surface transition-colors">
+              Tôi chấp thuận luật chơi Ma Sói Vực Thẳm và cam kết tuân thủ quy tắc sinh tử trong đêm.
+            </span>
+</label>
+</div>
+<!-- Main Register CTA -->
+<button class="relative w-full py-3 px-4 rounded-lg bg-gradient-to-r from-secondary-container via-error-container to-secondary-container text-on-error font-label-lg text-label-lg uppercase tracking-wider overflow-hidden group shadow-lg shadow-secondary-container/40 hover:scale-[1.01] active:scale-[0.99] transition-all flex items-center justify-center gap-2 mt-2" id="regSubmitBtn" type="submit">
+<div class="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full duration-700 transition-transform"></div>
+<span class="material-symbols-outlined text-[20px]">how_to_reg</span>
+<span id="regBtnText" class="">GIA NHẬP VỰC THẲM</span>
+<span class="text-xs opacity-75 font-mono ml-1">[TẠO TÀI KHOẢN]</span>
+</button>
+<div class="text-center pt-2">
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+            Đã có danh phận thợ săn? 
+            <button class="text-tertiary-container hover:text-error font-label-md text-label-md uppercase ml-1 underline transition-colors" onclick="switchAuthTab('login')" type="button">
+              Đăng nhập ngay
+            </button>
+</p>
+</div>
+</form>
+</div>
+</div>
+<!-- Floating Ambient Animation Control Button -->
+<div class="fixed bottom-12 right-4 z-40">
+<button class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-surface-container-low/90 backdrop-blur-md border border-outline-variant/40 hover:border-primary/50 text-on-surface-variant hover:text-on-surface shadow-lg transition-all group text-xs font-label-sm uppercase tracking-wider" id="videoToggleBtn" onclick="toggleAtmosphericAnimation()" title="Bật/Tắt hiệu ứng chuyển động video nền">
+<span class="w-2 h-2 rounded-full bg-primary animate-pulse" id="videoStatusDot"></span>
+<span class="material-symbols-outlined text-[16px] text-primary" id="videoPlayIcon">videocam</span>
+<span id="videoStatusText" class="">Hiệu ứng video nền: Bật</span>
+</button>
+</div>
+</main>
+<!-- Minimalist Atmospheric Footer -->
+<footer class="fixed bottom-0 w-full z-40 bg-surface-container-lowest/85 backdrop-blur-md border-t border-outline-variant/20 py-2.5">
+<div class="w-full px-gutter flex flex-col sm:flex-row items-center justify-between gap-2 text-center sm:text-left">
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
+<span class="font-label-sm text-label-sm uppercase text-outline">Bàn Đấu: Vực Thẳm #1</span>
+<span class="w-1 h-1 rounded-full bg-outline-variant"></span>
+<span class="font-label-sm text-label-sm text-on-surface-variant hidden md:inline">Hệ Thống Chống Gian Lận: Hoạt Động</span>
+</div>
+<div class="flex items-center gap-space-md">
+<span class="font-label-sm text-label-sm uppercase text-outline">Huyết Nguyệt Core v1.4.2-b</span>
+<a class="font-label-sm text-label-sm uppercase text-outline hover:text-on-surface transition-colors hidden sm:inline" href="#">Điều Khoản</a>
+<a class="font-label-sm text-label-sm uppercase text-outline hover:text-on-surface transition-colors hidden sm:inline" href="#">Bảo Mật</a>
+</div>
+</div>
+</footer>
+<!-- Interactive Scripts -->
+<script>
+  function switchAuthTab(tab) {
+    const tabLogin = document.getElementById('tabLogin');
+    const tabRegister = document.getElementById('tabRegister');
+    const formLogin = document.getElementById('formLogin');
+    const formRegister = document.getElementById('formRegister');
+
+    if (tab === 'login') {
+      tabLogin.className = 'py-2 text-center font-label-md text-label-md uppercase tracking-wider rounded transition-all bg-error-container text-on-error font-bold shadow-md shadow-error-container/40';
+      tabRegister.className = 'py-2 text-center font-label-md text-label-md uppercase tracking-wider rounded transition-all text-on-surface-variant hover:text-on-surface hover:bg-surface-container/50';
+      formLogin.classList.remove('hidden');
+      formRegister.classList.add('hidden');
+    } else {
+      tabRegister.className = 'py-2 text-center font-label-md text-label-md uppercase tracking-wider rounded transition-all bg-error-container text-on-error font-bold shadow-md shadow-error-container/40';
+      tabLogin.className = 'py-2 text-center font-label-md text-label-md uppercase tracking-wider rounded transition-all text-on-surface-variant hover:text-on-surface hover:bg-surface-container/50';
+      formRegister.classList.remove('hidden');
+      formLogin.classList.add('hidden');
+    }
+  }
+
+  function togglePasswordVisibility(inputId, iconId) {
+    const input = document.getElementById(inputId);
+    const icon = document.getElementById(iconId);
+    if (!input || !icon) return;
+    if (input.type === 'password') {
+      input.type = 'text';
+      icon.textContent = 'visibility';
+    } else {
+      input.type = 'password';
+      icon.textContent = 'visibility_off';
+    }
+  }
+
+  function triggerSocialFeedback(e, provider) {
+    const btn = e.currentTarget;
+    const originalHTML = btn.innerHTML;
+    btn.innerHTML = `<span class="material-symbols-outlined text-[16px] animate-spin">refresh</span><span>Đang nối...</span>`;
+    setTimeout(() => {
+      btn.innerHTML = originalHTML;
+    }, 1200);
+  }
+
+  function simulateLogin() {
+    const btn = document.getElementById('loginSubmitBtn');
+    const text = document.getElementById('loginBtnText');
+    const identityInput = document.getElementById('hunterIdentity');
+    
+    if (!identityInput.value) return;
+
+    btn.disabled = true;
+    text.textContent = 'ĐANG XÁC THỰC LINH HỒN...';
+
+    setTimeout(() => {
+      text.textContent = 'CHÀO MỪNG THỢ SĂN!';
+      btn.classList.add('bg-primary-container');
+      setTimeout(() => {
+        btn.disabled = false;
+        text.textContent = 'BƯỚC VÀO QUÁN RƯỢU';
+        btn.classList.remove('bg-primary-container');
+      }, 1500);
+    }, 1000);
+  }
+
+  function simulateRegister() {
+    const btn = document.getElementById('regSubmitBtn');
+    const text = document.getElementById('regBtnText');
+    btn.disabled = true;
+    text.textContent = 'ĐANG KHỞI TẠO DANH PHẬN...';
+
+    setTimeout(() => {
+      text.textContent = 'DANH TÍNH ĐÃ KHẮC LÊN BÀN CƯỢC!';
+      setTimeout(() => {
+        btn.disabled = false;
+        text.textContent = 'GIA NHẬP VỰC THẲM';
+        switchAuthTab('login');
+      }, 1400);
+    }, 1000);
+  }
+
+  let animationRunning = true;
+  function toggleAtmosphericAnimation() {
+    const sceneImg = document.getElementById('bgSceneImage');
+    const emberCont = document.getElementById('emberContainer');
+    const statusText = document.getElementById('videoStatusText');
+    const statusDot = document.getElementById('videoStatusDot');
+    const icon = document.getElementById('videoPlayIcon');
+
+    animationRunning = !animationRunning;
+
+    if (animationRunning) {
+      if (sceneImg) sceneImg.style.animationPlayState = 'running';
+      if (emberCont) emberCont.style.display = 'block';
+      statusText.textContent = 'Hiệu ứng video nền: Bật';
+      statusDot.className = 'w-2 h-2 rounded-full bg-primary animate-pulse';
+      icon.textContent = 'videocam';
+    } else {
+      if (sceneImg) sceneImg.style.animationPlayState = 'paused';
+      if (emberCont) emberCont.style.display = 'none';
+      statusText.textContent = 'Hiệu ứng video nền: Tạm dừng';
+      statusDot.className = 'w-2 h-2 rounded-full bg-outline';
+      icon.textContent = 'videocam_off';
+    }
+  }
+
+  // Interactive mouse parallax movement for realistic cutscene depth
+  window.addEventListener('mousemove', (e) => {
+    if (!animationRunning) return;
+    const { clientX, clientY } = e;
+    const xRatio = (clientX / window.innerWidth - 0.5) * 12;
+    const yRatio = (clientY / window.innerHeight - 0.5) * 12;
+    const layer = document.getElementById('cinematicLayer');
+    if (layer) {
+      layer.style.transform = `translate3d(${xRatio}px, ${yRatio}px, 0)`;
+      layer.style.transition = 'transform 0.4s ease-out';
+    }
+  });
+</script>
+
+
+</body></html>

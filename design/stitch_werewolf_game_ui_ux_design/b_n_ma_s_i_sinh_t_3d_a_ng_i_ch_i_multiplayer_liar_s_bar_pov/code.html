@@ -1,0 +1,206 @@
+<!DOCTYPE html><html lang="vi" style=""><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title class="">Ma Sói Sinh Tử: Hội Đồng Biểu Quyết Treo Cổ (Multiplayer POV)</title>
+<!-- Tailwind CSS CDN with Forms & Container Queries -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            blood: '#dc2626',
+            amberGlow: '#f59e0b',
+            darkRust: '#1a0d0a',
+            pokerGreen: '#0d3826',
+          },
+          fontFamily: {
+            game: ['Rajdhani', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+            display: ['Orbitron', 'monospace'],
+          },
+          animation: {
+            pulseSlow: 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+            vibrateAlert: 'vibrateAlert 0.8s infinite',
+            glowBeat: 'glowBeat 1.5s ease-in-out infinite alternate',
+          },
+          keyframes: {
+            vibrateAlert: {
+              '0%, 100%': { transform: 'scale(1)' },
+              '50%': { transform: 'scale(1.03)' },
+            },
+            glowBeat: {
+              '0%': { boxShadow: '0 0 15px rgba(220, 38, 38, 0.6)' },
+              '100%': { boxShadow: '0 0 30px rgba(239, 68, 68, 1)' }
+            }
+          }
+        }
+      }
+    }
+  </script>
+<link href="https://fonts.googleapis.com" rel="preconnect">
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;800;900&amp;family=Rajdhani:wght@500;600;700;800&amp;family=Cinzel:wght@700;900&amp;display=swap" rel="stylesheet">
+<!-- BEGIN: Custom Game Styles -->
+<style data-purpose="cinematic-theme">
+    body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background-color: #030303;
+      user-select: none;
+      font-family: 'Rajdhani', sans-serif;
+    }
+    .hud-glass {
+      background: rgba(8, 10, 14, 0.78);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.7);
+    }
+    .hud-glass-danger {
+      background: rgba(45, 10, 10, 0.82);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(239, 68, 68, 0.35);
+      box-shadow: 0 0 25px rgba(220, 38, 38, 0.4);
+    }
+    .neon-text-red {
+      text-shadow: 0 0 10px rgba(239, 68, 68, 0.9), 0 0 20px rgba(185, 28, 28, 0.7);
+    }
+    .neon-text-gold {
+      text-shadow: 0 0 8px rgba(245, 158, 11, 0.8), 0 0 16px rgba(217, 119, 6, 0.5);
+    }
+    .perspective-table {
+      perspective: 1200px;
+    }
+    .hand-card-skew {
+      transition: all 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      transform-origin: bottom center;
+    }
+    .hand-card-skew:hover {
+      transform: translateY(-28px) scale(1.12) !important;
+      z-index: 50 !important;
+      box-shadow: 0 15px 30px rgba(245, 158, 11, 0.45);
+    }
+    /* Audio Visualizer Bar Animation */
+    @keyframes eqBar {
+      0%, 100% { height: 4px; }
+      50% { height: 18px; }
+    }
+    .eq-bar-1 { animation: eqBar 0.6s infinite ease-in-out; }
+    .eq-bar-2 { animation: eqBar 0.4s infinite ease-in-out 0.2s; }
+    .eq-bar-3 { animation: eqBar 0.8s infinite ease-in-out 0.1s; }
+    .eq-bar-4 { animation: eqBar 0.5s infinite ease-in-out 0.3s; }
+  </style>
+<!-- END: Custom Game Styles -->
+<style data-purpose="werewolf-cards-theme">.werewolf-card-fan { filter: drop-shadow(0 15px 25px rgba(0,0,0,0.9)); perspective: 800px; } .werewolf-tarot-card { width: 88px; height: 136px; border-radius: 8px; position: relative; transition: all 0.3s cubic-bezier(0.2, 0.8, 0.2, 1); box-shadow: 0 10px 25px rgba(0,0,0,0.8), inset 0 0 12px rgba(0,0,0,0.9); } .werewolf-tarot-card:hover { transform: translateY(-38px) scale(1.12) rotate(0deg) !important; z-index: 60 !important; box-shadow: 0 20px 35px rgba(220,38,38,0.7), 0 0 25px rgba(245,158,11,0.5); } .werewolf-card-back { background: radial-gradient(circle at 50% 40%, #2b0b14 0%, #120308 70%, #050103 100%); border: 2px solid #854d0e; } .table-card-werewolf { background: radial-gradient(circle at 50% 30%, #1e1b2e 0%, #0a0812 100%); border: 1px solid #7c3aed; box-shadow: 0 4px 15px rgba(0,0,0,0.8), 0 0 8px rgba(124,58,237,0.4); transform: perspective(400px) rotateX(45deg); }</style></head>
+<body class="relative w-screen h-screen bg-black text-gray-100 overflow-hidden font-game select-none">
+<!-- BEGIN: GameBackground3D -->
+<!-- 3D Perspective Canvas & POV Background Frame -->
+<div class="absolute inset-0 z-0 w-full h-full overflow-hidden" data-purpose="background-viewport">
+<img alt="First-person POV in a dark gritty underground game bar, Liar's Bar multiplayer table with characters" class="w-full h-full object-cover object-center scale-100 filter brightness-95 contrast-110 pointer-events-none" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDml4jmTBnnlxUiNLWqD5b-x86ezwCrxkiKWsuBqInZY3h9trLiK_VlbVQki_9yjKj2Wor_kkg8kALjgCWJIy1dwNU9ziVbqcnF03oRYA8sJRQ_Q3UYjclEtoohFQRNeoW6wPhAKIjyhj2FeQaBhHU-oEimcN8y33CsxhEXhD24UdSIvKtDOtOmBqhhv4-MRpQStczMTJ9kgnSHw5XFhiDdY9UvgEL0UVjo_vudPuoS74NkD3XpOPHmXA">
+<!-- Vignette / Lighting atmosphere overlay -->
+<div class="absolute inset-0 bg-gradient-to-t from-black via-transparent to-black/80 pointer-events-none"></div>
+<div class="absolute inset-0 bg-gradient-to-r from-black/60 via-transparent to-black/60 pointer-events-none"></div>
+<div id="camera-pov-badge" class="absolute top-20 left-1/2 -translate-x-1/2 z-20 pointer-events-none transition-all duration-300 opacity-0 bg-red-950/90 border border-red-500/80 px-4 py-1.5 rounded-full shadow-[0_0_20px_rgba(220,38,38,0.6)] flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-red-500 animate-ping"></span><span class="text-xs font-black uppercase text-red-200 tracking-wider font-display">vvĐANG XEM: GÓC NHÌN THỨ 2 - CẬN CẢNH ĐỐI DIỆN / BÀN ĐẤU TOÀN CẢNH</span></div><div class="absolute inset-0 z-10 pointer-events-none" data-purpose="table-werewolf-tokens"><div class="absolute left-[48%] top-[56%] -translate-x-1/2 -translate-y-1/2 flex items-center gap-2" style="perspective: 500px; transform: rotateX(55deg);"><div class="w-14 h-20 rounded bg-gradient-to-b from-red-950 via-zinc-950 to-black border border-red-500/80 shadow-[0_0_15px_rgba(220,38,38,0.6)] flex flex-col items-center justify-between p-1 rotate-[-12deg]"><div class="text-[7px] font-display text-red-400 font-bold tracking-widest">HỘI ĐỒNG</div><div class="text-lg leading-none">🌕</div><div class="text-[6px] font-mono text-gray-400">MA SÓI</div></div><div class="w-14 h-20 rounded bg-gradient-to-b from-amber-950 via-zinc-950 to-black border border-amber-500/80 shadow-[0_0_15px_rgba(245,158,11,0.5)] flex flex-col items-center justify-between p-1 rotate-[4deg]"><div class="text-[7px] font-display text-amber-300 font-bold tracking-widest">PHÁN QUYẾT</div><div class="text-lg leading-none">⚖️</div><div class="text-[6px] font-mono text-gray-400">#02 TREO CỔ</div></div><div class="w-14 h-20 rounded bg-gradient-to-b from-purple-950 via-zinc-950 to-black border border-purple-500/70 shadow-[0_0_12px_rgba(168,85,247,0.4)] flex flex-col items-center justify-between p-1 rotate-[18deg]"><div class="text-[7px] font-display text-purple-300 font-bold tracking-widest">TIÊN TRI</div><div class="text-lg leading-none">🔮</div><div class="text-[6px] font-mono text-gray-400">SOI THÂN PHẬN</div></div></div><div class="absolute left-[20%] top-[62%] -translate-x-1/2 flex gap-1" style="perspective: 400px; transform: rotateX(50deg) rotateZ(18deg);"><div class="w-10 h-14 rounded bg-stone-900 border border-amber-600/60 shadow flex flex-col items-center justify-center"><span class="text-[6px] font-mono text-amber-400">THẺ LÀNG</span><span class="text-xs">📜</span></div></div><div class="absolute right-[22%] top-[63%] -translate-x-1/2 flex gap-1" style="perspective: 400px; transform: rotateX(50deg) rotateZ(-20deg);"><div class="w-10 h-14 rounded bg-red-950 border border-red-500/60 shadow flex flex-col items-center justify-center"><span class="text-[6px] font-mono text-red-300">PHIẾU PHẢT</span><span class="text-xs">🪢</span></div></div></div></div>
+<!-- END: GameBackground3D -->
+<!-- BEGIN: SeatHUDOverlays -->
+<!-- Floating dynamic spatial tags attached directly above each character around the table -->
+<div class="absolute inset-0 z-10 pointer-events-none" data-purpose="player-seat-markers"><!-- Ghế #01: Bác Sĩ Mỏ Quạ (Left foreground) -->
+<div class="absolute left-[7%] top-[45%] -translate-y-1/2 flex flex-col items-center">
+  <span class="text-xs font-bold text-white tracking-wider font-display drop-shadow opacity-85 select-none">
+    #01 BÁC SĨ MỎ QUẠ
+  </span>
+</div>
+
+<!-- Ghế #02: LordVader (Mid-left) -->
+<div class="absolute left-[21%] top-[25%] flex flex-col items-center">
+  <span class="text-xs font-bold text-white tracking-wider font-display drop-shadow opacity-90 select-none">
+    #02 LORDVADER
+  </span>
+</div>
+
+<!-- Ghế #03: Xemesis (Center-left) -->
+<div class="absolute left-[37%] top-[28%] flex flex-col items-center">
+  <span class="text-xs font-bold text-white tracking-wider font-display drop-shadow opacity-85 select-none">
+    #03 XEMESIS
+  </span>
+</div>
+
+<!-- Ghế #04: Cyborg Dealer (Center Dealer) -->
+<div class="absolute left-[50%] top-[24%] -translate-x-1/2 flex flex-col items-center">
+  <span class="text-xs font-bold text-white tracking-wider font-display drop-shadow opacity-90 select-none">#04 QUẢN TRÒ (MODERATOR)</span>
+</div>
+
+<!-- Ghế #05: PewPew (Center-right) -->
+<div class="absolute left-[62%] top-[29%] flex flex-col items-center">
+  <span class="text-xs font-bold text-gray-400 line-through tracking-wider font-display drop-shadow opacity-60 select-none">
+    #05 PEWPEW
+  </span>
+</div>
+
+<!-- Ghế #06: Độ Mixi (Far-right mid) -->
+<div class="absolute left-[73%] top-[25%] flex flex-col items-center">
+  <span class="text-xs font-bold text-white tracking-wider font-display drop-shadow opacity-90 select-none">
+    #06 ĐỘ MIXI
+  </span>
+</div>
+
+<!-- Ghế #07: Mặt Nạ Vàng (Far-right) -->
+<div class="absolute right-[4%] top-[34%] flex flex-col items-center">
+  <span class="text-xs font-bold text-white tracking-wider font-display drop-shadow opacity-85 select-none">
+    #07 MẶT NẠ VÀNG
+  </span>
+</div></div>
+<!-- END: SeatHUDOverlays -->
+<!-- BEGIN: TopBarCenterTurnInfo -->
+<!-- Header: Live Match Info, Target Card & Countdown Timer -->
+<header class="absolute top-3 inset-x-0 z-30 flex justify-center pointer-events-none px-6"><div class="flex items-center gap-3 pointer-events-auto bg-black/70 backdrop-blur-md px-4 py-1.5 rounded-full border border-white/10 shadow-2xl"><div class="flex items-center gap-2 pr-3 border-r border-white/10"><span class="w-2 h-2 rounded-full bg-red-500 animate-ping"></span><span class="text-xs font-bold text-red-400 font-display uppercase tracking-wider">BIỂU QUYẾT</span><span class="text-lg font-black font-display text-red-500 neon-text-red leading-none">00:13<span class="text-[10px] text-red-300 ml-0.5">s</span></span></div><div class="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-red-950/60 border border-red-500/40 text-[11px] font-mono text-red-200"><span class="text-amber-400 font-bold">#02 LordVader:</span><span class="font-black text-amber-300">3/5 Phiếu</span></div><div class="flex items-center gap-1 pl-2 border-l border-white/10"><div class="flex items-center gap-1 bg-zinc-900/80 p-0.5 rounded-full border border-white/10"><button id="btn-pov-1" class="px-2 py-0.5 rounded-full text-[9px] font-bold font-display uppercase tracking-wider transition bg-gradient-to-r from-red-600 to-rose-700 text-white shadow-[0_0_10px_rgba(220,38,38,0.7)] border border-red-400">1ST</button><button id="btn-pov-2" class="px-2 py-0.5 rounded-full text-[9px] font-bold font-display uppercase tracking-wider transition text-gray-400 hover:text-white hover:bg-zinc-800">2ND</button></div><kbd class="px-1.5 py-0.5 bg-black/60 rounded text-[9px] font-mono text-amber-300 border border-white/10">[V]</kbd></div></div></header>
+<!-- END: TopBarCenterTurnInfo -->
+<!-- BEGIN: StreamerWebcamAndLobbyInfo -->
+<!-- Top Left: Streamer FaceCam, Voice Indicator, Room Meta -->
+<aside class="absolute top-3 left-4 z-30 flex items-center gap-2 pointer-events-auto" data-purpose="streamer-hud"><div class="flex items-center gap-2 bg-black/60 backdrop-blur-md px-2.5 py-1.5 rounded-full border border-white/10 shadow-lg"><div class="relative w-8 h-8 rounded-full border border-amber-400/80 bg-zinc-800 flex items-center justify-center text-sm shadow"><span class="">🧔🏻‍♂️</span><span class="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-red-500 rounded-full border border-black animate-pulse"></span></div><div class="flex flex-col"><span class="text-[11px] font-bold text-amber-300 font-display leading-tight">ĐỘ MIXI</span><div class="flex items-center gap-1 text-[9px] font-mono text-emerald-400"><span class="w-1 h-2 bg-emerald-400 rounded-full eq-bar-1"></span><span class="w-1 h-3 bg-emerald-400 rounded-full eq-bar-2"></span><span class="">MIC ON</span></div></div></div></aside>
+<!-- END: StreamerWebcamAndLobbyInfo -->
+<!-- BEGIN: LeftHUDSeatRoster -->
+<!-- Left Side: Vertical 8-Seat Status Track & Mic Control -->
+<aside class="absolute left-4 bottom-20 z-30 w-44 flex flex-col gap-1" data-purpose="seats-vertical-tracker"><div class="bg-black/50 backdrop-blur-md p-2 rounded-xl border border-white/10 shadow-lg"><div class="text-[9px] font-mono uppercase tracking-wider text-gray-400 mb-1 flex items-center justify-between pb-1 border-b border-white/10"><span class="font-bold">BÀN CHƠI</span><span class="text-emerald-400 font-bold">6/8 SỐNG</span></div><div class="space-y-0.5 text-[10px]"><div class="flex justify-between px-1.5 py-0.5 rounded text-gray-400"><span class="">#1 Bác Sĩ</span><span class="text-emerald-400">Sống</span></div><div class="flex justify-between px-1.5 py-0.5 rounded bg-red-950/60 border border-red-500/40 text-red-200 font-bold animate-pulseSlow"><span class="">#2 LordVader</span><span class="text-red-400">3 Phiếu</span></div><div class="flex justify-between px-1.5 py-0.5 rounded text-gray-400"><span class="">#3 Xemesis</span><span class="text-emerald-400">Sống</span></div><div class="flex justify-between px-1.5 py-0.5 rounded text-cyan-300"><span class="">#4 Quản Trò</span><span class="">Chủ tọa</span></div><div class="flex justify-between px-1.5 py-0.5 rounded text-gray-500 line-through"><span class="">#5 PewPew</span><span class="text-red-500">Chết</span></div><div class="flex justify-between px-1.5 py-0.5 rounded text-gray-400"><span class="">#6 Độ Mixi</span><span class="text-emerald-400">Sống</span></div><div class="flex justify-between px-1.5 py-0.5 rounded text-gray-400"><span class="">#7 Mặt Nạ</span><span class="text-emerald-400">Sống</span></div><div class="flex justify-between px-1.5 py-0.5 rounded bg-emerald-950/60 border border-emerald-400/50 text-emerald-200 font-bold"><span class="">#8 Bạn</span><span class="text-yellow-300">Lượt bạn</span></div></div></div></aside>
+<!-- END: LeftHUDSeatRoster -->
+<!-- BEGIN: RightHUDGameLogAndRoulette -->
+<!-- Top Right: Table Combat Log & Russian Roulette Chamber Indicator -->
+<aside class="absolute top-3 right-4 z-30 flex flex-col w-64 pointer-events-auto" data-purpose="battle-log-and-roulette"><div class="bg-black/50 backdrop-blur-md p-2.5 rounded-xl border border-white/10 shadow-lg"><div class="flex items-center justify-between pb-1 border-b border-white/10 mb-1.5"><span class="text-[10px] font-bold text-amber-400 font-display tracking-wider">NHẬT KÝ</span><span class="text-[8px] font-mono text-gray-400">LIVE</span></div><div class="space-y-1.5 text-[11px] text-gray-300 font-sans"><div class="border-l border-red-500 pl-1.5 text-[10px]"><span class="text-red-400 font-semibold">#06 Độ Mixi:</span> Cáo buộc #02 LordVader có biểu hiện mờ ám.</div><div class="border-l border-amber-500 pl-1.5 text-[10px]"><span class="text-yellow-300 font-semibold">#02 LordVader:</span> "Tôi là Dân làng lương thiện!"</div><div class="border-l border-red-500 pl-1.5 text-[10px] text-red-200 font-bold">#02 LordVader đang có 3 phiếu kết tội.</div></div></div></aside>
+<!-- END: RightHUDGameLogAndRoulette -->
+<!-- BEGIN: BottomPOVCardsAndPlayerHand -->
+<!-- Player Hand POV: Displaying your playable cards fanned out at bottom center -->
+<section class="absolute bottom-16 inset-x-0 z-20 flex justify-center items-end pointer-events-auto" data-purpose="player-hand-fanned-cards"><div class="flex flex-col items-center pointer-events-auto select-none relative"><div class="werewolf-card-fan flex items-end justify-center mb-1 -space-x-8 pointer-events-auto"><div class="werewolf-tarot-card werewolf-card-back border border-amber-500/80 p-1 flex flex-col justify-between items-center text-center cursor-pointer shadow-2xl rotate-[-15deg] -translate-y-1 hover:border-amber-300 bg-gradient-to-b from-stone-900 via-zinc-950 to-black"><div class="w-full flex justify-between items-center px-1 text-[8px] font-mono text-amber-400/80"><span class="">✦</span><span class="tracking-wider">VILLAGE</span><span class="">✦</span></div><div class="flex flex-col items-center my-auto"><span class="text-3xl filter drop-shadow-[0_0_8px_rgba(245,158,11,0.7)]">🔮</span><span class="text-[9px] font-black font-display text-amber-300 tracking-wider mt-1">TIÊN TRI</span><span class="text-[7px] text-gray-400 font-mono scale-90">SOI ĐÊM NAY</span></div><div class="w-full text-center pb-0.5 text-[7px] text-amber-500 font-mono border-t border-amber-500/30">BẢO VỆ LÀNG</div></div><div class="werewolf-tarot-card werewolf-card-back border border-red-500/90 p-1 flex flex-col justify-between items-center text-center cursor-pointer shadow-2xl rotate-[-5deg] -translate-y-4 hover:border-red-400 bg-gradient-to-b from-red-950 via-zinc-950 to-black"><div class="w-full flex justify-between items-center px-1 text-[8px] font-mono text-red-400"><span class="">☠</span><span class="tracking-wider">TÒA ÁN</span><span class="">☠</span></div><div class="flex flex-col items-center my-auto"><span class="text-3xl filter drop-shadow-[0_0_10px_rgba(220,38,38,0.9)]">🪢</span><span class="text-[9px] font-black font-display text-red-200 tracking-wider mt-1">TREO CỔ</span><span class="text-[7px] text-red-400 font-mono">#02 LORDVADER</span></div><div class="w-full text-center pb-0.5 text-[7px] text-red-400 font-mono border-t border-red-500/30">3/5 PHIẾU TỘI</div></div><div class="werewolf-tarot-card werewolf-card-back border border-amber-400/90 p-1 flex flex-col justify-between items-center text-center cursor-pointer shadow-2xl rotate-[5deg] -translate-y-4 hover:border-yellow-300 bg-gradient-to-b from-amber-950 via-zinc-950 to-black"><div class="w-full flex justify-between items-center px-1 text-[8px] font-mono text-amber-400"><span class="">🌕</span><span class="tracking-wider">VAI TRÒ</span><span class="">🌕</span></div><div class="flex flex-col items-center my-auto"><span class="text-3xl filter drop-shadow-[0_0_10px_rgba(245,158,11,0.8)]">👨‍🌾</span><span class="text-[9px] font-black font-display text-amber-300 tracking-wider mt-1">DÂN LÀNG</span><span class="text-[7px] text-emerald-400 font-mono">LƯƠNG THIỆN</span></div><div class="w-full text-center pb-0.5 text-[7px] text-amber-400 font-mono border-t border-amber-500/30">BẦU CHỌN TREO</div></div><div class="werewolf-tarot-card werewolf-card-back border border-zinc-600 p-1 flex flex-col justify-between items-center text-center cursor-pointer shadow-2xl rotate-[15deg] -translate-y-1 hover:border-zinc-400 bg-gradient-to-b from-zinc-900 via-zinc-950 to-black"><div class="w-full flex justify-between items-center px-1 text-[8px] font-mono text-gray-400"><span class="">⚖</span><span class="tracking-wider">BỎ PHIẾU</span><span class="">⚖</span></div><div class="flex flex-col items-center my-auto"><span class="text-3xl filter drop-shadow">🕊️</span><span class="text-[9px] font-black font-display text-gray-200 tracking-wider mt-1">PHIẾU TRẮNG</span><span class="text-[7px] text-gray-400 font-mono">TRUNG LẬP</span></div><div class="w-full text-center pb-0.5 text-[7px] text-gray-400 font-mono border-t border-zinc-700/60">KHÔNG KẾT TỘI</div></div></div><div class="flex items-center justify-center gap-2 mt-1"><div class="hand-card-skew px-3 py-1.5 rounded-lg bg-black/80 backdrop-blur-md border border-amber-400/80 text-amber-300 flex items-center gap-2 cursor-pointer shadow-lg hover:border-yellow-300"><span class="text-base">👨‍🌾</span><div class="text-left leading-tight"><div class="text-[10px] font-extrabold font-display">DÂN LÀNG / TIÊN TRI</div><div class="text-[8px] text-amber-200/80">Tìm diệt Ma Sói trong làng</div></div></div><div class="hand-card-skew px-3 py-1.5 rounded-lg bg-red-950/90 backdrop-blur-md border border-red-500 text-red-200 flex items-center gap-2 cursor-pointer shadow-[0_0_15px_rgba(220,38,38,0.5)] -translate-y-1 hover:border-red-400"><span class="text-base">🪢</span><div class="text-left leading-tight"><div class="text-[10px] font-black font-display text-white">TREO CỔ #02 LORDVADER</div><div class="text-[8px] text-red-300">Phiếu phán quyết (3/5)</div></div></div><div class="hand-card-skew px-3 py-1.5 rounded-lg bg-black/80 backdrop-blur-md border border-zinc-600 text-gray-300 flex items-center gap-2 cursor-pointer shadow-lg hover:border-zinc-400"><span class="text-base">🕊️</span><div class="text-left leading-tight"><div class="text-[10px] font-bold font-display">BỎ PHIẾU TRẮNG</div><div class="text-[8px] text-gray-400">Từ chối treo cổ</div></div></div></div></div></section>
+<!-- END: BottomPOVCardsAndPlayerHand -->
+<!-- BEGIN: BottomActionBarControls -->
+<!-- Bottom Controller Strip: Main action buttons (Play Cards, Call Liar, Trigger Gun) -->
+<footer class="absolute bottom-3 inset-x-0 z-30 flex justify-center px-4" data-purpose="hud-action-controls"><div class="bg-black/80 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/15 shadow-2xl flex items-center gap-2 max-w-xl w-full justify-between"><button class="flex-1 bg-red-950/80 hover:bg-red-900 border border-red-600/80 text-white rounded-lg px-3 py-1.5 flex items-center justify-between text-xs font-bold transition shadow-[0_0_10px_rgba(220,38,38,0.4)]"><span class="flex items-center gap-1.5 font-display"><span class="">🪢</span> Bỏ phiếu Treo cổ #02</span><kbd class="px-1 py-0.2 bg-black/60 rounded text-[9px] font-mono text-gray-300 border border-white/10">[1]</kbd></button><button class="flex-1 bg-gradient-to-r from-red-600 to-rose-700 hover:from-red-500 hover:to-rose-600 text-white rounded-lg px-3 py-1.5 flex items-center justify-between text-xs font-black shadow-[0_0_15px_rgba(220,38,38,0.7)] border border-red-400 transition animate-glowBeat"><span class="flex items-center gap-1.5 font-display"><span class="">🗣️</span> Tranh luận / Bào chữa</span><kbd class="px-1 py-0.2 bg-black/40 rounded text-[9px] font-mono text-red-200 border border-red-300/40">[E]</kbd></button><button class="flex-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-gray-300 hover:text-white rounded-lg px-3 py-1.5 flex items-center justify-between text-xs font-bold transition"><span class="flex items-center gap-1.5 font-display"><span class="">🕊️</span> Bỏ phiếu trắng</span><kbd class="px-1 py-0.2 bg-black/60 rounded text-[9px] font-mono text-gray-400 border border-white/10">[SPACE]</kbd></button></div></footer><div id="pov-interactive-helper" class="hidden" onclick="(function(){const b1=document.getElementById('btn-pov-1');const b2=document.getElementById('btn-pov-2');const img=document.querySelector('div[data-purpose=background-viewport] img');const badge=document.getElementById('camera-pov-badge');const markers=document.querySelector('div[data-purpose=player-seat-markers]');let isPov2=false;function setPov(pov2){isPov2=pov2;if(isPov2){b1.className='px-2.5 py-0.5 rounded-full text-[10px] font-bold font-display uppercase tracking-wider transition text-gray-400 hover:text-white hover:bg-zinc-800';b2.className='px-2.5 py-0.5 rounded-full text-[10px] font-bold font-display uppercase tracking-wider transition bg-gradient-to-r from-red-600 to-rose-700 text-white shadow-[0_0_10px_rgba(220,38,38,0.7)] border border-red-400';if(img){img.style.transform='scale(1.18) translateY(-4%)';img.style.transition='transform 0.6s cubic-bezier(0.16, 1, 0.3, 1)';}if(badge){badge.classList.remove('opacity-0');badge.classList.add('opacity-100');}if(markers){markers.style.transform='scale(1.08) translateY(-3%)';markers.style.transition='transform 0.6s cubic-bezier(0.16, 1, 0.3, 1)';}}else{b2.className='px-2.5 py-0.5 rounded-full text-[10px] font-bold font-display uppercase tracking-wider transition text-gray-400 hover:text-white hover:bg-zinc-800';b1.className='px-2.5 py-0.5 rounded-full text-[10px] font-bold font-display uppercase tracking-wider transition bg-gradient-to-r from-red-600 to-rose-700 text-white shadow-[0_0_10px_rgba(220,38,38,0.7)] border border-red-400';if(img){img.style.transform='scale(1) translateY(0)';}if(badge){badge.classList.add('opacity-0');badge.classList.remove('opacity-100');}if(markers){markers.style.transform='scale(1) translateY(0)';}}}if(b1)b1.addEventListener('click',()=&gt;setPov(false));if(b2)b2.addEventListener('click',()=&gt;setPov(true));document.addEventListener('keydown',(e)=&gt;{if(e.code==='KeyV'){setPov(!isPov2);}});})()"></div><script>document.getElementById('pov-interactive-helper').click();</script>
+<!-- END: BottomActionBarControls -->
+<!-- BEGIN: InteractiveHUDKeybindScript -->
+<!-- Lightweight UI logic for key shortcuts & click feedback -->
+<script data-purpose="hud-interactions">
+    document.addEventListener('keydown', (event) => {
+      if (event.code === 'KeyE') {
+        const liarBtn = document.querySelector('button.animate-glowBeat');
+        if (liarBtn) {
+          liarBtn.classList.add('scale-95');
+          setTimeout(() => liarBtn.classList.remove('scale-95'), 150);
+        }
+      }
+    });
+
+    // Simple interaction on card click to toggle selection
+    const cards = document.querySelectorAll('.hand-card-skew');
+    cards.forEach(card => {
+      card.addEventListener('click', () => {
+        card.classList.toggle('-translate-y-8');
+        card.classList.toggle('border-yellow-300');
+      });
+    });
+  </script>
+<!-- END: InteractiveHUDKeybindScript -->
+
+
+
+
+</body></html>

@@ -3,6 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { AuthClient, UserProfile } from '../services/auth.client';
+import { CreateRoomModal } from '../components/CreateRoomModal';
+import { RoomSettings } from '@werewolf/shared';
 
 export default function HomePage() {
   const router = useRouter();
@@ -18,6 +20,7 @@ export default function HomePage() {
   const [quickCodeInput, setQuickCodeInput] = useState('');
   const [nickname, setNickname] = useState('');
   const [showJoinModal, setShowJoinModal] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
 
   useEffect(() => {
@@ -56,6 +59,13 @@ export default function HomePage() {
     const finalNick = nickname.trim() || sessionStorage.getItem('werewolf_nickname') || 'Thợ Săn Mới';
     sessionStorage.setItem('werewolf_nickname', finalNick);
     router.push(`/game/${roomCode}`);
+  };
+
+  const handleCustomRoomCreated = (settings: Partial<RoomSettings>, hostNickname: string) => {
+    sessionStorage.setItem('werewolf_nickname', hostNickname);
+    sessionStorage.setItem('werewolf_pending_create_settings', JSON.stringify(settings));
+    setShowCreateModal(false);
+    router.push('/game/NEW');
   };
 
   const filteredRooms = roomsList.filter((r) => {
@@ -113,6 +123,13 @@ export default function HomePage() {
               className="px-4 py-1.5 rounded font-space text-xs uppercase tracking-wider text-slate-300 hover:text-white hover:bg-[#1c1f2a] transition-all"
             >
               Bàn Chơi 3D POV
+            </button>
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="px-3.5 py-1.5 rounded font-space text-xs uppercase tracking-wider text-amber-300 bg-amber-950/60 border border-amber-500/40 hover:bg-amber-900/80 transition-all flex items-center gap-1.5 font-bold shadow-[0_0_12px_rgba(245,158,11,0.3)]"
+            >
+              <span className="material-symbols-outlined text-[15px]">add_circle</span>
+              <span>Tạo Phòng Tùy Chỉnh</span>
             </button>
           </nav>
 
@@ -306,34 +323,46 @@ export default function HomePage() {
 
                 {/* Mode 3: Custom */}
                 <div
-                  onClick={() => setShowJoinModal(true)}
-                  className="relative flex items-center justify-between p-3.5 rounded-xl bg-[#1c1f2a]/60 hover:bg-[#262a35] border border-[#334155]/30 cursor-pointer transition-all"
+                  onClick={() => setShowCreateModal(true)}
+                  className="relative flex items-center justify-between p-3.5 rounded-xl bg-[#1c1f2a]/60 hover:bg-[#262a35] border border-amber-500/30 hover:border-amber-500/60 cursor-pointer transition-all shadow-md group"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded bg-[#313540] flex items-center justify-center text-purple-400">
+                    <div className="w-10 h-10 rounded bg-amber-950/60 border border-amber-500/40 flex items-center justify-center text-amber-400 group-hover:scale-105 transition-transform">
                       <span className="material-symbols-outlined text-[22px]">tune</span>
                     </div>
                     <div className="flex flex-col">
-                      <span className="font-space font-bold text-sm text-white">Tùy Chỉnh & Nhập Mã Phòng</span>
+                      <span className="font-space font-bold text-sm text-white group-hover:text-amber-300 transition-colors">
+                        Tùy Chỉnh & Tạo Bàn Mới
+                      </span>
                       <span className="font-geist text-[11px] text-slate-400">
-                        Vào phòng bạn bè qua mã 6 ký tự hoặc tạo bàn riêng
+                        Chọn số người, thời gian thảo luận & cơ cấu các vai trò
                       </span>
                     </div>
                   </div>
-                  <span className="material-symbols-outlined text-slate-400 text-[20px]">chevron_right</span>
+                  <span className="material-symbols-outlined text-amber-400 text-[20px]">add_circle</span>
                 </div>
               </div>
 
-              {/* Match CTA Button */}
+              {/* Match CTA Buttons */}
               <div className="flex flex-col gap-2">
-                <button
-                  onClick={() => handleJoinRoom('ROOM-1')}
-                  className="w-full relative group overflow-hidden py-4 px-6 rounded-xl bg-gradient-to-r from-red-800 via-red-600 to-red-800 text-white font-space font-bold text-sm uppercase tracking-wider shadow-[0_0_28px_rgba(147,0,10,0.7)] hover:shadow-[0_0_36px_rgba(239,68,68,0.85)] hover:scale-[1.01] active:scale-[0.99] transition-all flex items-center justify-center gap-2"
-                >
-                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full duration-700 transition-transform" />
-                  <span className="material-symbols-outlined text-[22px]">travel_explore</span>
-                  <span>VÀO BÀN CƯỢC (TÌM TRẬN)</span>
-                </button>
+                <div className="flex gap-2.5">
+                  <button
+                    onClick={() => handleJoinRoom('ROOM-1')}
+                    className="flex-1 relative group overflow-hidden py-3.5 px-4 rounded-xl bg-gradient-to-r from-red-800 via-red-600 to-red-800 text-white font-space font-bold text-xs uppercase tracking-wider shadow-[0_0_28px_rgba(147,0,10,0.7)] hover:shadow-[0_0_36px_rgba(239,68,68,0.85)] hover:scale-[1.01] active:scale-[0.99] transition-all flex items-center justify-center gap-1.5"
+                  >
+                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full duration-700 transition-transform" />
+                    <span className="material-symbols-outlined text-[20px]">travel_explore</span>
+                    <span>VÀO BÀN CƯỢC</span>
+                  </button>
+
+                  <button
+                    onClick={() => setShowCreateModal(true)}
+                    className="flex-1 py-3.5 px-4 rounded-xl bg-gradient-to-r from-amber-700 via-amber-600 to-amber-700 hover:from-amber-600 hover:to-amber-500 text-white font-space font-black text-xs uppercase tracking-wider shadow-[0_0_24px_rgba(217,119,6,0.5)] hover:scale-[1.01] active:scale-[0.99] transition-all flex items-center justify-center gap-1.5"
+                  >
+                    <span className="material-symbols-outlined text-[20px]">tune</span>
+                    <span>TẠO BÀN TÙY CHỈNH</span>
+                  </button>
+                </div>
                 <div className="flex items-center justify-between text-slate-400 font-space text-[11px] px-1">
                   <span className="flex items-center gap-1.5">
                     <span className="w-1.5 h-1.5 rounded-full bg-primary" /> Ping: 24ms (Hà Nội)
@@ -592,11 +621,11 @@ export default function HomePage() {
 
               <button
                 type="button"
-                onClick={() => setShowJoinModal(true)}
-                className="px-4 py-2 rounded-xl bg-gradient-to-r from-red-800 to-red-600 hover:from-red-700 hover:to-red-500 text-white font-space font-bold text-xs uppercase tracking-wider shadow-lg shadow-red-950/40 flex items-center gap-1.5 transition-all"
+                onClick={() => setShowCreateModal(true)}
+                className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-700 to-amber-600 hover:from-amber-600 hover:to-amber-500 text-white font-space font-bold text-xs uppercase tracking-wider shadow-lg shadow-amber-950/40 flex items-center gap-1.5 transition-all"
               >
                 <span className="material-symbols-outlined text-[16px]">add_circle</span>
-                Tạo Bàn Riêng
+                Tạo Bàn Mới
               </button>
             </div>
           </div>
@@ -708,16 +737,27 @@ export default function HomePage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => handleJoinRoom('NEW')}
-                  className="flex-1 py-2.5 rounded-lg bg-gradient-to-r from-red-800 to-red-600 text-white font-space font-bold text-xs uppercase tracking-wider"
+                  onClick={() => {
+                    setShowJoinModal(false);
+                    setShowCreateModal(true);
+                  }}
+                  className="flex-1 py-2.5 rounded-lg bg-gradient-to-r from-amber-700 to-amber-600 hover:from-amber-600 hover:to-amber-500 text-white font-space font-bold text-xs uppercase tracking-wider transition-all"
                 >
-                  Tạo Phòng Mới
+                  Cấu Hình & Tạo Bàn Mới
                 </button>
               </div>
             </div>
           </div>
         </div>
       )}
+
+      {/* 4. COMPREHENSIVE CREATE ROOM MODAL */}
+      <CreateRoomModal
+        isOpen={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+        onCreateRoom={handleCustomRoomCreated}
+        initialNickname={nickname || userProfile?.nickname || 'Thợ Săn Bạn'}
+      />
     </div>
   );
 }

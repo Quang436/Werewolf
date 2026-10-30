@@ -168,11 +168,11 @@ export type ErrorCode = z.infer<typeof ErrorCode>;
 
 /* ============================== SETTINGS ============================== */
 
-export const RoleConfig = z.record(Role, z.number().int().min(0).max(12));
+export const RoleConfig = z.record(Role, z.number().int().min(0).max(18));
 
 export const RoomSettings = z.object({
-  minPlayers: z.number().int().min(6).default(6),
-  maxPlayers: z.number().int().max(12).default(12),
+  minPlayers: z.number().int().min(4).default(4),
+  maxPlayers: z.number().int().min(4).max(18).default(12),
   roleConfig: RoleConfig,
   seerRevealMode: z.enum(['WOLF_OR_NOT', 'EXACT_ROLE']).default('WOLF_OR_NOT'),
   revealRoleOnDeath: z.boolean().default(false),
@@ -195,7 +195,7 @@ export const RoomSettings = z.object({
     seer: z.number().int().default(15),
     announcement: z.number().int().default(6),
     deathTriggers: z.number().int().default(20),
-    discussion: z.number().int().min(30).max(300).default(120),
+    discussion: z.number().int().min(15).max(600).default(120),
     voting: z.number().int().default(30),
     revote: z.number().int().default(20),
     defense: z.number().int().default(30),

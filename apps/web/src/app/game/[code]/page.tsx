@@ -34,8 +34,18 @@ export default function GameRoomPage() {
     if (!isConnected || !code) return;
 
     if (code === 'NEW') {
-      // Tạo phòng mới
-      emitAction('room:create', {}).then((res) => {
+      // Tạo phòng mới với cấu hình tùy chỉnh (nếu có)
+      let pendingSettings = {};
+      try {
+        const stored = sessionStorage.getItem('werewolf_pending_create_settings');
+        if (stored) {
+          pendingSettings = JSON.parse(stored);
+        }
+      } catch (e) {
+        console.error('Failed to parse pending create settings:', e);
+      }
+
+      emitAction('room:create', { settings: pendingSettings }).then((res) => {
         if (res.ok) {
           const roomCode = (res as any).data?.code;
           if (roomCode) {

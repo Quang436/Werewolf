@@ -9,6 +9,12 @@ import {
 } from '@werewolf/shared';
 import { GameStateManager } from '../stores/game.store';
 import { LiarsBar3DExperience, werewolfAudio } from './LiarsBar3DExperience';
+import { PlayerRoleCard } from './PlayerRoleCard';
+import {
+  generateBalancedDeck,
+  getRoleInfo,
+  shuffleArray,
+} from '../constants/roles-data';
 
 export interface WerewolfGameAppProps {
   store: GameStateManager;
@@ -80,12 +86,15 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
         e.preventDefault();
         werewolfAudio.playVoteStamp();
         onEmitAction('day:vote', { targetId: 'SKIP' });
+      } else if (e.code === 'KeyC') {
+        store.toggleCardReveal();
+        werewolfAudio.playCardDeal();
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onEmitAction, selectedTargetId]);
+  }, [onEmitAction, selectedTargetId, store]);
 
   // Dynamic players list resolution (from live room or demo council size)
   const activePlayers: PublicPlayerView[] = useMemo(() => {
@@ -129,6 +138,55 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
   const myNickname =
     myPlayerInfo?.nickname ||
     (typeof window !== 'undefined' ? sessionStorage.getItem('werewolf_nickname') || 'Thợ Săn Bạn' : 'Thợ Săn Bạn');
+
+  const [dealNotification, setDealNotification] = useState<string | null>(null);
+
+  // Resolved current role: prioritizes state.assignedRole, then room.me.role, then fallback
+  const myCurrentRole: Role = useMemo(() => {
+    return state.assignedRole || (effectiveRoom.me?.role as Role) || 'SEER';
+  }, [state.assignedRole, effectiveRoom.me?.role]);
+
+  const handleRandomDeal = () => {
+    werewolfAudio.playCardDeal();
+    const count = activePlayers.length;
+    const balancedDeck = generateBalancedDeck(count);
+    const shuffled = shuffleArray(balancedDeck);
+
+    const myIndex = activePlayers.findIndex((p) => p.id === myPlayerInfo?.id);
+    const myNewRole = shuffled[myIndex >= 0 ? myIndex : shuffled.length - 1];
+    const myRoleInfo = getRoleInfo(myNewRole);
+    const myTeam =
+      myRoleInfo.category === 'werewolf'
+        ? 'WEREWOLF'
+        : myRoleInfo.category === 'third'
+        ? 'NEUTRAL'
+        : 'VILLAGE';
+
+    const wolves = activePlayers
+      .filter((_, idx) => {
+        const r = shuffled[idx];
+        return r === 'WEREWOLF' || r === 'BIG_BAD_WOLF' || r === 'WOLF_CUB' || r === 'LONE_WOLF';
+      })
+      .map((p) => ({ id: p.id, nickname: p.nickname }));
+
+    store.setAssignedRole({
+      role: myNewRole,
+      team: myTeam as any,
+      teammates: wolves,
+    });
+    store.setCardRevealed(true);
+
+    if (myRoleInfo.category === 'werewolf') {
+      werewolfAudio.playWolfHowl();
+    } else {
+      werewolfAudio.playBell();
+    }
+
+    setDealNotification(
+      `🎴 Đã phát bài ngẫu nhiên cho ${count} người chơi! Bạn nhận lá bài: ${myRoleInfo.nameVN} (${myRoleInfo.categoryLabel})`
+    );
+    setTimeout(() => setDealNotification(null), 4500);
+  };
 
   const isNight = effectiveRoom.phase.includes('NIGHT');
   const remainingSeconds = Math.max(0, Math.ceil(state.remainingMs ? state.remainingMs / 1000 : 45));
@@ -228,6 +286,19 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
             </div>
           </div>
 
+          {/* Random Card Deal Engine Button */}
+          <div className="flex items-center pl-2 border-l border-white/10">
+            <button
+              type="button"
+              onClick={handleRandomDeal}
+              className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-gradient-to-r from-amber-500 via-amber-600 to-amber-700 hover:from-amber-400 hover:to-amber-600 text-black font-black text-[11px] font-display uppercase tracking-wider shadow-[0_0_15px_rgba(245,158,11,0.6)] border border-amber-300 transition-all transform hover:scale-105 active:scale-95"
+              title="Phát bài ngẫu nhiên cho tất cả người chơi trong phòng"
+            >
+              <span className="text-sm">🎴</span>
+              <span>Phát Bài Ngẫu Nhiên</span>
+            </button>
+          </div>
+
           {/* Phase Quick Toggle for Testing (Day / Night) */}
           <div className="flex items-center gap-1 pl-2 border-l border-white/10">
             <button
@@ -289,6 +360,16 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
         </div>
       </header>
 
+      {/* Random Deal Notification Banner */}
+      {dealNotification && (
+        <div className="absolute top-14 left-1/2 -translate-x-1/2 z-40 bg-gradient-to-r from-amber-950 via-zinc-950 to-amber-950 border-2 border-amber-500/80 px-6 py-2 rounded-2xl shadow-[0_0_35px_rgba(245,158,11,0.7)] flex items-center gap-3 animate-fadeIn">
+          <span className="text-2xl animate-bounce">🎴</span>
+          <span className="text-xs font-display font-black text-amber-200 tracking-wide uppercase">
+            {dealNotification}
+          </span>
+        </div>
+      )}
+
       {/* 3. STREAMER PROFILE & WEBCAM (TOP LEFT) */}
       <aside className="absolute top-3 left-4 z-30 flex items-center gap-2 pointer-events-auto">
         <div className="flex items-center gap-2.5 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 shadow-lg">
@@ -324,7 +405,7 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
       </aside>
 
       {/* 4. LEFT HUD: DYNAMIC COUNCIL ROSTER (SHOWS EXACT PARTICIPANTS) */}
-      <aside className="absolute left-4 bottom-24 z-30 w-52 flex flex-col gap-1.5 pointer-events-auto">
+      <aside className="absolute left-4 top-16 z-30 w-56 flex flex-col gap-1.5 pointer-events-auto">
         <div className="bg-black/75 backdrop-blur-md p-2.5 rounded-xl border border-white/10 shadow-2xl">
           <div className="text-[9px] font-mono uppercase tracking-wider text-gray-400 mb-1.5 flex items-center justify-between pb-1 border-b border-white/10">
             <span className="font-bold flex items-center gap-1 text-slate-200">
@@ -334,7 +415,7 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
             <span className="text-emerald-400 font-bold text-[9px]">SỐNG {aliveCount}</span>
           </div>
 
-          <div className="space-y-1 text-[10px] max-h-56 overflow-y-auto pr-1">
+          <div className="space-y-1 text-[10px] max-h-48 overflow-y-auto pr-1">
             {activePlayers.map((p) => {
               const isSelected = selectedTargetId === p.id;
               const isAccused = accusedPlayerId === p.id;
@@ -384,6 +465,36 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
             })}
           </div>
         </div>
+      </aside>
+
+      {/* 4.5. BOTTOM LEFT: PLAYER ROLE CARD HUD (3D FLIP, ACTIONS & LORE) */}
+      <aside className="absolute left-4 bottom-3 z-40">
+        <PlayerRoleCard
+          role={myCurrentRole}
+          team={state.assignedTeam}
+          wolfTeammates={state.wolfTeammates}
+          lover={(effectiveRoom.me as any)?.lover}
+          isCardRevealed={state.isCardRevealed}
+          onToggleReveal={() => {
+            store.toggleCardReveal();
+            werewolfAudio.playCardDeal();
+          }}
+          onSelectRoleTest={(newRole) => {
+            const roleInfo = getRoleInfo(newRole);
+            const team =
+              roleInfo.category === 'werewolf'
+                ? 'WEREWOLF'
+                : roleInfo.category === 'third'
+                ? 'NEUTRAL'
+                : 'VILLAGE';
+            store.setAssignedRole({
+              role: newRole,
+              team: team as any,
+            });
+            werewolfAudio.playCardDeal();
+          }}
+          isAlive={myPlayerInfo?.isAlive}
+        />
       </aside>
 
       {/* 5. RIGHT HUD: COMBAT / TRIAL LOG & IN-GAME CHAT STREAM */}

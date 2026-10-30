@@ -61,11 +61,18 @@ export class GameLoopService {
       // Kiểm tra tổng số lượng role cấu hình
       let totalAssignedRoles = 0;
       const rolePool: Role[] = [];
-      for (const [r, count] of Object.entries(room.settings.roleConfig)) {
+      for (const [r, count] of Object.entries(room.settings.roleConfig || {})) {
         totalAssignedRoles += count;
         for (let i = 0; i < count; i++) {
           rolePool.push(r as Role);
         }
+      }
+
+      // Nếu phòng chưa cấu hình thủ công -> Tự động sinh bộ bài cân bằng chuẩn
+      if (totalAssignedRoles === 0) {
+        const autoRoles = this.generateAutoBalancedRoles(playerCount);
+        rolePool.push(...autoRoles);
+        totalAssignedRoles = rolePool.length;
       }
 
       if (totalAssignedRoles !== playerCount) {
@@ -412,4 +419,37 @@ export class GameLoopService {
       stats: playerStats,
     });
   }
+
+  /**
+   * Tự động sinh danh sách bài ngẫu nhiên cân bằng theo số lượng người
+   */
+  private generateAutoBalancedRoles(playerCount: number): Role[] {
+    const count = Math.max(4, Math.min(18, playerCount));
+    if (count === 4) return ['WEREWOLF', 'SEER', 'BODYGUARD', 'VILLAGER'];
+    if (count === 6) return ['WEREWOLF', 'MINION', 'SEER', 'BODYGUARD', 'HUNTER', 'VILLAGER'];
+    if (count === 8) return ['WEREWOLF', 'WEREWOLF', 'SEER', 'BODYGUARD', 'WITCH', 'HUNTER', 'VILLAGER', 'VILLAGER'];
+    if (count === 10) return ['WEREWOLF', 'WEREWOLF', 'WOLF_CUB', 'SEER', 'BODYGUARD', 'WITCH', 'HUNTER', 'CUPID', 'VILLAGER', 'VILLAGER'];
+    if (count === 12) return ['WEREWOLF', 'WEREWOLF', 'BIG_BAD_WOLF', 'SEER', 'BODYGUARD', 'WITCH', 'HUNTER', 'CUPID', 'MAYOR', 'TANNER', 'VILLAGER', 'VILLAGER'];
+
+    const wolfCount = Math.max(1, Math.floor(count / 3.5));
+    const deck: Role[] = [];
+    deck.push('WEREWOLF');
+    if (wolfCount >= 2) deck.push('WEREWOLF');
+    if (wolfCount >= 3) deck.push('BIG_BAD_WOLF');
+    if (wolfCount >= 4) deck.push('LONE_WOLF');
+
+    deck.push('SEER');
+    deck.push('BODYGUARD');
+    if (deck.length < count) deck.push('WITCH');
+    if (deck.length < count) deck.push('HUNTER');
+    if (deck.length < count) deck.push('CUPID');
+    if (deck.length < count) deck.push('MAYOR');
+    if (deck.length < count && count >= 10) deck.push('TANNER');
+
+    while (deck.length < count) {
+      deck.push('VILLAGER');
+    }
+    return deck.slice(0, count);
+  }
 }
+

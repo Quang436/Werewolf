@@ -70,6 +70,10 @@ export function useWerewolfSocket({
       store.setRoomSnapshot(p.data);
     });
 
+    socket.on('role:assigned', (p: ServerPacket<any>) => {
+      store.setAssignedRole(p.data);
+    });
+
     socket.on('phase:changed', (p: ServerPacket<{ phase: any; phaseEndsAt: number | null }>) => {
       store.updatePhase(p.data.phase, p.data.phaseEndsAt);
     });

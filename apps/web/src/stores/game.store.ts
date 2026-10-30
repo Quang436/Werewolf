@@ -6,6 +6,7 @@
  * 2. Tích hợp ClockSync (NTP) để tính chính xác countdown timer từng mili-giây.
  * 3. Quản lý tin nhắn chat theo 4 tab kênh: 'public', 'wolves', 'lovers', 'dead'.
  * 4. Quản lý trạng thái tương tác của người chơi (Pending Action dialog).
+ * 5. Quản lý hiển thị lá bài vai trò cá nhân (Player Role Card, lật bài, chi tiết kỹ năng).
  */
 
 import {
@@ -28,6 +29,12 @@ export interface ChatMessage {
   ts: number;
 }
 
+export interface AssignedRolePayload {
+  role: Role;
+  team: Team;
+  teammates?: Array<{ id: string; nickname: string }>;
+}
+
 export interface GameState {
   room: ClientRoomView | null;
   clockSync: ClockSync;
@@ -39,6 +46,13 @@ export interface GameState {
   seerResultModal: { targetId: string; result: string } | null;
   winnerAnnouncement: Team | null;
 
+  // Role Card Display State
+  assignedRole: Role | null;
+  assignedTeam: Team | null;
+  wolfTeammates: Array<{ id: string; nickname: string }>;
+  isCardRevealed: boolean;
+  isRoleModalOpen: boolean;
+
   // Actions
   setRoomSnapshot: (snapshot: ClientRoomView) => void;
   updatePhase: (phase: ClientRoomView['phase'], phaseEndsAt: number | null) => void;
@@ -48,6 +62,10 @@ export interface GameState {
   setActiveChatChannel: (channel: ChatChannel) => void;
   setPendingAction: (action: ActionRequest | null) => void;
   setSeerResult: (res: { targetId: string; result: string } | null) => void;
+  setAssignedRole: (payload: AssignedRolePayload) => void;
+  toggleCardReveal: () => void;
+  setCardRevealed: (revealed: boolean) => void;
+  setRoleModalOpen: (open: boolean) => void;
   resetGame: () => void;
 }
 
@@ -61,6 +79,10 @@ export function createInitialGameState(): Omit<
   | 'setActiveChatChannel'
   | 'setPendingAction'
   | 'setSeerResult'
+  | 'setAssignedRole'
+  | 'toggleCardReveal'
+  | 'setCardRevealed'
+  | 'setRoleModalOpen'
   | 'resetGame'
 > {
   return {
@@ -78,6 +100,11 @@ export function createInitialGameState(): Omit<
     pendingAction: null,
     seerResultModal: null,
     winnerAnnouncement: null,
+    assignedRole: null,
+    assignedTeam: null,
+    wolfTeammates: [],
+    isCardRevealed: true,
+    isRoleModalOpen: false,
   };
 }
 
@@ -97,6 +124,10 @@ export class GameStateManager {
       setActiveChatChannel: (channel) => this.setActiveChatChannel(channel),
       setPendingAction: (action) => this.setPendingAction(action),
       setSeerResult: (res) => this.setSeerResult(res),
+      setAssignedRole: (payload) => this.setAssignedRole(payload),
+      toggleCardReveal: () => this.toggleCardReveal(),
+      setCardRevealed: (revealed) => this.setCardRevealed(revealed),
+      setRoleModalOpen: (open) => this.setRoleModalOpen(open),
       resetGame: () => this.resetGame(),
     };
   }
@@ -116,11 +147,39 @@ export class GameStateManager {
     }
   }
 
+  public setAssignedRole(payload: AssignedRolePayload): void {
+    this.state.assignedRole = payload.role;
+    this.state.assignedTeam = payload.team;
+    if (payload.teammates) {
+      this.state.wolfTeammates = payload.teammates;
+    }
+    this.notify();
+  }
+
+  public toggleCardReveal(): void {
+    this.state.isCardRevealed = !this.state.isCardRevealed;
+    this.notify();
+  }
+
+  public setCardRevealed(revealed: boolean): void {
+    this.state.isCardRevealed = revealed;
+    this.notify();
+  }
+
+  public setRoleModalOpen(open: boolean): void {
+    this.state.isRoleModalOpen = open;
+    this.notify();
+  }
+
   public setRoomSnapshot(snapshot: ClientRoomView): void {
     this.state.room = snapshot;
     this.state.pendingAction = snapshot.pendingAction || null;
     if (snapshot.winner) {
       this.state.winnerAnnouncement = snapshot.winner;
+    }
+    if (snapshot.me?.role && !this.state.assignedRole) {
+      this.state.assignedRole = snapshot.me.role;
+      this.state.assignedTeam = snapshot.me.team;
     }
     this.updateRemainingTime();
     this.notify();

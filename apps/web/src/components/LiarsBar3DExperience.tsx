@@ -130,6 +130,8 @@ export interface TableOpponent {
   isDead: boolean;
   votes: number;
   dialogue?: string;
+  idleImg: string;
+  actionImg: string;
 }
 
 export interface LiarsBar3DProps {
@@ -167,41 +169,69 @@ export function LiarsBar3DExperience({
   // Screen-projected positions for 3D nametags / dialogue
   const [screenPos, setScreenPos] = useState<{ [id: string]: { x: number; y: number; visible: boolean } }>({});
 
-  // Local opponents state
+  // 5 Iconic Characters matching the user's reference image
   const [opponents, setOpponents] = useState<TableOpponent[]>([
     {
-      id: 'bull',
+      id: 'cowboy',
       seatNumber: 1,
-      nickname: '#01 TRÙM TÊ GIÁC (BULL)',
-      roleHint: 'Đại Ca Giáp Gai',
+      nickname: '#01 CAO BỒI (GUNSLINGER)',
+      roleHint: 'Xạ Thủ Bất Tử',
       isDead: false,
       votes: 1,
-      dialogue: 'Hai đứa mày đừng hòng qua mặt tao. Tao có 3 lá Át!',
+      dialogue: 'Đừng có giở trò với tao. Tao đã thấy ngươi rút bài gian lận!',
+      idleImg: '/assets/characters/cowboy_idle.png',
+      actionImg: '/assets/characters/cowboy_action.png',
     },
     {
-      id: 'robot',
+      id: 'plague',
       seatNumber: 2,
-      nickname: '#02 ROBOT TRỌNG TÀI',
-      roleHint: 'Chủ Sòng Dealer',
+      nickname: '#02 BÁC SĨ DỊCH HẠCH',
+      roleHint: 'Thầy Thuốc Bí Ẩn',
       isDead: false,
       votes: 0,
-      dialogue: 'Hãy đặt cược số phận của các ngươi lên bàn poker!',
+      dialogue: 'Mùi của cái chết đang bao trùm lấy bàn poker này...',
+      idleImg: '/assets/characters/plague_idle.png',
+      actionImg: '/assets/characters/plague_action.png',
+    },
+    {
+      id: 'dog',
+      seatNumber: 3,
+      nickname: '#03 CHÓ BỐ GIÀ (PEAKY)',
+      roleHint: 'Trùm Sòng Bạc Lão Luyện',
+      isDead: false,
+      votes: 0,
+      dialogue: 'Cứ bình tĩnh hút điếu thuốc đã, xem ai là kẻ nói dối trước.',
+      idleImg: '/assets/characters/dog_idle.png',
+      actionImg: '/assets/characters/dog_action.png',
     },
     {
       id: 'wolf',
-      seatNumber: 3,
-      nickname: '#03 SÁT THỦ SÓI',
-      roleHint: 'Sát Thủ Sói Mobster',
+      seatNumber: 4,
+      nickname: '#04 MA SÓI HẮC ÁM',
+      roleHint: 'Ác Quỷ Đêm Trăng',
       isDead: false,
       votes: 2,
-      dialogue: 'Cứ thử bóp cò đi, xem đứa nào nằm xuống trước!',
+      dialogue: 'Cứ thử bóp cò đi! Máu của ngươi sẽ tưới đẫm bàn này!',
+      idleImg: '/assets/characters/wolf_idle.png',
+      actionImg: '/assets/characters/wolf_action.png',
+    },
+    {
+      id: 'girl',
+      seatNumber: 5,
+      nickname: '#05 CÔ GÁI DÂN LÀNG',
+      roleHint: 'Dân Làng Vô Tội',
+      isDead: false,
+      votes: 0,
+      dialogue: 'Làm ơn tin tôi đi, tôi thực sự chỉ là dân làng thôi mà...',
+      idleImg: '/assets/characters/girl_idle.png',
+      actionImg: '/assets/characters/girl_action.png',
     },
   ]);
 
   // Cards on hand
   const [handCards] = useState([
     { id: 1, name: 'TIÊN TRI', sub: 'SOI ĐÊM', type: 'seer', icon: '🔮', desc: 'Tìm diệt Ma Sói trong làng' },
-    { id: 2, name: 'TREO CỔ', sub: '#03 SÁT THỦ SÓI', type: 'verdict', icon: '⚖️', desc: '3/5 Phiếu phán quyết' },
+    { id: 2, name: 'TREO CỔ', sub: '#04 MA SÓI', type: 'verdict', icon: '⚖️', desc: '3/5 Phiếu phán quyết' },
     { id: 3, name: 'DÂN LÀNG', sub: 'LƯƠNG THIỆN', type: 'village', icon: '🧑🌾', desc: 'Bầu chọn treo cổ kẻ ác' },
     { id: 4, name: 'PHIẾU TRẮNG', sub: 'TRUNG LẬP', type: 'skip', icon: '🕊️', desc: 'Từ chối phán quyết' },
   ]);
@@ -219,14 +249,24 @@ export function LiarsBar3DExperience({
     muzzleLight: THREE.PointLight;
     lampGroup: THREE.Group;
     playedCardsGroup: THREE.Group;
+    candleLight1: THREE.PointLight;
+    candleLight2: THREE.PointLight;
+    particles: THREE.Points;
     raycaster: THREE.Raycaster;
     shootRecoil: number;
-    mixers: THREE.AnimationMixer[];
-    charObjects: { [id: string]: { root: THREE.Object3D; mixer?: THREE.AnimationMixer; actions: { [name: string]: THREE.AnimationAction } } };
+    charObjects: {
+      [id: string]: {
+        root: THREE.Mesh;
+        idleTex: THREE.Texture;
+        actTex: THREE.Texture;
+        mat: THREE.MeshStandardMaterial;
+        baseY: number;
+      };
+    };
   } | null>(null);
 
   // ============================================================================
-  // 3. INITIALIZE REAL THREE.JS 3D WEBGL SCENE WITH FULL 3D MODELS
+  // 3. INITIALIZE REAL THREE.JS 3D WEBGL CINEMATIC TAVERN EXPERIENCE
   // ============================================================================
   useEffect(() => {
     if (!mountRef.current) return;
@@ -234,555 +274,214 @@ export function LiarsBar3DExperience({
     const width = container.clientWidth || window.innerWidth;
     const height = container.clientHeight || window.innerHeight;
 
-    // A. RENDERER (Warm, high-exposure cinematic tone mapping)
+    // A. RENDERER (Warm, cinematic tone mapping)
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' });
     renderer.setSize(width, height);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 2.2;
+    renderer.toneMappingExposure = 1.95;
     container.replaceChildren(renderer.domElement);
 
-    // B. SCENE & ATMOSPHERE (Warm Amber-Gold Speakeasy Tavern)
+    // B. SCENE & ATMOSPHERE (Warm Speakeasy Tavern)
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x382216);
-    scene.fog = new THREE.Fog(0x382216, 14, 42);
+    scene.background = new THREE.Color(0x1a100a);
+    scene.fog = new THREE.Fog(0x1a100a, 8, 22);
 
-    // C. CAMERA (FPS Perspective)
-    const camera = new THREE.PerspectiveCamera(60, width / height, 0.1, 50);
-    camera.position.set(0, 1.52, 2.05);
-    camera.lookAt(0, 1.15, -0.4);
+    // C. CAMERA (First Person Perspective)
+    const camera = new THREE.PerspectiveCamera(54, width / height, 0.1, 40);
+    camera.position.set(0, 1.46, 1.95);
+    camera.lookAt(0, 1.15, -0.6);
 
     // D. CINEMATIC WARM TAVERN MULTI-SOURCE LIGHTING
-    // 1. Global Warm Ambient Light (Eliminates pitch-black shadows)
-    const ambientLight = new THREE.AmbientLight(0xffeedb, 3.2);
+    // 1. Global Ambient Light
+    const ambientLight = new THREE.AmbientLight(0xffeedb, 2.6);
     scene.add(ambientLight);
 
-    // 2. Warm Hemisphere Bounce (Warm ceiling light + mahogany floor bounce)
-    const hemiLight = new THREE.HemisphereLight(0xfff5e6, 0x784420, 2.6);
+    // 2. Warm Hemisphere Bounce
+    const hemiLight = new THREE.HemisphereLight(0xffecd2, 0x5a3116, 2.2);
     scene.add(hemiLight);
 
-    // 3. Main Key Directional Sun/Window Light
-    const dirLight = new THREE.DirectionalLight(0xffedd5, 3.5);
-    dirLight.position.set(2, 6, 3);
-    dirLight.target.position.set(0, 1.0, -0.4);
-    scene.add(dirLight);
-    scene.add(dirLight.target);
-
-    // 4. Swinging Brass Overhead Lantern
+    // 3. Hanging Brass Overhead Lantern
     const lampGroup = new THREE.Group();
-    lampGroup.position.set(0, 3.4, 0);
+    lampGroup.position.set(0, 3.2, -1.35);
 
     const chainGeo = new THREE.CylinderGeometry(0.015, 0.015, 1.2, 8);
-    const metalMat = new THREE.MeshStandardMaterial({ color: 0x292524, roughness: 0.6, metalness: 0.8 });
+    const metalMat = new THREE.MeshStandardMaterial({ color: 0x221810, roughness: 0.7, metalness: 0.8 });
     const chainMesh = new THREE.Mesh(chainGeo, metalMat);
     chainMesh.position.y = -0.6;
     lampGroup.add(chainMesh);
 
-    const shadeGeo = new THREE.ConeGeometry(0.44, 0.30, 24, 1, true);
-    const brassMat = new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.3, metalness: 0.85 });
+    const shadeGeo = new THREE.ConeGeometry(0.42, 0.28, 24, 1, true);
+    const brassMat = new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.35, metalness: 0.85 });
     const shadeMesh = new THREE.Mesh(shadeGeo, brassMat);
     shadeMesh.position.y = -1.2;
     shadeMesh.rotation.x = Math.PI;
     lampGroup.add(shadeMesh);
 
-    const bulbGeo = new THREE.SphereGeometry(0.1, 16, 16);
-    const bulbMat = new THREE.MeshBasicMaterial({ color: 0xfff0aa });
-    const bulbMesh = new THREE.Mesh(bulbGeo, bulbMat);
+    const bulbMesh = new THREE.Mesh(
+      new THREE.SphereGeometry(0.1, 16, 16),
+      new THREE.MeshBasicMaterial({ color: 0xfff0aa })
+    );
     bulbMesh.position.y = -1.25;
     lampGroup.add(bulbMesh);
 
-    // High intensity lantern point light
-    const lanternLight = new THREE.PointLight(0xffaa33, 16.0, 14, 1.0);
+    const lanternLight = new THREE.PointLight(0xffa834, 11.0, 14, 1.0);
     lanternLight.position.set(0, -1.3, 0);
-    lanternLight.castShadow = true;
-    lanternLight.shadow.mapSize.width = 1024;
-    lanternLight.shadow.mapSize.height = 1024;
-    lanternLight.shadow.bias = -0.001;
     lampGroup.add(lanternLight);
     scene.add(lampGroup);
 
-    // 5. High-Impact Table Spotlight (Shines directly down on poker felt & chips)
-    const tableSpot = new THREE.SpotLight(0xfff1db, 22.0, 12, Math.PI / 2.8, 0.4, 1.0);
-    tableSpot.position.set(0, 3.2, 0);
-    tableSpot.target.position.set(0, 1.0, 0);
-    tableSpot.castShadow = true;
-    scene.add(tableSpot);
-    scene.add(tableSpot.target);
+    // 4. Two Real 3D Candlelights on the Tavern Table
+    const candleLight1 = new THREE.PointLight(0xffb84d, 3.4, 5.0, 1.0);
+    candleLight1.position.set(-0.45, 0.52, -1.65);
+    scene.add(candleLight1);
 
-    // 6. Dedicated Character Face & Body Key Lights (Ensures each model pops with warm highlights!)
-    const bullLight = new THREE.PointLight(0xffd59e, 6.0, 6.5, 1.0);
-    bullLight.position.set(-1.3, 1.8, -0.1);
-    scene.add(bullLight);
+    const candleFlame1 = new THREE.Mesh(
+      new THREE.ConeGeometry(0.02, 0.06, 8),
+      new THREE.MeshBasicMaterial({ color: 0xffea88 })
+    );
+    candleFlame1.position.set(-0.45, 0.52, -1.65);
+    scene.add(candleFlame1);
 
-    const robotLight = new THREE.PointLight(0xffe6c4, 5.5, 6.5, 1.0);
-    robotLight.position.set(0, 1.9, -1.0);
-    scene.add(robotLight);
+    const candleLight2 = new THREE.PointLight(0xffb84d, 3.4, 5.0, 1.0);
+    candleLight2.position.set(0.68, 0.52, -1.65);
+    scene.add(candleLight2);
 
-    const wolfLight = new THREE.PointLight(0xffd59e, 6.0, 6.5, 1.0);
-    wolfLight.position.set(1.3, 1.8, -0.1);
-    scene.add(wolfLight);
+    const candleFlame2 = new THREE.Mesh(
+      new THREE.ConeGeometry(0.02, 0.06, 8),
+      new THREE.MeshBasicMaterial({ color: 0xffea88 })
+    );
+    candleFlame2.position.set(0.68, 0.52, -1.65);
+    scene.add(candleFlame2);
 
-    const playerPovLight = new THREE.PointLight(0xffddb3, 4.0, 4.5, 1.0);
-    playerPovLight.position.set(0, 1.5, 1.5);
-    scene.add(playerPovLight);
-
-    // 7. Atmospheric Wall Sconces & Neon Glow
-    const leftSconceLight = new THREE.PointLight(0xff9933, 5.0, 9, 1.0);
-    leftSconceLight.position.set(-3.7, 2.4, -0.8);
-    scene.add(leftSconceLight);
-
-    const rightSconceLight = new THREE.PointLight(0xff9933, 5.0, 9, 1.0);
-    rightSconceLight.position.set(3.7, 2.4, -0.8);
-    scene.add(rightSconceLight);
-
-    const backBarGlow = new THREE.PointLight(0xffaa44, 6.0, 8, 1.0);
-    backBarGlow.position.set(0, 2.4, -3.2);
-    scene.add(backBarGlow);
-
-    const neonSignLight = new THREE.PointLight(0xff2200, 4.5, 7, 1.2);
-    neonSignLight.position.set(0, 3.2, -3.5);
-    scene.add(neonSignLight);
-
-    // Muzzle flash light attached to camera
-    const muzzleLight = new THREE.PointLight(0xfff5e6, 0, 8, 1.5);
+    // 5. Muzzle Flash Light attached to camera
+    const muzzleLight = new THREE.PointLight(0xfff5e6, 0, 9, 1.5);
     muzzleLight.position.set(0, -0.1, -0.3);
     camera.add(muzzleLight);
 
-    // E. FULLY ENCLOSED 3D TAVERN ROOM WITH WARM WOOD & SHELVES
-    // 1. Polished Hardwood Parquet Floor
-    const floorGeo = new THREE.PlaneGeometry(16, 16);
-    const floorMat = new THREE.MeshStandardMaterial({ color: 0x52321e, roughness: 0.45, metalness: 0.1 });
-    const floorMesh = new THREE.Mesh(floorGeo, floorMat);
-    floorMesh.rotation.x = -Math.PI / 2;
-    floorMesh.receiveShadow = true;
-    scene.add(floorMesh);
+    // E. MASTER CINEMATIC TAVERN ENVIRONMENT BACKDROP
+    // Mapped with the exact dark fantasy tavern reference image
+    const texLoader = new THREE.TextureLoader();
+    const masterTex = texLoader.load('/assets/liars_bar_cinematic_master.png');
+    masterTex.colorSpace = THREE.SRGBColorSpace;
 
-    // 2. Ceiling with Rustic Dark Oak Beams
-    const ceilingGeo = new THREE.PlaneGeometry(16, 16);
-    const ceilingMat = new THREE.MeshStandardMaterial({ color: 0x331c0e, roughness: 0.8 });
-    const ceilingMesh = new THREE.Mesh(ceilingGeo, ceilingMat);
-    ceilingMesh.position.y = 4.2;
-    ceilingMesh.rotation.x = Math.PI / 2;
-    scene.add(ceilingMesh);
+    const masterGeo = new THREE.PlaneGeometry(8.9, 5.23);
+    const masterMat = new THREE.MeshStandardMaterial({
+      map: masterTex,
+      roughness: 0.85,
+      metalness: 0.05,
+    });
+    const masterBackdrop = new THREE.Mesh(masterGeo, masterMat);
+    masterBackdrop.position.set(0, 1.25, -2.85);
+    scene.add(masterBackdrop);
 
-    // Heavy wooden cross-beams on ceiling
-    for (let beam = -3; beam <= 3; beam += 2) {
-      const beamGeo = new THREE.BoxGeometry(16, 0.35, 0.25);
-      const beamMat = new THREE.MeshStandardMaterial({ color: 0x261409, roughness: 0.65 });
-      const beamMesh = new THREE.Mesh(beamGeo, beamMat);
-      beamMesh.position.set(0, 4.05, beam);
-      scene.add(beamMesh);
-    }
+    // F. 5 INTERACTIVE 3D CHARACTERS WITH REALTIME HOVER & ACTION STATES
+    const charConfigs = [
+      {
+        id: 'cowboy',
+        pos: [-2.42, 1.05, -2.48] as [number, number, number],
+        size: [1.6, 2.15] as [number, number],
+        idleSrc: '/assets/characters/cowboy_idle.png',
+        actSrc: '/assets/characters/cowboy_action.png',
+      },
+      {
+        id: 'plague',
+        pos: [-1.22, 1.25, -2.55] as [number, number, number],
+        size: [1.45, 1.95] as [number, number],
+        idleSrc: '/assets/characters/plague_idle.png',
+        actSrc: '/assets/characters/plague_action.png',
+      },
+      {
+        id: 'dog',
+        pos: [0.0, 1.28, -2.62] as [number, number, number],
+        size: [1.45, 1.95] as [number, number],
+        idleSrc: '/assets/characters/dog_idle.png',
+        actSrc: '/assets/characters/dog_action.png',
+      },
+      {
+        id: 'wolf',
+        pos: [1.25, 1.45, -2.55] as [number, number, number],
+        size: [1.55, 2.1] as [number, number],
+        idleSrc: '/assets/characters/wolf_idle.png',
+        actSrc: '/assets/characters/wolf_action.png',
+      },
+      {
+        id: 'girl',
+        pos: [2.42, 1.05, -2.48] as [number, number, number],
+        size: [1.45, 1.95] as [number, number],
+        idleSrc: '/assets/characters/girl_idle.png',
+        actSrc: '/assets/characters/girl_action.png',
+      },
+    ];
 
-    // 3. Back Wall (Rich Paneled Mahogany Wood)
-    const backWallGeo = new THREE.PlaneGeometry(16, 5);
-    const backWallMat = new THREE.MeshStandardMaterial({ color: 0x4a2a16, roughness: 0.6 });
-    const backWall = new THREE.Mesh(backWallGeo, backWallMat);
-    backWall.position.set(0, 2.5, -3.8);
-    backWall.receiveShadow = true;
-    scene.add(backWall);
+    const charObjects: {
+      [id: string]: {
+        root: THREE.Mesh;
+        idleTex: THREE.Texture;
+        actTex: THREE.Texture;
+        mat: THREE.MeshStandardMaterial;
+        baseY: number;
+      };
+    } = {};
 
-    // 4. Left Wall with Framed Poker Painting & Wall Sconce
-    const leftWallGeo = new THREE.PlaneGeometry(16, 5);
-    const leftWallMat = new THREE.MeshStandardMaterial({ color: 0x422413, roughness: 0.65 });
-    const leftWall = new THREE.Mesh(leftWallGeo, leftWallMat);
-    leftWall.position.set(-4.2, 2.5, 0);
-    leftWall.rotation.y = Math.PI / 2;
-    leftWall.receiveShadow = true;
-    scene.add(leftWall);
+    charConfigs.forEach((cfg) => {
+      const idleTex = texLoader.load(cfg.idleSrc);
+      const actTex = texLoader.load(cfg.actSrc);
+      idleTex.colorSpace = THREE.SRGBColorSpace;
+      actTex.colorSpace = THREE.SRGBColorSpace;
 
-    // Framed Vintage Oil Poker Portrait on Left Wall
-    const goldFrameGeo = new THREE.BoxGeometry(0.08, 1.6, 2.2);
-    const goldFrameMat = new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.3, metalness: 0.8 });
-    const goldFrame = new THREE.Mesh(goldFrameGeo, goldFrameMat);
-    goldFrame.position.set(-4.14, 2.4, -0.6);
-    scene.add(goldFrame);
+      const mat = new THREE.MeshStandardMaterial({
+        map: idleTex,
+        transparent: true,
+        alphaTest: 0.04,
+        roughness: 0.65,
+        metalness: 0.05,
+      });
 
-    const canvasGeo = new THREE.BoxGeometry(0.02, 1.4, 2.0);
-    const canvasMat = new THREE.MeshStandardMaterial({ color: 0x1e3a8a, roughness: 0.7 });
-    const canvas = new THREE.Mesh(canvasGeo, canvasMat);
-    canvas.position.set(-4.11, 2.4, -0.6);
-    scene.add(canvas);
+      const geo = new THREE.PlaneGeometry(cfg.size[0], cfg.size[1]);
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.set(...cfg.pos);
+      mesh.name = cfg.id;
+      scene.add(mesh);
 
-    // Left Brass Wall Sconce
-    const sconceBaseGeo = new THREE.CylinderGeometry(0.06, 0.08, 0.25, 8);
-    const sconceMat = new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.3, metalness: 0.85 });
-    const leftSconce = new THREE.Mesh(sconceBaseGeo, sconceMat);
-    leftSconce.position.set(-4.1, 2.3, -2.0);
-    scene.add(leftSconce);
-
-    const leftSconceBulb = new THREE.Mesh(new THREE.SphereGeometry(0.07, 12, 12), new THREE.MeshBasicMaterial({ color: 0xffea88 }));
-    leftSconceBulb.position.set(-4.0, 2.45, -2.0);
-    scene.add(leftSconceBulb);
-
-    // 5. Right Wall with Vintage Dartboard & Wall Sconce
-    const rightWall = new THREE.Mesh(leftWallGeo, leftWallMat);
-    rightWall.position.set(4.2, 2.5, 0);
-    rightWall.rotation.y = -Math.PI / 2;
-    rightWall.receiveShadow = true;
-    scene.add(rightWall);
-
-    // Vintage Round Dartboard on Right Wall
-    const dartboardGeo = new THREE.CylinderGeometry(0.55, 0.55, 0.06, 32);
-    const dartboardMat = new THREE.MeshStandardMaterial({ color: 0x1c1917, roughness: 0.8 });
-    const dartboard = new THREE.Mesh(dartboardGeo, dartboardMat);
-    dartboard.rotation.z = Math.PI / 2;
-    dartboard.position.set(4.14, 2.4, -0.6);
-    scene.add(dartboard);
-
-    // Right Brass Wall Sconce
-    const rightSconce = new THREE.Mesh(sconceBaseGeo, sconceMat);
-    rightSconce.position.set(4.1, 2.3, -2.0);
-    scene.add(rightSconce);
-
-    const rightSconceBulb = new THREE.Mesh(new THREE.SphereGeometry(0.07, 12, 12), new THREE.MeshBasicMaterial({ color: 0xffea88 }));
-    rightSconceBulb.position.set(4.0, 2.45, -2.0);
-    scene.add(rightSconceBulb);
-
-    // 6. Grand Speakeasy Back Bar: Mirrors, 3-Tier Shelves & Radiant Bottles
-    // Back Bar Mirror (Reflects warm tavern interior)
-    const mirrorGeo = new THREE.PlaneGeometry(6.2, 1.8);
-    const mirrorMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.15, metalness: 0.9 });
-    const mirror = new THREE.Mesh(mirrorGeo, mirrorMat);
-    mirror.position.set(0, 2.4, -3.75);
-    scene.add(mirror);
-
-    // 3 Tiers of Polished Wood Shelves
-    const shelfHeights = [1.6, 2.2, 2.8];
-    shelfHeights.forEach((shY) => {
-      const shGeo = new THREE.BoxGeometry(6.6, 0.08, 0.38);
-      const shMat = new THREE.MeshStandardMaterial({ color: 0x2e170a, roughness: 0.45, metalness: 0.1 });
-      const shMesh = new THREE.Mesh(shGeo, shMat);
-      shMesh.position.set(0, shY, -3.6);
-      scene.add(shMesh);
-
-      // Under-shelf warm LED strip light
-      const stripLight = new THREE.PointLight(0xffc266, 2.5, 4, 1.5);
-      stripLight.position.set(0, shY - 0.05, -3.5);
-      scene.add(stripLight);
+      charObjects[cfg.id] = {
+        root: mesh,
+        idleTex,
+        actTex,
+        mat,
+        baseY: cfg.pos[1],
+      };
     });
 
-    // Glowing Liquor Bottles on the Shelves (Ruby Port, Amber Bourbon, Emerald Absinthe, Golden Rum, Sapphire Gin)
-    const bottlePalettes = [0xef4444, 0xf59e0b, 0x10b981, 0x3b82f6, 0xec4899, 0xd97706];
-    shelfHeights.forEach((shY) => {
-      for (let b = 0; b < 14; b++) {
-        const bottleColor = bottlePalettes[(b + Math.floor(shY * 3)) % bottlePalettes.length];
-        const bottleGeo = new THREE.CylinderGeometry(0.045, 0.055, 0.28, 8);
-        const bottleMat = new THREE.MeshStandardMaterial({
-          color: bottleColor,
-          roughness: 0.15,
-          metalness: 0.3,
-          transparent: true,
-          opacity: 0.88,
-        });
-        const bottle = new THREE.Mesh(bottleGeo, bottleMat);
-        bottle.position.set(-2.8 + b * 0.43, shY + 0.16, -3.58);
-        scene.add(bottle);
-      }
+    // G. 3D ATMOSPHERIC FLOATING SMOKE & DUST PARTICLES
+    const particleCount = 65;
+    const particleGeo = new THREE.BufferGeometry();
+    const particlePos = new Float32Array(particleCount * 3);
+    for (let p = 0; p < particleCount; p++) {
+      particlePos[p * 3] = (Math.random() - 0.5) * 5.5;
+      particlePos[p * 3 + 1] = 0.5 + Math.random() * 2.8;
+      particlePos[p * 3 + 2] = -1.2 - Math.random() * 1.8;
+    }
+    particleGeo.setAttribute('position', new THREE.BufferAttribute(particlePos, 3));
+    const particleMat = new THREE.PointsMaterial({
+      color: 0xffd188,
+      size: 0.04,
+      transparent: true,
+      opacity: 0.45,
     });
+    const particles = new THREE.Points(particleGeo, particleMat);
+    scene.add(particles);
 
-    // Glowing Neon "LIAR'S BAR" Sign
-    const neonFrameGeo = new THREE.BoxGeometry(2.4, 0.65, 0.08);
-    const neonFrameMat = new THREE.MeshStandardMaterial({ color: 0x18181b, roughness: 0.8 });
-    const neonFrame = new THREE.Mesh(neonFrameGeo, neonFrameMat);
-    neonFrame.position.set(0, 3.4, -3.72);
-    scene.add(neonFrame);
-
-    const neonSignGeo = new THREE.BoxGeometry(2.1, 0.45, 0.04);
-    const neonSignMat = new THREE.MeshBasicMaterial({ color: 0xff3300 });
-    const neonSign = new THREE.Mesh(neonSignGeo, neonSignMat);
-    neonSign.position.set(0, 3.4, -3.68);
-    scene.add(neonSign);
-
-    // F. 3D CASINO POKER TABLE (Vibrant Emerald Felt, Golden Ring, Mahogany Armrest)
-    const tableGroup = new THREE.Group();
-    tableGroup.position.set(0, 0, 0);
-
-    // Vibrant Emerald Green Poker Felt
-    const feltGeo = new THREE.CylinderGeometry(1.68, 1.68, 0.08, 48);
-    const feltMat = new THREE.MeshStandardMaterial({ color: 0x15803d, roughness: 0.65, metalness: 0.05 });
-    const feltMesh = new THREE.Mesh(feltGeo, feltMat);
-    feltMesh.position.y = 1.0;
-    feltMesh.receiveShadow = true;
-    tableGroup.add(feltMesh);
-
-    // Inner Polished Golden Betting Ring
-    const betRingGeo = new THREE.TorusGeometry(1.22, 0.016, 8, 48);
-    const goldMat = new THREE.MeshStandardMaterial({ color: 0xfbbf24, roughness: 0.25, metalness: 0.85 });
-    const betRing = new THREE.Mesh(betRingGeo, goldMat);
-    betRing.rotation.x = Math.PI / 2;
-    betRing.position.y = 1.045;
-    tableGroup.add(betRing);
-
-    // Outer Cherry Mahogany Beveled Armrest
-    const rimGeo = new THREE.TorusGeometry(1.75, 0.15, 16, 48);
-    const woodMat = new THREE.MeshStandardMaterial({ color: 0x582414, roughness: 0.25, metalness: 0.2 });
-    const rimMesh = new THREE.Mesh(rimGeo, woodMat);
-    rimMesh.rotation.x = Math.PI / 2;
-    rimMesh.position.y = 1.04;
-    rimMesh.castShadow = true;
-    rimMesh.receiveShadow = true;
-    tableGroup.add(rimMesh);
-
-    // Heavy Central Pedestal Base
-    const pillarGeo = new THREE.CylinderGeometry(0.38, 0.65, 1.0, 24);
-    const pillarMesh = new THREE.Mesh(pillarGeo, woodMat);
-    pillarMesh.position.y = 0.5;
-    pillarMesh.castShadow = true;
-    tableGroup.add(pillarMesh);
-
-    // Table Props: Stacks of Colorful Casino Poker Chips
-    const chipColors = [0xef4444, 0x3b82f6, 0x10b981, 0xf59e0b];
-    for (let i = 0; i < 8; i++) {
-      const ang = (i / 8) * Math.PI * 1.65 - 0.82;
-      const chipStackGeo = new THREE.CylinderGeometry(0.07, 0.07, 0.05 + (i % 3) * 0.035, 16);
-      const chipMat = new THREE.MeshStandardMaterial({ color: chipColors[i % chipColors.length], roughness: 0.3 });
-      const stack = new THREE.Mesh(chipStackGeo, chipMat);
-      stack.position.set(Math.sin(ang) * 1.25, 1.06, Math.cos(ang) * 1.25);
-      stack.castShadow = true;
-      tableGroup.add(stack);
-    }
-
-    // Whiskey Glasses with Amber Bourbon & Ice on Table
-    for (let g = 0; g < 3; g++) {
-      const gAng = [-0.9, 0, 0.9][g];
-      const glassGroup = new THREE.Group();
-      glassGroup.position.set(Math.sin(gAng) * 1.35, 1.05, Math.cos(gAng) * 1.35);
-
-      const glassCup = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.055, 0.05, 0.12, 16, 1, true),
-        new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.1, transparent: true, opacity: 0.45 })
-      );
-      glassCup.position.y = 0.06;
-      glassGroup.add(glassCup);
-
-      const whiskeyLiquid = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.048, 0.045, 0.06, 16),
-        new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.2, metalness: 0.1 })
-      );
-      whiskeyLiquid.position.y = 0.035;
-      glassGroup.add(whiskeyLiquid);
-      tableGroup.add(glassGroup);
-    }
-
-    // Played Cards group on the table
+    // H. 3D PLAYED CARDS GROUP ON WOODEN TABLE
     const playedCardsGroup = new THREE.Group();
-    playedCardsGroup.position.set(0, 1.045, 0);
-    tableGroup.add(playedCardsGroup);
-    scene.add(tableGroup);
+    playedCardsGroup.position.set(0, 0.58, -1.45);
+    scene.add(playedCardsGroup);
 
-    // G. LOAD 3D CHAIRS & REAL 3D ANIMATED CHARACTERS VIA GLTFLOADER
-    const gltfLoader = new GLTFLoader();
-    const mixers: THREE.AnimationMixer[] = [];
-    const charObjects: { [id: string]: { root: THREE.Object3D; mixer?: THREE.AnimationMixer; actions: { [name: string]: THREE.AnimationAction } } } = {};
-
-    // 1. Load 3D Chairs
-    gltfLoader.load('/models/chair.glb', (gltf) => {
-      const chairModel = gltf.scene;
-      chairModel.traverse((node: any) => {
-        if (node.isMesh) {
-          node.castShadow = true;
-          node.receiveShadow = true;
-          if (node.material) {
-            node.material = node.material.clone();
-            node.material.color.setHex(0x633519); // Polished mahogany chair
-            node.material.roughness = 0.45;
-          }
-        }
-      });
-
-      // Seat 1: Bull
-      const chair1 = chairModel.clone();
-      chair1.scale.set(0.65, 0.65, 0.65);
-      chair1.position.set(-1.45, 0, -0.75);
-      chair1.rotation.y = Math.PI / 4 + 0.2;
-      scene.add(chair1);
-
-      // Seat 2: Robot
-      const chair2 = chairModel.clone();
-      chair2.scale.set(0.65, 0.65, 0.65);
-      chair2.position.set(0, 0, -1.65);
-      chair2.rotation.y = 0;
-      scene.add(chair2);
-
-      // Seat 3: Wolf
-      const chair3 = chairModel.clone();
-      chair3.scale.set(0.65, 0.65, 0.65);
-      chair3.position.set(1.45, 0, -0.75);
-      chair3.rotation.y = -Math.PI / 4 - 0.2;
-      scene.add(chair3);
-    });
-
-    // 2. Load 3D Bull Character (Trùm Tê Giác - PROPER COLOR & LIGHTING)
-    gltfLoader.load('/models/bull.glb', (gltf) => {
-      const model = gltf.scene;
-      model.scale.set(0.35, 0.35, 0.35);
-      model.position.set(-1.35, 0.88, -0.75);
-      model.rotation.y = Math.PI / 3;
-
-      model.traverse((node: any) => {
-        if (node.isMesh) {
-          node.castShadow = true;
-          node.receiveShadow = true;
-          if (node.material) {
-            node.material = node.material.clone();
-            const matName = node.material.name || '';
-            node.material.roughness = 0.55;
-            node.material.metalness = 0.1;
-
-            if (matName === 'Main') {
-              // Mobster leather coat / rich dark brown fur
-              node.material.color.setHex(0x5a3d2e);
-            } else if (matName === 'Main_Light') {
-              // Inner ears & underbelly: warm tan
-              node.material.color.setHex(0x8c6248);
-            } else if (matName === 'Muzzle') {
-              // Snout: warm tan leather
-              node.material.color.setHex(0xb5825a);
-            } else if (matName === 'Horns') {
-              // Menacing ivory horns
-              node.material.color.setHex(0xf3e5c8);
-              node.material.roughness = 0.3;
-            } else if (matName === 'Hooves') {
-              node.material.color.setHex(0x2d1e15);
-            } else if (matName === 'Eye_White') {
-              node.material.color.setHex(0xffffff);
-            } else if (matName === 'Eye_Black') {
-              node.material.color.setHex(0x1a1a1a);
-            } else {
-              if (node.material.color.r < 0.2 && node.material.color.g < 0.2 && node.material.color.b < 0.2) {
-                node.material.color.setHex(0x6b4c3b);
-              }
-            }
-          }
-        }
-      });
-      scene.add(model);
-
-      const mixer = new THREE.AnimationMixer(model);
-      mixers.push(mixer);
-      const actions: { [name: string]: THREE.AnimationAction } = {};
-      gltf.animations.forEach((clip) => {
-        actions[clip.name] = mixer.clipAction(clip);
-      });
-
-      if (actions['AnimalArmature|Idle']) {
-        actions['AnimalArmature|Idle'].play();
-      }
-
-      charObjects['bull'] = { root: model, mixer, actions };
-    });
-
-    // 3. Load 3D Robot Dealer / Moderator (GOLDEN BRASS CHASSIS & CYAN GLOW)
-    gltfLoader.load('/models/robot.glb', (gltf) => {
-      const model = gltf.scene;
-      model.scale.set(0.40, 0.40, 0.40);
-      model.position.set(0, 0.95, -1.65);
-      model.rotation.y = 0;
-
-      model.traverse((node: any) => {
-        if (node.isMesh) {
-          node.castShadow = true;
-          node.receiveShadow = true;
-          if (node.material) {
-            node.material = node.material.clone();
-            const matName = node.material.name || '';
-            node.material.roughness = 0.35;
-            node.material.metalness = 0.55;
-
-            if (matName === 'Main') {
-              // Polished antique brass chassis
-              node.material.color.setHex(0xd97706);
-            } else if (matName === 'Grey') {
-              // Brushed steel joints & gears
-              node.material.color.setHex(0x94a3b8);
-            } else if (matName === 'Black') {
-              // Glowing neon visor & dealer eyes
-              node.material.color.setHex(0x0284c7);
-              node.material.emissive = new THREE.Color(0x06b6d4);
-              node.material.emissiveIntensity = 0.85;
-            }
-          }
-        }
-      });
-      scene.add(model);
-
-      const mixer = new THREE.AnimationMixer(model);
-      mixers.push(mixer);
-      const actions: { [name: string]: THREE.AnimationAction } = {};
-      gltf.animations.forEach((clip) => {
-        actions[clip.name] = mixer.clipAction(clip);
-      });
-
-      if (actions['Sitting']) {
-        actions['Sitting'].play();
-      } else if (actions['Idle']) {
-        actions['Idle'].play();
-      }
-
-      charObjects['robot'] = { root: model, mixer, actions };
-    });
-
-    // 4. Load 3D Wolf Character (SILVER-GREY FUR & AMBER GLOWING EYES)
-    gltfLoader.load('/models/wolf.glb', (gltf) => {
-      const model = gltf.scene;
-      model.scale.set(0.52, 0.52, 0.52);
-      model.position.set(1.35, 0.90, -0.75);
-      model.rotation.y = -Math.PI / 3;
-
-      model.traverse((node: any) => {
-        if (node.isMesh) {
-          node.castShadow = true;
-          node.receiveShadow = true;
-          if (node.material) {
-            node.material = node.material.clone();
-            const matName = node.material.name || '';
-            node.material.roughness = 0.65;
-            node.material.metalness = 0.05;
-
-            if (matName === 'Main') {
-              // Sleek mobster wolf silver-grey fur
-              node.material.color.setHex(0x768294);
-            } else if (matName === 'Main_Light') {
-              // Soft silver-cream chest & snout
-              node.material.color.setHex(0xd6d0c7);
-            } else if (matName === 'Nose') {
-              node.material.color.setHex(0x1a1a1a);
-            } else if (matName === 'Eyes_Black' || matName === 'Eyes') {
-              // Fierce glowing amber predator eyes
-              node.material.color.setHex(0xf59e0b);
-              node.material.emissive = new THREE.Color(0xd97706);
-              node.material.emissiveIntensity = 0.65;
-            } else {
-              if (node.material.color.r < 0.2) {
-                node.material.color.setHex(0x64748b);
-              }
-            }
-          }
-        }
-      });
-      scene.add(model);
-
-      const mixer = new THREE.AnimationMixer(model);
-      mixers.push(mixer);
-      const actions: { [name: string]: THREE.AnimationAction } = {};
-      gltf.animations.forEach((clip) => {
-        actions[clip.name] = mixer.clipAction(clip);
-      });
-
-      if (actions['AnimalArmature|Idle']) {
-        actions['AnimalArmature|Idle'].play();
-      }
-
-      charObjects['wolf'] = { root: model, mixer, actions };
-    });
-
-    // H. LOAD PLAYER'S 3D REVOLVER (STEEL BARREL & WALNUT WOOD GRIP)
+    // I. PLAYER'S 3D FIRST-PERSON REVOLVER (FPS WEAPON)
     const revolverGroup = new THREE.Group();
     revolverGroup.position.set(0.22, -0.22, -0.42);
 
+    const gltfLoader = new GLTFLoader();
     gltfLoader.load('/models/revolver.glb', (gltf) => {
       const gunModel = gltf.scene;
       gunModel.scale.set(0.12, 0.12, 0.12);
@@ -819,13 +518,15 @@ export function LiarsBar3DExperience({
       muzzleLight,
       lampGroup,
       playedCardsGroup,
+      candleLight1,
+      candleLight2,
+      particles,
       raycaster: new THREE.Raycaster(),
       shootRecoil: 0,
-      mixers,
       charObjects,
     };
 
-    // I. RESIZE HANDLER
+    // J. RESIZE HANDLER
     const handleResize = () => {
       if (!mountRef.current) return;
       const w = mountRef.current.clientWidth;
@@ -836,7 +537,7 @@ export function LiarsBar3DExperience({
     };
     window.addEventListener('resize', handleResize);
 
-    // J. ANIMATION LOOP
+    // K. ANIMATION LOOP
     let animationFrameId: number;
     let clock = new THREE.Clock();
 
@@ -847,23 +548,59 @@ export function LiarsBar3DExperience({
       const state = threeRef.current;
       if (!state) return;
 
-      // 1. Update 3D Character Skeletal Animation Mixers
-      state.mixers.forEach((m) => m.update(delta));
-
-      // 2. Smooth Camera FPS Look
+      // 1. Smooth Camera FPS Look
       const targetYaw = mouseRef.current.targetYaw;
       const targetPitch = mouseRef.current.targetPitch;
       camera.rotation.y += (targetYaw - camera.rotation.y) * 0.08;
       camera.rotation.x += (targetPitch - camera.rotation.x) * 0.08;
 
       // Subtle breathing camera sway
-      camera.position.y = 1.48 + Math.sin(t * 1.6) * 0.005;
+      camera.position.y = 1.46 + Math.sin(t * 1.6) * 0.005;
 
-      // 3. Hanging Lamp Swing
-      state.lampGroup.rotation.z = Math.sin(t * 1.5) * 0.032;
-      state.lampGroup.rotation.x = Math.cos(t * 1.2) * 0.022;
+      // 2. Hanging Lamp Swing
+      state.lampGroup.rotation.z = Math.sin(t * 1.4) * 0.024;
+      state.lampGroup.rotation.x = Math.cos(t * 1.1) * 0.016;
 
-      // 4. Player's Revolver Stance (Hip vs ADS Aiming)
+      // 3. Realistic Candlelight Flicker
+      const flicker1 = Math.sin(t * 11) * 0.25 + Math.cos(t * 17) * 0.15;
+      const flicker2 = Math.cos(t * 13) * 0.25 + Math.sin(t * 19) * 0.15;
+      state.candleLight1.intensity = 3.4 + flicker1;
+      state.candleLight2.intensity = 3.4 + flicker2;
+
+      // 4. Subtle Character Idle Breathing & Reaction to Hover
+      Object.entries(state.charObjects).forEach(([id, char], idx) => {
+        const isHovered = hoveredTargetId === id;
+        const isAccused = accusedId === id;
+
+        // Breathes gently when alive
+        const breath = Math.sin(t * 2.2 + idx * 1.3) * 0.006;
+        char.root.position.y = char.baseY + breath;
+
+        // Texture swaps to action pose when hovered or accused
+        const targetTex = isHovered || isAccused ? char.actTex : char.idleTex;
+        if (char.mat.map !== targetTex) {
+          char.mat.map = targetTex;
+          char.mat.needsUpdate = true;
+        }
+
+        // Slight scale emphasis when hovered
+        const targetScale = isHovered ? 1.05 : 1.0;
+        char.root.scale.lerp(new THREE.Vector3(targetScale, targetScale, 1), 0.12);
+      });
+
+      // 5. Floating Smoke & Dust Animation
+      const posAttr = state.particles.geometry.getAttribute('position') as THREE.BufferAttribute;
+      const positions = posAttr.array as Float32Array;
+      for (let p = 0; p < particleCount; p++) {
+        positions[p * 3 + 1] += 0.003; // rise up
+        positions[p * 3] += Math.sin(t * 1.5 + p) * 0.001; // gentle sway
+        if (positions[p * 3 + 1] > 3.2) {
+          positions[p * 3 + 1] = 0.5; // loop back to table level
+        }
+      }
+      posAttr.needsUpdate = true;
+
+      // 6. Player's Revolver Stance (Hip vs ADS Aiming)
       const targetGunPos = isAimingGun
         ? new THREE.Vector3(0, -0.13, -0.32) // Center ADS
         : new THREE.Vector3(0.22, -0.22, -0.42); // Hip
@@ -877,12 +614,12 @@ export function LiarsBar3DExperience({
         ? state.shootRecoil * 0.4
         : THREE.MathUtils.lerp(state.revolverGroup.rotation.x, 0.05, 0.1);
 
-      // 5. Update Screen Positions for 3D Nametags
-      const projectToScreen = (root?: THREE.Object3D) => {
-        if (!root) return { x: 0, y: 0, visible: false };
+      // 7. Update Screen Positions for 3D Nametags
+      const projectToScreen = (mesh?: THREE.Mesh) => {
+        if (!mesh) return { x: 0, y: 0, visible: false };
         const v = new THREE.Vector3();
-        root.getWorldPosition(v);
-        v.y += 1.1; // above 3D character head
+        mesh.getWorldPosition(v);
+        v.y += 1.05; // above character head
         v.project(camera);
         const sx = ((v.x + 1) * width) / 2;
         const sy = ((-v.y + 1) * height) / 2;
@@ -890,9 +627,11 @@ export function LiarsBar3DExperience({
       };
 
       setScreenPos({
-        bull: projectToScreen(state.charObjects['bull']?.root),
-        robot: projectToScreen(state.charObjects['robot']?.root),
+        cowboy: projectToScreen(state.charObjects['cowboy']?.root),
+        plague: projectToScreen(state.charObjects['plague']?.root),
+        dog: projectToScreen(state.charObjects['dog']?.root),
         wolf: projectToScreen(state.charObjects['wolf']?.root),
+        girl: projectToScreen(state.charObjects['girl']?.root),
       });
 
       // Render 3D Scene
@@ -906,7 +645,7 @@ export function LiarsBar3DExperience({
       window.removeEventListener('resize', handleResize);
       renderer.dispose();
     };
-  }, [isAimingGun]);
+  }, [isAimingGun, hoveredTargetId, accusedId]);
 
   // Mouse move handler for 3D FPS rotation & Raycasting
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -915,8 +654,8 @@ export function LiarsBar3DExperience({
     const normX = (e.clientX - rect.left) / rect.width - 0.5;
     const normY = (e.clientY - rect.top) / rect.height - 0.5;
 
-    mouseRef.current.targetYaw = -normX * 0.75;
-    mouseRef.current.targetPitch = -normY * 0.42;
+    mouseRef.current.targetYaw = -normX * 0.65;
+    mouseRef.current.targetPitch = -normY * 0.38;
 
     // Raycast to detect hover on 3D character meshes
     if (threeRef.current) {
@@ -930,17 +669,14 @@ export function LiarsBar3DExperience({
         charIds.push(id);
       }
 
-      const intersects = threeRef.current.raycaster.intersectObjects(targets, true);
+      const intersects = threeRef.current.raycaster.intersectObjects(targets, false);
       if (intersects.length > 0) {
-        let hit = intersects[0].object;
-        while (hit.parent && !charIds.includes(hit.name)) {
-          for (const id of charIds) {
-            if (threeRef.current.charObjects[id]?.root === hit) {
-              setHoveredTargetId(id);
-              return;
-            }
+        const hit = intersects[0].object;
+        for (const id of charIds) {
+          if (threeRef.current.charObjects[id]?.root === hit) {
+            setHoveredTargetId(id);
+            return;
           }
-          hit = hit.parent;
         }
       } else {
         setHoveredTargetId(null);
@@ -977,30 +713,17 @@ export function LiarsBar3DExperience({
 
       if (threeRef.current) {
         threeRef.current.shootRecoil = 1.0;
-        threeRef.current.muzzleLight.intensity = 8.0;
+        threeRef.current.muzzleLight.intensity = 9.0;
         setTimeout(() => {
           if (threeRef.current) threeRef.current.muzzleLight.intensity = 0;
           setRevolverFired(false);
         }, 60);
 
-        // Play Death skeletal animation or hit reaction
+        // Play hit reaction on character plane
         const char = threeRef.current.charObjects[targetId];
-        if (char && char.actions) {
-          const deathAction = char.actions['AnimalArmature|Death'] || char.actions['Death'];
-          const hitAction = char.actions['AnimalArmature|Idle_HitReact_Left'];
-
-          if (deathAction) {
-            char.mixer?.stopAllAction();
-            deathAction.clampWhenFinished = true;
-            deathAction.setLoop(THREE.LoopOnce, 1);
-            deathAction.play();
-          } else if (hitAction) {
-            hitAction.setLoop(THREE.LoopOnce, 1);
-            hitAction.play();
-          } else {
-            char.root.rotation.x -= 0.5;
-            char.root.position.y -= 0.6;
-          }
+        if (char) {
+          char.root.rotation.z -= 0.35;
+          char.root.position.y -= 0.6;
         }
       }
 
@@ -1010,7 +733,7 @@ export function LiarsBar3DExperience({
     }, 50);
   };
 
-  // Play card onto 3D table felt
+  // Play card onto 3D table
   const handlePlayCardToTable = (card: { id: number; name: string }) => {
     tavernAudio.playCardFlip();
 
@@ -1020,13 +743,11 @@ export function LiarsBar3DExperience({
       const cardMesh = new THREE.Mesh(cardGeo, cardMat);
 
       const randX = (Math.random() - 0.5) * 0.6;
-      const randZ = (Math.random() - 0.5) * 0.4;
+      const randZ = (Math.random() - 0.5) * 0.35;
       const randRotY = (Math.random() - 0.5) * 0.8;
 
       cardMesh.position.set(randX, 0.01, randZ);
       cardMesh.rotation.y = randRotY;
-      cardMesh.castShadow = true;
-      cardMesh.receiveShadow = true;
       threeRef.current.playedCardsGroup.add(cardMesh);
     }
 
@@ -1067,7 +788,7 @@ export function LiarsBar3DExperience({
       }}
       className="relative w-full h-full overflow-hidden bg-black select-none cursor-crosshair"
     >
-      {/* 1. REAL THREE.JS 3D WEBGL VIEWPORT WITH SKELETAL 3D MODELS */}
+      {/* 1. REAL THREE.JS 3D WEBGL VIEWPORT */}
       <div ref={mountRef} className="absolute inset-0 w-full h-full" />
 
       {/* 2. REALTIME 3D PROJECTED NAMETAGS & DIALOGUE IN 3D SPACE */}
@@ -1089,7 +810,9 @@ export function LiarsBar3DExperience({
                 className={`px-3 py-1.5 rounded-xl border backdrop-blur-md shadow-2xl text-center max-w-[240px] ${
                   isAccused
                     ? 'bg-red-950/95 border-red-500 text-red-200 animate-bounce'
-                    : 'bg-black/85 border-amber-500/50 text-amber-200'
+                    : isTargeted
+                    ? 'bg-amber-950/95 border-amber-400 text-amber-200 shadow-[0_0_20px_rgba(251,191,36,0.5)]'
+                    : 'bg-black/85 border-stone-600/60 text-stone-300'
                 }`}
               >
                 <p className="font-space text-[10px] font-bold leading-tight">

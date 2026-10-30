@@ -57,6 +57,9 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
   const [isDealingSequence, setIsDealingSequence] = useState(false);
   const [isCenterRevealOpen, setIsCenterRevealOpen] = useState(false);
   const [hasDealt, setHasDealt] = useState(false);
+  const [isCouncilCollapsed, setIsCouncilCollapsed] = useState(false);
+  const [isBattleLogCollapsed, setIsBattleLogCollapsed] = useState(false);
+  const [isChatCollapsed, setIsChatCollapsed] = useState(false);
 
   const handleCloseCenterReveal = useCallback(() => {
     setIsCenterRevealOpen(false);
@@ -533,66 +536,104 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
       </aside>
 
       {/* 4. LEFT HUD: DYNAMIC COUNCIL ROSTER (SHOWS EXACT PARTICIPANTS) */}
-      <aside className="absolute left-4 top-16 z-30 w-56 flex flex-col gap-1.5 pointer-events-auto">
-        <div className="bg-black/75 backdrop-blur-md p-2.5 rounded-xl border border-white/10 shadow-2xl">
-          <div className="text-[9px] font-mono uppercase tracking-wider text-gray-400 mb-1.5 flex items-center justify-between pb-1 border-b border-white/10">
-            <span className="font-bold flex items-center gap-1 text-slate-200">
-              <span className="material-symbols-outlined text-[12px] text-amber-400">groups</span>
-              <span>HỘI ĐỒNG ({aliveCount}/{activePlayers.length})</span>
+      <aside className="absolute left-4 top-16 z-30 pointer-events-auto">
+        {isCouncilCollapsed ? (
+          <button
+            type="button"
+            onClick={() => {
+              werewolfAudio.playVoteStamp();
+              setIsCouncilCollapsed(false);
+            }}
+            className="group flex items-center gap-2 px-3 py-1.5 rounded-xl bg-black/80 hover:bg-black/95 backdrop-blur-md border border-amber-500/40 hover:border-amber-400 text-stone-200 hover:text-white shadow-[0_0_15px_rgba(0,0,0,0.8)] hover:shadow-[0_0_20px_rgba(245,158,11,0.3)] transition-all transform hover:scale-105 active:scale-95 cursor-pointer text-xs font-mono animate-fadeIn"
+            title="Mở rộng danh sách Hội Đồng"
+          >
+            <div className="w-5 h-5 rounded-lg bg-amber-500/20 border border-amber-500/50 flex items-center justify-center text-amber-400">
+              <span className="material-symbols-outlined text-[13px]">groups</span>
+            </div>
+            <span className="font-bold font-display uppercase tracking-wider text-amber-300">
+              Hội Đồng ({aliveCount}/{activePlayers.length})
             </span>
-            <span className="text-emerald-400 font-bold text-[9px]">SỐNG {aliveCount}</span>
-          </div>
-
-          <div className="space-y-1 text-[10px] max-h-48 overflow-y-auto pr-1">
-            {activePlayers.map((p) => {
-              const isSelected = selectedTargetId === p.id;
-              const isAccused = accusedPlayerId === p.id;
-              const voteCount = effectiveTally[p.id] || 0;
-              const isMe = p.id === myPlayerInfo?.id || (!myPlayerInfo && p.seat === 1);
-
-              return (
-                <div
-                  key={p.id}
+            <span className="text-[9px] font-mono text-emerald-400 bg-emerald-950/80 px-1.5 py-0.2 rounded border border-emerald-500/40 font-bold">
+              SỐNG {aliveCount}
+            </span>
+            <span className="text-[10px] text-stone-400 font-mono flex items-center gap-0.5 ml-0.5 group-hover:text-amber-200">
+              <span>👁️ Mở</span>
+            </span>
+          </button>
+        ) : (
+          <div className="w-56 bg-black/75 backdrop-blur-md p-2.5 rounded-xl border border-white/10 shadow-2xl animate-fadeIn">
+            <div className="text-[9px] font-mono uppercase tracking-wider text-gray-400 mb-1.5 flex items-center justify-between pb-1 border-b border-white/10">
+              <span className="font-bold flex items-center gap-1 text-slate-200">
+                <span className="material-symbols-outlined text-[12px] text-amber-400">groups</span>
+                <span>HỘI ĐỒNG ({aliveCount}/{activePlayers.length})</span>
+              </span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-emerald-400 font-bold text-[9px]">SỐNG {aliveCount}</span>
+                <button
+                  type="button"
                   onClick={() => {
-                    if (p.isAlive && !isMe) {
-                      setSelectedTargetId(p.id);
-                      werewolfAudio.playVoteStamp();
-                    }
+                    werewolfAudio.playVoteStamp();
+                    setIsCouncilCollapsed(true);
                   }}
-                  className={`flex items-center justify-between px-2 py-1 rounded transition-all cursor-pointer ${
-                    !p.isAlive
-                      ? 'bg-zinc-900/40 text-stone-500 line-through cursor-not-allowed opacity-60'
-                      : isSelected
-                      ? 'bg-red-950/90 border border-red-500 text-white font-bold shadow-[0_0_10px_rgba(220,38,38,0.5)]'
-                      : isAccused
-                      ? 'bg-amber-950/70 border border-amber-500/50 text-amber-200 font-bold animate-pulse'
-                      : isMe
-                      ? 'bg-emerald-950/60 border border-emerald-500/30 text-emerald-200'
-                      : 'hover:bg-zinc-800/80 text-gray-300'
-                  }`}
+                  className="w-5 h-5 rounded hover:bg-white/15 text-stone-400 hover:text-amber-300 flex items-center justify-center transition cursor-pointer"
+                  title="Ẩn danh sách Hội Đồng"
                 >
-                  <div className="flex items-center gap-1.5 truncate">
-                    <span className="font-mono text-[9px] text-stone-400">#{p.seat < 10 ? `0${p.seat}` : p.seat}</span>
-                    <span className="truncate">{p.nickname}</span>
-                    {isMe && <span className="text-[8px] bg-emerald-500/20 text-emerald-400 px-1 rounded">Bạn</span>}
-                  </div>
+                  <span className="material-symbols-outlined text-[13px]">visibility_off</span>
+                </button>
+              </div>
+            </div>
 
-                  <div className="shrink-0 flex items-center gap-1 font-mono text-[9px]">
-                    {!p.isAlive ? (
-                      <span className="text-stone-500 font-bold">💀 Chết</span>
-                    ) : voteCount > 0 ? (
-                      <span className="text-red-400 font-bold bg-red-950/80 px-1 rounded border border-red-500/40">
-                        {voteCount} Phiếu
-                      </span>
-                    ) : (
-                      <span className="text-emerald-400">Sống</span>
-                    )}
+            <div className="space-y-1 text-[10px] max-h-48 overflow-y-auto pr-1">
+              {activePlayers.map((p) => {
+                const isSelected = selectedTargetId === p.id;
+                const isAccused = accusedPlayerId === p.id;
+                const voteCount = effectiveTally[p.id] || 0;
+                const isMe = p.id === myPlayerInfo?.id || (!myPlayerInfo && p.seat === 1);
+
+                return (
+                  <div
+                    key={p.id}
+                    onClick={() => {
+                      if (p.isAlive && !isMe) {
+                        setSelectedTargetId(p.id);
+                        werewolfAudio.playVoteStamp();
+                      }
+                    }}
+                    className={`flex items-center justify-between px-2 py-1 rounded transition-all cursor-pointer ${
+                      !p.isAlive
+                        ? 'bg-zinc-900/40 text-stone-500 line-through cursor-not-allowed opacity-60'
+                        : isSelected
+                        ? 'bg-red-950/90 border border-red-500 text-white font-bold shadow-[0_0_10px_rgba(220,38,38,0.5)]'
+                        : isAccused
+                        ? 'bg-amber-950/70 border border-amber-500/50 text-amber-200 font-bold animate-pulse'
+                        : isMe
+                        ? 'bg-emerald-950/60 border border-emerald-500/30 text-emerald-200'
+                        : 'hover:bg-zinc-800/80 text-gray-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5 truncate">
+                      <span className="font-mono text-[9px] text-stone-400">#{p.seat < 10 ? `0${p.seat}` : p.seat}</span>
+                      <span className="truncate">{p.nickname}</span>
+                      {isMe && <span className="text-[8px] bg-emerald-500/20 text-emerald-400 px-1 rounded">Bạn</span>}
+                    </div>
+
+                    <div className="shrink-0 flex items-center gap-1 font-mono text-[9px]">
+                      {!p.isAlive ? (
+                        <span className="text-stone-500 font-bold">💀 Chết</span>
+                      ) : voteCount > 0 ? (
+                        <span className="text-red-400 font-bold bg-red-950/80 px-1 rounded border border-red-500/40">
+                          {voteCount} Phiếu
+                        </span>
+                      ) : (
+                        <span className="text-emerald-400">Sống</span>
+                      )}
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
-        </div>
+        )}
       </aside>
 
       {/* 4.5. BOTTOM LEFT: PLAYER ROLE CARD HUD (3D FLIP, ACTIONS & LORE) */}
@@ -630,72 +671,149 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
       </aside>
 
       {/* 5. RIGHT HUD: COMBAT / TRIAL LOG & IN-GAME CHAT STREAM */}
-      <aside className="absolute top-3 right-4 z-30 flex flex-col w-72 pointer-events-auto gap-2">
-        <div className="bg-black/60 backdrop-blur-md p-3 rounded-xl border border-white/10 shadow-lg">
-          <div className="flex items-center justify-between pb-1.5 border-b border-white/10 mb-2">
-            <span className="text-[11px] font-bold text-amber-400 font-display tracking-wider">NHẬT KÝ BÀN ĐẤU</span>
-            <span className="text-[9px] font-mono text-emerald-400 bg-emerald-950/80 px-1.5 py-0.2 rounded border border-emerald-500/40">
+      <aside className="absolute top-3 right-4 z-30 flex flex-col items-end pointer-events-auto gap-2">
+        {/* Battle Log Box */}
+        {isBattleLogCollapsed ? (
+          <button
+            type="button"
+            onClick={() => {
+              werewolfAudio.playVoteStamp();
+              setIsBattleLogCollapsed(false);
+            }}
+            className="group flex items-center gap-2 px-3 py-1.5 rounded-xl bg-black/80 hover:bg-black/95 backdrop-blur-md border border-amber-500/40 hover:border-amber-400 text-stone-200 hover:text-white shadow-[0_0_15px_rgba(0,0,0,0.8)] hover:shadow-[0_0_20px_rgba(245,158,11,0.3)] transition-all transform hover:scale-105 active:scale-95 cursor-pointer text-xs font-mono animate-fadeIn"
+            title="Mở rộng Nhật Ký Bàn Đấu"
+          >
+            <div className="w-5 h-5 rounded-lg bg-red-500/20 border border-red-500/50 flex items-center justify-center text-red-400">
+              <span className="material-symbols-outlined text-[13px]">history_edu</span>
+            </div>
+            <span className="text-[11px] font-bold text-amber-400 font-display tracking-wider">
+              NHẬT KÝ BÀN ĐẤU
+            </span>
+            <span className="text-[9px] font-mono text-emerald-400 bg-emerald-950/80 px-1.5 py-0.2 rounded border border-emerald-500/40 font-bold">
               LIVE
             </span>
+            <span className="text-[10px] text-stone-400 font-mono flex items-center gap-0.5 ml-0.5 group-hover:text-amber-200">
+              <span>👁️ Mở</span>
+            </span>
+          </button>
+        ) : (
+          <div className="w-72 bg-black/60 backdrop-blur-md p-3 rounded-xl border border-white/10 shadow-lg animate-fadeIn">
+            <div className="flex items-center justify-between pb-1.5 border-b border-white/10 mb-2">
+              <span className="text-[11px] font-bold text-amber-400 font-display tracking-wider flex items-center gap-1">
+                <span className="material-symbols-outlined text-[13px] text-amber-400">history_edu</span>
+                <span>NHẬT KÝ BÀN ĐẤU</span>
+              </span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[9px] font-mono text-emerald-400 bg-emerald-950/80 px-1.5 py-0.2 rounded border border-emerald-500/40 font-bold">
+                  LIVE
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    werewolfAudio.playVoteStamp();
+                    setIsBattleLogCollapsed(true);
+                  }}
+                  className="w-5 h-5 rounded hover:bg-white/15 text-stone-400 hover:text-amber-300 flex items-center justify-center transition cursor-pointer"
+                  title="Ẩn Nhật Ký Bàn Đấu"
+                >
+                  <span className="material-symbols-outlined text-[13px]">visibility_off</span>
+                </button>
+              </div>
+            </div>
+            <div className="space-y-1.5 text-xs text-gray-300 font-sans max-h-36 overflow-y-auto pr-1">
+              <div className="border-l-2 border-red-500 pl-2 text-[11px]">
+                <span className="text-red-400 font-semibold">#06 Độ Mixi:</span> Cáo buộc #02 LordVader có biểu hiện mờ ám.
+              </div>
+              <div className="border-l-2 border-amber-500 pl-2 text-[11px]">
+                <span className="text-amber-300 font-semibold">#02 LordVader:</span> &ldquo;Tôi là Dân làng lương thiện!&rdquo;
+              </div>
+              <div className="border-l-2 border-red-500 pl-2 text-[11px] text-red-200 font-bold">
+                #02 LordVader đang có 3 phiếu kết tội.
+              </div>
+            </div>
           </div>
-          <div className="space-y-1.5 text-xs text-gray-300 font-sans max-h-36 overflow-y-auto pr-1">
-            <div className="border-l-2 border-red-500 pl-2 text-[11px]">
-              <span className="text-red-400 font-semibold">#06 Độ Mixi:</span> Cáo buộc #02 LordVader có biểu hiện mờ ám.
-            </div>
-            <div className="border-l-2 border-amber-500 pl-2 text-[11px]">
-              <span className="text-amber-300 font-semibold">#02 LordVader:</span> &ldquo;Tôi là Dân làng lương thiện!&rdquo;
-            </div>
-            <div className="border-l-2 border-red-500 pl-2 text-[11px] text-red-200 font-bold">
-              #02 LordVader đang có 3 phiếu kết tội.
-            </div>
-          </div>
-        </div>
+        )}
 
         {/* Live Chat Box */}
-        <div className="bg-black/70 backdrop-blur-md p-3 rounded-xl border border-white/10 shadow-lg flex flex-col h-56 justify-between">
-          <div className="flex items-center gap-1 border-b border-white/10 pb-1 mb-1">
-            {(['public', 'wolves', 'lovers', 'dead'] as ChatChannel[]).map((ch) => (
-              <button
-                key={ch}
-                onClick={() => store.setActiveChatChannel(ch)}
-                className={`flex-1 py-0.5 rounded text-[10px] font-mono uppercase font-bold transition-colors ${
-                  state.activeChatChannel === ch
-                    ? 'bg-red-950 text-red-300 border border-red-500/40'
-                    : 'text-gray-400 hover:text-white'
-                }`}
-              >
-                {ch === 'public' ? 'Làng' : ch === 'wolves' ? 'Sói' : ch === 'lovers' ? 'Đôi' : 'Ma'}
-              </button>
-            ))}
-          </div>
-
-          <div className="flex-1 overflow-y-auto space-y-1 text-[11px] pr-1">
-            {(state.chatMessages[state.activeChatChannel] || []).map((msg) => (
-              <div key={msg.id} className="text-slate-300">
-                <span className="text-amber-300 font-mono font-bold mr-1">
-                  {msg.senderNickname || msg.senderId}:
-                </span>
-                <span>{msg.text}</span>
+        {isChatCollapsed ? (
+          <button
+            type="button"
+            onClick={() => {
+              werewolfAudio.playVoteStamp();
+              setIsChatCollapsed(false);
+            }}
+            className="group flex items-center gap-2 px-3 py-1.5 rounded-xl bg-black/80 hover:bg-black/95 backdrop-blur-md border border-white/20 hover:border-amber-400 text-stone-200 hover:text-white shadow-[0_0_15px_rgba(0,0,0,0.8)] hover:shadow-[0_0_20px_rgba(245,158,11,0.3)] transition-all transform hover:scale-105 active:scale-95 cursor-pointer text-xs font-mono animate-fadeIn"
+            title="Mở rộng khung Trò Chuyện"
+          >
+            <div className="w-5 h-5 rounded-lg bg-zinc-800 border border-white/20 flex items-center justify-center text-slate-300">
+              <span className="material-symbols-outlined text-[13px]">chat</span>
+            </div>
+            <span className="font-bold text-[11px] font-mono tracking-wider text-slate-200">
+              TRÒ CHUYỆN
+            </span>
+            <span className="text-[10px] text-stone-400 font-mono flex items-center gap-0.5 ml-0.5 group-hover:text-amber-200">
+              <span>👁️ Mở</span>
+            </span>
+          </button>
+        ) : (
+          <div className="w-72 bg-black/70 backdrop-blur-md p-3 rounded-xl border border-white/10 shadow-lg flex flex-col h-56 justify-between animate-fadeIn">
+            <div className="flex items-center justify-between border-b border-white/10 pb-1 mb-1">
+              <div className="flex items-center gap-1 flex-1">
+                {(['public', 'wolves', 'lovers', 'dead'] as ChatChannel[]).map((ch) => (
+                  <button
+                    key={ch}
+                    onClick={() => store.setActiveChatChannel(ch)}
+                    className={`flex-1 py-0.5 rounded text-[10px] font-mono uppercase font-bold transition-colors ${
+                      state.activeChatChannel === ch
+                        ? 'bg-red-950 text-red-300 border border-red-500/40'
+                        : 'text-gray-400 hover:text-white'
+                    }`}
+                  >
+                    {ch === 'public' ? 'Làng' : ch === 'wolves' ? 'Sói' : ch === 'lovers' ? 'Đôi' : 'Ma'}
+                  </button>
+                ))}
               </div>
-            ))}
-          </div>
+              <button
+                type="button"
+                onClick={() => {
+                  werewolfAudio.playVoteStamp();
+                  setIsChatCollapsed(true);
+                }}
+                className="w-5 h-5 ml-1.5 rounded hover:bg-white/15 text-stone-400 hover:text-amber-300 flex items-center justify-center transition cursor-pointer"
+                title="Ẩn khung Trò Chuyện"
+              >
+                <span className="material-symbols-outlined text-[13px]">visibility_off</span>
+              </button>
+            </div>
 
-          <form onSubmit={handleSendChat} className="flex gap-1 pt-1.5 border-t border-white/10">
-            <input
-              type="text"
-              value={chatInput}
-              onChange={(e) => setChatInput(e.target.value)}
-              placeholder="Nói gì đó..."
-              className="flex-1 bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-red-500"
-            />
-            <button
-              type="submit"
-              className="px-2 py-1 bg-red-800 hover:bg-red-700 text-white text-xs rounded font-mono"
-            >
-              Gửi
-            </button>
-          </form>
-        </div>
+            <div className="flex-1 overflow-y-auto space-y-1 text-[11px] pr-1">
+              {(state.chatMessages[state.activeChatChannel] || []).map((msg) => (
+                <div key={msg.id} className="text-slate-300">
+                  <span className="text-amber-300 font-mono font-bold mr-1">
+                    {msg.senderNickname || msg.senderId}:
+                  </span>
+                  <span>{msg.text}</span>
+                </div>
+              ))}
+            </div>
+
+            <form onSubmit={handleSendChat} className="flex gap-1 pt-1.5 border-t border-white/10">
+              <input
+                type="text"
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                placeholder="Nói gì đó..."
+                className="flex-1 bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-red-500"
+              />
+              <button
+                type="submit"
+                className="px-2 py-1 bg-red-800 hover:bg-red-700 text-white text-xs rounded font-mono"
+              >
+                Gửi
+              </button>
+            </form>
+          </div>
+        )}
       </aside>
 
       {/* 6. BOTTOM ACTION CONTROLLER BAR (PURE WEREWOLF GAME RULES) */}

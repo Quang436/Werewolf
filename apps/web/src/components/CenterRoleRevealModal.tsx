@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Role, Team } from '@werewolf/shared';
 import {
   getFactionVisuals,
@@ -30,54 +30,79 @@ export const CenterRoleRevealModal: React.FC<CenterRoleRevealModalProps> = ({
   const [isFlipped, setIsFlipped] = useState(false);
   const [countdown, setCountdown] = useState(12);
 
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
   const roleInfo = getRoleInfo(role);
   const roleExtra = getRoleDetailExtra(role);
   const visuals = getFactionVisuals(roleInfo.category);
 
-  // Trigger dramatic 3D card flip on open
+  // Trigger dramatic 3D card flip once when modal opens
   useEffect(() => {
-    if (isOpen) {
+    if (!isOpen) {
       setIsFlipped(false);
-      setCountdown(12);
-
-      // Play card deal sound initially
-      werewolfAudio.playCardDeal();
-
-      // Flip card after 400ms
-      const flipTimer = setTimeout(() => {
-        setIsFlipped(true);
-        if (roleInfo.category === 'werewolf') {
-          werewolfAudio.playWolfHowl();
-        } else if (roleInfo.category === 'third') {
-          werewolfAudio.playWhisper();
-        } else {
-          werewolfAudio.playBell();
-        }
-      }, 450);
-
-      // 12s countdown to auto-dock into corner
-      const interval = setInterval(() => {
-        setCountdown((prev) => {
-          if (prev <= 1) {
-            clearInterval(interval);
-            onClose();
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-
-      return () => {
-        clearTimeout(flipTimer);
-        clearInterval(interval);
-      };
+      return;
     }
-  }, [isOpen, roleInfo.category, onClose]);
+
+    setIsFlipped(false);
+    setCountdown(12);
+
+    // Play card deal sound initially
+    werewolfAudio.playCardDeal();
+
+    // Flip card after 350ms
+    const flipTimer = setTimeout(() => {
+      setIsFlipped(true);
+      const cat = getRoleInfo(role).category;
+      if (cat === 'werewolf') {
+        werewolfAudio.playWolfHowl();
+      } else if (cat === 'third') {
+        werewolfAudio.playWhisper();
+      } else {
+        werewolfAudio.playBell();
+      }
+    }, 350);
+
+    // 12s countdown to auto-dock into corner
+    const interval = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          onCloseRef.current();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => {
+      clearTimeout(flipTimer);
+      clearInterval(interval);
+    };
+  }, [isOpen, role]);
+
+  // Listen for Escape or KeyC to dismiss modal
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.code === 'Escape' || e.code === 'KeyC') {
+        e.preventDefault();
+        onCloseRef.current();
+      }
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-xl p-4 animate-fadeIn pointer-events-auto select-none">
+    <div
+      onClick={() => onCloseRef.current()}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-xl p-4 animate-fadeIn pointer-events-auto select-none"
+    >
       {/* Background Ambience Particles / Glow */}
       <div
         className="absolute w-[500px] h-[500px] rounded-full blur-[100px] opacity-40 pointer-events-none transition-all duration-700"
@@ -85,7 +110,20 @@ export const CenterRoleRevealModal: React.FC<CenterRoleRevealModalProps> = ({
       />
 
       {/* Main Center Card Reveal Dialog */}
-      <div className="relative flex flex-col items-center max-w-md w-full">
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="relative flex flex-col items-center max-w-md w-full"
+      >
+        {/* Close Button top-right */}
+        <button
+          type="button"
+          onClick={() => onCloseRef.current()}
+          className="absolute -top-3 -right-3 z-30 w-8 h-8 rounded-full bg-zinc-900 border border-white/20 text-stone-300 hover:text-white hover:bg-red-950 hover:border-red-500 flex items-center justify-center transition shadow-lg text-sm font-bold"
+          title="Đóng lá bài (Thu nhỏ về góc màn hình)"
+        >
+          ✕
+        </button>
+
         {/* Top Announcement Tag */}
         <div className="mb-3 text-center">
           <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-zinc-900/90 border border-amber-500/50 shadow-[0_0_20px_rgba(245,158,11,0.4)]">
@@ -98,8 +136,13 @@ export const CenterRoleRevealModal: React.FC<CenterRoleRevealModalProps> = ({
 
         {/* 3D Flipping Grand Card Container */}
         <div
-          className="relative w-[340px] md:w-[380px] h-[520px] md:h-[550px]"
+          className="relative w-[340px] md:w-[380px] h-[520px] md:h-[550px] cursor-pointer"
           style={{ perspective: '1200px' }}
+          onClick={() => {
+            setIsFlipped((prev) => !prev);
+            werewolfAudio.playVoteStamp();
+          }}
+          title="Click để lật mở / lật úp lá bài"
         >
           <div
             className="w-full h-full relative transition-transform duration-700 ease-out"

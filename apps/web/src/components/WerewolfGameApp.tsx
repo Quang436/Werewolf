@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ALL_ROLES_FROM_PDF,
   ChatChannel,
@@ -57,6 +57,14 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
   const [isDealingSequence, setIsDealingSequence] = useState(false);
   const [isCenterRevealOpen, setIsCenterRevealOpen] = useState(false);
 
+  const handleCloseCenterReveal = useCallback(() => {
+    setIsCenterRevealOpen(false);
+  }, []);
+
+  const handleOpenCenterReveal = useCallback(() => {
+    setIsCenterRevealOpen(true);
+  }, []);
+
   useEffect(() => {
     return store.subscribe((newState) => {
       setState({ ...newState });
@@ -90,6 +98,7 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
         werewolfAudio.playVoteStamp();
         onEmitAction('day:vote', { targetId: 'SKIP' });
       } else if (e.code === 'KeyC') {
+        setIsCenterRevealOpen((prev) => !prev);
         store.toggleCardReveal();
         werewolfAudio.playCardDeal();
       }
@@ -149,9 +158,11 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
     return state.assignedRole || (effectiveRoom.me?.role as Role) || 'SEER';
   }, [state.assignedRole, effectiveRoom.me?.role]);
 
-  // Trigger dealing animation automatically when game phase enters ASSIGN_ROLES
+  // Trigger dealing animation automatically when game phase enters ASSIGN_ROLES (only once per phase entry)
+  const lastPhaseRef = useRef<string | null>(null);
   useEffect(() => {
-    if (effectiveRoom.phase === 'ASSIGN_ROLES') {
+    if (effectiveRoom.phase === 'ASSIGN_ROLES' && lastPhaseRef.current !== 'ASSIGN_ROLES') {
+      lastPhaseRef.current = 'ASSIGN_ROLES';
       setIsDealingSequence(true);
       setIsCenterRevealOpen(false);
       werewolfAudio.playCardDeal();
@@ -160,10 +171,13 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
         setIsCenterRevealOpen(true);
       }, 1500);
       return () => clearTimeout(timer);
+    } else if (effectiveRoom.phase !== 'ASSIGN_ROLES') {
+      lastPhaseRef.current = effectiveRoom.phase;
     }
   }, [effectiveRoom.phase]);
 
-  const handleRandomDeal = () => {
+  const handleRandomDeal = useCallback(() => {
+    if (isDealingSequence) return;
     // 1. Play dealing audio and trigger 3D table card flight
     setIsDealingSequence(true);
     setIsCenterRevealOpen(false);
@@ -210,20 +224,12 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
       setIsDealingSequence(false);
       setIsCenterRevealOpen(true);
 
-      if (myRoleInfo.category === 'werewolf') {
-        werewolfAudio.playWolfHowl();
-      } else if (myRoleInfo.category === 'third') {
-        werewolfAudio.playWhisper();
-      } else {
-        werewolfAudio.playBell();
-      }
-
       setDealNotification(
         `✨ Bạn nhận lá bài: ${myRoleInfo.nameVN} (${myRoleInfo.categoryLabel})`
       );
       setTimeout(() => setDealNotification(null), 4000);
     }, 1500);
-  };
+  }, [activePlayers, isDealingSequence, myPlayerInfo?.id, store]);
 
   const isNight = effectiveRoom.phase.includes('NIGHT');
   const remainingSeconds = Math.max(0, Math.ceil(state.remainingMs ? state.remainingMs / 1000 : 45));
@@ -517,7 +523,7 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
             store.toggleCardReveal();
             werewolfAudio.playCardDeal();
           }}
-          onOpenCenterReveal={() => setIsCenterRevealOpen(true)}
+          onOpenCenterReveal={handleOpenCenterReveal}
           onSelectRoleTest={(newRole) => {
             const roleInfo = getRoleInfo(newRole);
             const team =
@@ -741,7 +747,7 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
         team={state.assignedTeam}
         wolfTeammates={state.wolfTeammates}
         lover={(effectiveRoom.me as any)?.lover}
-        onClose={() => setIsCenterRevealOpen(false)}
+        onClose={handleCloseCenterReveal}
       />
     </div>
   );

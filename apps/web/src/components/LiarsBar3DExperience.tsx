@@ -635,7 +635,7 @@ export function LiarsBar3DExperience({
     renderer.setSize(width, height);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.shadowMap.type = THREE.PCFShadowMap;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.05;
     container.replaceChildren(renderer.domElement);
@@ -1046,11 +1046,11 @@ export function LiarsBar3DExperience({
     // I. ANIMATION LOOP
     let animationFrameId: number;
     let dealStartTime: number | null = null;
-    const clock = new THREE.Clock();
+    const loopStartTime = performance.now();
 
     const animate = () => {
       animationFrameId = requestAnimationFrame(animate);
-      const t = clock.getElapsedTime();
+      const t = (performance.now() - loopStartTime) * 0.001;
       const state = threeRef.current;
       if (!state) return;
 

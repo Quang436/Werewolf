@@ -2,18 +2,37 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import { GameStateManager } from '../../../stores/game.store';
 import { useWerewolfSocket } from '../../../hooks/useWerewolfSocket';
-import { WerewolfGameApp } from '../../../components/WerewolfGameApp';
+
+// Dynamically import 3D Game Client with SSR disabled to eliminate hydration mismatch
+const WerewolfGameApp = dynamic(
+  () => import('../../../components/WerewolfGameApp').then((mod) => mod.WerewolfGameApp),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex flex-col items-center justify-center h-screen bg-[#0a0706] text-amber-200">
+        <div className="w-12 h-12 border-4 border-amber-500/30 border-t-amber-500 rounded-full animate-spin mb-4" />
+        <p className="font-display uppercase tracking-widest text-sm font-bold">Đang tải bàn Hội Đồng 3D...</p>
+      </div>
+    ),
+  }
+);
 
 export default function GameRoomPage() {
   const params = useParams();
   const router = useRouter();
   const code = (params?.code as string)?.toUpperCase();
 
+  const [isMounted, setIsMounted] = useState(false);
   const store = useMemo(() => new GameStateManager(), []);
   const [nickname, setNickname] = useState<string>('Người Làng');
   const [initError, setInitError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   // Khởi tạo socket connection
   const { isConnected, emitAction, sendChat } = useWerewolfSocket({
@@ -72,6 +91,15 @@ export default function GameRoomPage() {
       });
     }
   }, [isConnected, code, emitAction, router]);
+
+  if (!isMounted) {
+    return (
+      <div className="flex flex-col items-center justify-center h-screen bg-[#0a0706] text-amber-200">
+        <div className="w-12 h-12 border-4 border-amber-500/30 border-t-amber-500 rounded-full animate-spin mb-4" />
+        <p className="font-display uppercase tracking-widest text-sm font-bold">Đang tải bàn Hội Đồng 3D...</p>
+      </div>
+    );
+  }
 
   if (initError) {
     return (

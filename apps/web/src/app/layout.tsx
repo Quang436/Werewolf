@@ -13,7 +13,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="vi" className="dark">
+    <html lang="vi" className="dark" suppressHydrationWarning>
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
@@ -26,7 +26,10 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body className="bg-[#0a0d16] text-[#f1f5f9] font-geist antialiased selection:bg-red-900 selection:text-white">
+      <body
+        className="bg-[#0a0d16] text-[#f1f5f9] font-geist antialiased selection:bg-red-900 selection:text-white"
+        suppressHydrationWarning
+      >
         {children}
       </body>
     </html>

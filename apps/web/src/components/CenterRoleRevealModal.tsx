@@ -65,23 +65,28 @@ export const CenterRoleRevealModal: React.FC<CenterRoleRevealModalProps> = ({
       }
     }, 350);
 
-    // 12s countdown to auto-dock into corner
-    const interval = setInterval(() => {
-      setCountdown((prev) => {
-        if (prev <= 1) {
-          clearInterval(interval);
-          onCloseRef.current();
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
     return () => {
       clearTimeout(flipTimer);
-      clearInterval(interval);
     };
   }, [isOpen, role]);
+
+  // 12s countdown ticker (pure state update, NO side effects during state update!)
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const interval = setInterval(() => {
+      setCountdown((prev) => Math.max(0, prev - 1));
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [isOpen]);
+
+  // Clean, safe side effect when countdown reaches 0
+  useEffect(() => {
+    if (isOpen && countdown === 0) {
+      onCloseRef.current();
+    }
+  }, [isOpen, countdown]);
 
   // Listen for Escape or KeyC to dismiss modal
   useEffect(() => {

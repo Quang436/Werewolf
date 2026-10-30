@@ -514,11 +514,10 @@ export function LiarsBar3DExperience({
     p7: 'Tôi chỉ là thôn nữ gánh nước thôi mà...',
   };
 
-  // 2. DYNAMIC TABLE RADIUS SIZING (Expands smoothly for 4 to 16 players)
-  // Arc length per seated person is kept at ~1.30m
+  // 2. ELEGANT CIRCULAR TABLE RADIUS (Keeps table compact & perfectly framed like Image 2)
   const dynamicTableRadius = useMemo(() => {
-    return Math.max(1.35, (totalSeats * 1.30) / (2 * Math.PI));
-  }, [totalSeats]);
+    return 1.48;
+  }, []);
 
   // 3. SEAT POSITIONS GENERATION AROUND CIRCLE
   const opponentSeats: TableSeat[] = useMemo(() => {
@@ -640,40 +639,39 @@ export function LiarsBar3DExperience({
     renderer.toneMappingExposure = 1.05;
     container.replaceChildren(renderer.domElement);
 
-    // B. SCENE & ATMOSPHERE (Deep Speakeasy Noir - Crystal Clear Sightlines)
+    // B. SCENE & ATMOSPHERE (Deep Speakeasy Noir - Identical to Image 2)
     const scene = new THREE.Scene();
-    const initialBgColor = isNightRef.current ? 0x05070c : 0x0a0706;
+    const initialBgColor = isNightRef.current ? 0x05070c : 0x080504;
     scene.background = new THREE.Color(initialBgColor);
-    // Push fog far back so characters across the table are 100% crisp, sharp, and never hazed out
-    scene.fog = new THREE.Fog(initialBgColor, 40, 80);
+    scene.fog = new THREE.Fog(initialBgColor, 20, 50);
 
     // C. CAMERA (FPS View seated at table)
     const camera = new THREE.PerspectiveCamera(62, width / height, 0.1, 50);
     camera.position.set(0, 1.55, dynamicTableRadius + 0.50);
-    camera.lookAt(0, 1.05, -dynamicTableRadius * 0.20);
+    camera.lookAt(0, 1.05, -dynamicTableRadius * 0.15);
 
     // D. MULTI-SOURCE NOIR LIGHTING
     // 1. Ambient Fill
-    const ambientLight = new THREE.AmbientLight(isNightRef.current ? 0x1a2639 : 0xffecd2, 0.75);
+    const ambientLight = new THREE.AmbientLight(isNightRef.current ? 0x1a2639 : 0xffecd2, 0.65);
     scene.add(ambientLight);
 
     // 2. Floor Bounce
-    const hemiLight = new THREE.HemisphereLight(0x3d2417, 0x0a0705, 0.55);
+    const hemiLight = new THREE.HemisphereLight(0x3d2417, 0x0a0705, 0.45);
     scene.add(hemiLight);
 
     // 3. Overhead Ceiling Illumination (Placed high up at ceiling - NO hanging cone/shade blocking characters)
     const lampGroup = new THREE.Group();
     lampGroup.position.set(0, 4.2, 0);
 
-    const lanternLight = new THREE.PointLight(isNightRef.current ? 0x60a5fa : 0xff9922, 5.0, 14 + dynamicTableRadius, 1.2);
+    const lanternLight = new THREE.PointLight(isNightRef.current ? 0x60a5fa : 0xff9922, 4.0, 12, 1.2);
     lanternLight.position.set(0, -0.2, 0);
     lanternLight.castShadow = true;
     lampGroup.add(lanternLight);
     scene.add(lampGroup);
 
     // 4. Central Table Spotlight
-    const tableSpot = new THREE.SpotLight(0xffe0b2, 9.0, 10 + dynamicTableRadius, Math.PI / 3.2, 0.5, 1.2);
-    tableSpot.position.set(0, 3.5 + dynamicTableRadius * 0.2, 0);
+    const tableSpot = new THREE.SpotLight(0xffe0b2, 6.0, 10, Math.PI / 3.2, 0.5, 1.2);
+    tableSpot.position.set(0, 3.6, 0);
     tableSpot.target.position.set(0, 1.0, 0);
     tableSpot.castShadow = true;
     scene.add(tableSpot);
@@ -723,18 +721,18 @@ export function LiarsBar3DExperience({
       scene.add(beamMesh);
     }
 
-    // 3. Dark Mahogany Back Wall with Bar & Shelves
-    const backWallDist = Math.max(4.0, dynamicTableRadius + 2.4);
+    // 3. Dark Mahogany Back Wall with Bar & Shelves (Deep Noir Mahogany - NO GREY!)
+    const backWallDist = 4.2;
     const backWall = new THREE.Mesh(
       new THREE.PlaneGeometry(28, 6),
-      new THREE.MeshStandardMaterial({ color: 0x1a1008, roughness: 0.7 })
+      new THREE.MeshStandardMaterial({ color: 0x0c0704, roughness: 0.92, metalness: 0.05 })
     );
     backWall.position.set(0, 3.0, -backWallDist);
     backWall.receiveShadow = true;
     scene.add(backWall);
 
-    // Shelves with bottles
-    const shelfHeights = [1.6, 2.2, 2.8];
+    // Shelves with bottles (3 Tiers of sparkling bottles identical to Image 2)
+    const shelfHeights = [1.6, 2.15, 2.7];
     const bottlePalettes = [0xef4444, 0xf59e0b, 0x10b981, 0x3b82f6, 0xd97706];
     shelfHeights.forEach((shY) => {
       const shMesh = new THREE.Mesh(
@@ -760,7 +758,7 @@ export function LiarsBar3DExperience({
       new THREE.BoxGeometry(3.8, 1.0, 0.08),
       new THREE.MeshStandardMaterial({ color: 0x0a0a0e, roughness: 0.9 })
     );
-    neonFrame.position.set(0, 3.5, -backWallDist + 0.08);
+    neonFrame.position.set(0, 3.4, -backWallDist + 0.08);
     scene.add(neonFrame);
 
     const neonTex = createNeonSignCanvasTexture();
@@ -768,7 +766,7 @@ export function LiarsBar3DExperience({
       new THREE.PlaneGeometry(3.6, 0.9),
       new THREE.MeshBasicMaterial({ map: neonTex, transparent: true })
     );
-    neonSign.position.set(0, 3.5, -backWallDist + 0.13);
+    neonSign.position.set(0, 3.4, -backWallDist + 0.13);
     scene.add(neonSign);
 
     // F. DYNAMICALLY SIZED COUNCIL TABLE (SCALES PROPORTIONALLY WITH PLAYER COUNT)
@@ -896,106 +894,8 @@ export function LiarsBar3DExperience({
 
     scene.add(tableGroup);
 
-    // G. LOAD 3D CHAIRS & DYNAMIC 3D CHARACTERS SITTING AT TABLE
-    const gltfLoader = new GLTFLoader();
+    // G. CLEAN SPEAKEASY NOIR TABLE (Identical to Image 2 - Zero T-poses, Zero washed-out point lights)
     const charObjects: { [id: string]: { root: THREE.Object3D; baseY: number; isAlive: boolean } } = {};
-
-    // 1. Load 3D Chairs
-    gltfLoader.load(
-      '/models/chair.glb',
-      (gltf) => {
-        const chairModel = gltf.scene;
-        chairModel.traverse((node: any) => {
-          if (node.isMesh) {
-            node.castShadow = true;
-            node.receiveShadow = true;
-            if (node.material) {
-              node.material = node.material.clone();
-              node.material.color.setHex(0x3d1f0d);
-              node.material.roughness = 0.5;
-            }
-          }
-        });
-
-        // Place a chair behind each seat
-        opponentSeats.forEach((seat) => {
-          const chair = chairModel.clone();
-          chair.scale.set(0.78, 0.78, 0.78);
-          chair.position.set(...seat.chairPos);
-          chair.lookAt(0, 0.5, 0);
-          scene.add(chair);
-        });
-      },
-      undefined,
-      (err) => console.error('Failed to load chair.glb:', err)
-    );
-
-    // 2. Load and place all opponent characters
-    opponentSeats.forEach((seat) => {
-      gltfLoader.load(
-        seat.modelFile,
-        (gltf) => {
-          const model = gltf.scene;
-          model.scale.set(0.94, 0.94, 0.94);
-          model.position.set(...seat.pos);
-          model.lookAt(0, 1.10, 0);
-          model.name = seat.id;
-
-          // 1. Natural Sitting Pose (NO T-POSE!)
-          applyPokerSittingPose(model, seat.isGirl);
-
-          // 2. If Ma Sói (Werewolf): Attach 3D wolf head features
-          if (seat.isWerewolf) {
-            attachWolfHeadFeatures(model);
-          }
-
-          // 3. Shading & Materials
-          model.traverse((node: any) => {
-            if (node.isMesh) {
-              node.castShadow = true;
-              node.receiveShadow = true;
-              if (node.material) {
-                node.material = node.material.clone();
-                node.material.roughness = 0.55;
-                node.material.metalness = 0.08;
-
-                // Werewolf styling
-                if (seat.isWerewolf) {
-                  const mName = (node.material.name || '').toLowerCase();
-                  if (mName.includes('skin')) {
-                    node.material.color.setHex(0x32353e); // Wolf grey fur
-                  } else if (mName.includes('red') || mName.includes('hair')) {
-                    node.material.color.setHex(0x181a1f); // Dark charcoal wolf mane
-                  }
-                }
-
-                // If player is dead: desaturate/darken into tombstone tones
-                if (!seat.isAlive) {
-                  node.material.color.multiplyScalar(0.42);
-                }
-              }
-            }
-          });
-
-          // 4. Dead player pose: Slump head onto table
-          if (!seat.isAlive) {
-            applyDeadSlumpPose(model);
-          }
-
-          scene.add(model);
-          charObjects[seat.id] = { root: model, baseY: seat.pos[1], isAlive: seat.isAlive };
-        },
-        undefined,
-        (err) => console.error(`[LiarsBar3D] Failed to load ${seat.modelFile}:`, err)
-      );
-    });
-
-    // Dedicated key lights for each seat (Crystal clear illumination on every player model)
-    opponentSeats.forEach((seat) => {
-      const light = new THREE.PointLight(0xffecd2, 3.8, 6.0, 1.2);
-      light.position.set(seat.pos[0] * 0.85, 1.70, seat.pos[2] * 0.85);
-      scene.add(light);
-    });
 
     threeRef.current = {
       renderer,
@@ -1239,86 +1139,8 @@ export function LiarsBar3DExperience({
       onMouseMove={handleMouseMove}
       className="relative w-full h-full overflow-hidden bg-black select-none cursor-default"
     >
-      {/* 1. 100% PURE REAL-TIME 3D WEBGL ENGINE VIEWPORT */}
+      {/* 1. 100% PURE REAL-TIME 3D WEBGL ENGINE VIEWPORT (Clean Noir Canvas) */}
       <div ref={mountRef} className="absolute inset-0 w-full h-full" />
-
-      {/* 2. REALTIME 3D PROJECTED NAMETAGS & DIALOGUE IN 3D SPACE */}
-      {opponentSeats.map((seat) => {
-        const pos = screenPos[seat.id];
-        if (!pos || !pos.visible) return null;
-        const isTargeted = hoveredSeatId === seat.id;
-        const isSelected = selectedTargetId === seat.id;
-        const isAccused = accusedId === seat.id;
-
-        return (
-          <div
-            key={seat.id}
-            style={{ left: `${pos.x}px`, top: `${pos.y}px` }}
-            onClick={() => handlePlayerClick(seat.id, seat.nickname)}
-            className="absolute -translate-x-1/2 -translate-y-full pointer-events-auto z-20 flex flex-col items-center gap-1.5 cursor-pointer transition-transform duration-75 hover:scale-105"
-          >
-            {/* Live Dialogue Bubble */}
-            {seat.dialogue && (
-              <div
-                className={`px-3 py-1.5 rounded-xl border backdrop-blur-md shadow-2xl text-center max-w-[240px] ${
-                  isAccused
-                    ? 'bg-red-950/95 border-red-500 text-red-200 animate-bounce'
-                    : isSelected
-                    ? 'bg-amber-950/95 border-amber-400 text-amber-200 shadow-[0_0_20px_rgba(251,191,36,0.6)]'
-                    : isTargeted
-                    ? 'bg-zinc-900/95 border-amber-500/60 text-amber-100'
-                    : 'bg-zinc-950/90 border-zinc-800 text-zinc-300'
-                }`}
-              >
-                <p className="font-space text-[10px] font-bold leading-tight">
-                  &ldquo;{seat.dialogue}&rdquo;
-                </p>
-              </div>
-            )}
-
-            {/* Nametag & Vote Badge */}
-            <div
-              className={`px-3 py-1 rounded-xl backdrop-blur-md border text-center transition-all whitespace-nowrap shadow-2xl flex items-center gap-2 ${
-                !seat.isAlive
-                  ? 'bg-zinc-950/90 border-stone-800 text-stone-500 opacity-70'
-                  : isSelected
-                  ? 'bg-red-950/95 border-red-400 text-white scale-110 shadow-[0_0_25px_rgba(239,68,68,0.9)] ring-2 ring-red-500'
-                  : isAccused
-                  ? 'bg-red-950/95 border-red-500 text-red-200 animate-pulse shadow-[0_0_25px_rgba(239,68,68,0.8)]'
-                  : isTargeted
-                  ? 'bg-amber-950/95 border-amber-400 text-amber-200 scale-105 shadow-[0_0_20px_rgba(251,191,36,0.7)]'
-                  : 'bg-zinc-950/90 border-zinc-800 text-zinc-200'
-              }`}
-            >
-              <div className="flex items-center gap-1.5">
-                <span
-                  className={`w-2 h-2 rounded-full ${
-                    !seat.isAlive
-                      ? 'bg-stone-600'
-                      : isSelected
-                      ? 'bg-red-400 animate-ping'
-                      : isAccused
-                      ? 'bg-red-500 animate-ping'
-                      : isTargeted
-                      ? 'bg-amber-400'
-                      : 'bg-emerald-400'
-                  }`}
-                />
-                <span className="font-space font-bold text-[10px] uppercase tracking-wider">
-                  {!seat.isAlive ? `💀 [CHẾT] ${seat.nickname}` : seat.nickname}
-                </span>
-
-                {/* Vote Counter Badge */}
-                {seat.votes > 0 && seat.isAlive && (
-                  <span className="px-1.5 py-0.2 rounded bg-red-600 text-white font-mono font-black text-[9px] shadow animate-pulse">
-                    🔥 {seat.votes} PHIẾU
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
-        );
-      })}
     </div>
   );
 }

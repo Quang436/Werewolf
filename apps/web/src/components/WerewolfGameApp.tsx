@@ -8,13 +8,33 @@ import {
   Role,
 } from '@werewolf/shared';
 import { GameStateManager } from '../stores/game.store';
-import { LiarsBar3DExperience } from './LiarsBar3DExperience';
+import { LiarsBar3DExperience, werewolfAudio } from './LiarsBar3DExperience';
 
 export interface WerewolfGameAppProps {
   store: GameStateManager;
   onEmitAction: (event: string, payload: unknown) => void;
   onSendChat: (channel: ChatChannel, text: string) => void;
 }
+
+// 16 Standard Council Members for dynamic scaling testing
+const ALL_SAMPLE_PLAYERS: PublicPlayerView[] = [
+  { id: 'p1', seat: 1, nickname: 'Bác Sĩ', avatarUrl: null, isHost: false, isAlive: true, ready: true, connection: 'ONLINE' },
+  { id: 'p2', seat: 2, nickname: 'LordVader', avatarUrl: null, isHost: false, isAlive: true, ready: true, connection: 'ONLINE' },
+  { id: 'p3', seat: 3, nickname: 'Xemesis', avatarUrl: null, isHost: false, isAlive: true, ready: true, connection: 'ONLINE' },
+  { id: 'p4', seat: 4, nickname: 'Quản Trò', avatarUrl: null, isHost: true, isAlive: true, ready: true, connection: 'ONLINE' },
+  { id: 'p5', seat: 5, nickname: 'PewPew', avatarUrl: null, isHost: false, isAlive: false, ready: true, connection: 'ONLINE' },
+  { id: 'p6', seat: 6, nickname: 'Độ Mixi', avatarUrl: null, isHost: false, isAlive: true, ready: true, connection: 'ONLINE' },
+  { id: 'p7', seat: 7, nickname: 'Mặt Nạ', avatarUrl: null, isHost: false, isAlive: true, ready: true, connection: 'ONLINE' },
+  { id: 'p8', seat: 8, nickname: 'Bạn', avatarUrl: null, isHost: false, isAlive: true, ready: true, connection: 'ONLINE' },
+  { id: 'p9', seat: 9, nickname: 'Thầy Bói', avatarUrl: null, isHost: false, isAlive: true, ready: true, connection: 'ONLINE' },
+  { id: 'p10', seat: 10, nickname: 'Thợ Săn Huyết', avatarUrl: null, isHost: false, isAlive: true, ready: true, connection: 'ONLINE' },
+  { id: 'p11', seat: 11, nickname: 'Bảo Vệ Đêm', avatarUrl: null, isHost: false, isAlive: true, ready: true, connection: 'ONLINE' },
+  { id: 'p12', seat: 12, nickname: 'Phù Thủy Tối', avatarUrl: null, isHost: false, isAlive: true, ready: true, connection: 'ONLINE' },
+  { id: 'p13', seat: 13, nickname: 'Dân Làng Cổ', avatarUrl: null, isHost: false, isAlive: true, ready: true, connection: 'ONLINE' },
+  { id: 'p14', seat: 14, nickname: 'Sói Đầu Đàn', avatarUrl: null, isHost: false, isAlive: true, ready: true, connection: 'ONLINE' },
+  { id: 'p15', seat: 15, nickname: 'Cô Gái Rừng', avatarUrl: null, isHost: false, isAlive: true, ready: true, connection: 'ONLINE' },
+  { id: 'p16', seat: 16, nickname: 'Thị Trưởng', avatarUrl: null, isHost: false, isAlive: true, ready: true, connection: 'ONLINE' },
+];
 
 export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
   store,
@@ -24,8 +44,9 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
   const [state, setState] = useState(store.getState());
   const [chatInput, setChatInput] = useState('');
   const [isPov2, setIsPov2] = useState(false);
-  const [micActive, setMicActive] = useState(true);
-  const [selectedActionIndex, setSelectedActionIndex] = useState<number | null>(null);
+  const [selectedTargetId, setSelectedTargetId] = useState<string | null>('p2');
+  const [demoCouncilSize, setDemoCouncilSize] = useState<number>(8);
+  const [demoPhase, setDemoPhase] = useState<'DAY_VOTING' | 'NIGHT_WEREWOLVES' | 'DAY_DEFENSE'>('DAY_VOTING');
 
   useEffect(() => {
     return store.subscribe((newState) => {
@@ -41,7 +62,7 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
     return () => clearInterval(timer);
   }, [store]);
 
-  // Keybind listeners: KeyV (POV toggle), KeyE (Debate), Digit1 (Vote)
+  // Keybind listeners: KeyV (POV toggle), KeyE (Debate), Digit1 (Vote selected target), Space (Skip vote)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
@@ -49,41 +70,68 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
       if (e.code === 'KeyV') {
         setIsPov2((prev) => !prev);
       } else if (e.code === 'KeyE') {
-        onEmitAction('day:debate', { message: 'Tôi khẳng định mình vô tội!' });
+        onEmitAction('day:debate', { message: 'Tôi khẳng định mình là Dân làng lương thiện!' });
       } else if (e.code === 'Digit1') {
-        onEmitAction('day:vote', { targetId: 'TARGET_DEFENDANT' });
+        if (selectedTargetId) {
+          werewolfAudio.playGavel();
+          onEmitAction('day:vote', { targetId: selectedTargetId });
+        }
       } else if (e.code === 'Space') {
         e.preventDefault();
+        werewolfAudio.playVoteStamp();
         onEmitAction('day:vote', { targetId: 'SKIP' });
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onEmitAction]);
+  }, [onEmitAction, selectedTargetId]);
 
-  const room = state.room;
-  if (!room) {
-    return (
-      <div className="flex items-center justify-center h-screen bg-[#07090e] text-white font-geist">
-        <div className="bg-[#111622] p-8 rounded-2xl border border-red-500/40 text-center shadow-2xl">
-          <div className="w-12 h-12 rounded-full bg-red-950/60 border border-red-500/50 flex items-center justify-center mx-auto mb-3">
-            <span className="material-symbols-outlined text-red-500 animate-spin text-2xl">sync</span>
-          </div>
-          <h2 className="font-syne font-bold text-lg uppercase tracking-wider text-white">ĐANG KẾT NỐI BÀN ĐẤU...</h2>
-          <p className="font-geist text-xs text-slate-400 mt-1">Đang đồng bộ dữ liệu bảo mật từ Quản Trò</p>
-        </div>
-      </div>
-    );
-  }
+  // Dynamic players list resolution (from live room or demo council size)
+  const activePlayers: PublicPlayerView[] = useMemo(() => {
+    if (state.room?.players && state.room.players.length > 0) {
+      return state.room.players;
+    }
+    return ALL_SAMPLE_PLAYERS.slice(0, demoCouncilSize);
+  }, [state.room?.players, demoCouncilSize]);
 
-  const myPlayerInfo = room.players.find((p) => p.id === room.me?.id);
+  // Dynamic effective room object
+  const effectiveRoom = useMemo(() => {
+    if (state.room) {
+      return state.room;
+    }
+    return {
+      id: 'room_council_demo',
+      code: 'DEMO88',
+      hostId: 'p4',
+      phase: demoPhase,
+      round: 1,
+      stateVersion: 1,
+      phaseEndsAt: Date.now() + 60000,
+      serverNow: Date.now(),
+      settings: { maxPlayers: demoCouncilSize, isPrivate: false },
+      players: activePlayers,
+      me: {
+        id: activePlayers[activePlayers.length - 1]?.id || 'p8',
+        role: 'VILLAGER' as Role,
+        isAlive: true,
+      },
+      day: {
+        tally: { p2: 3, p6: 1 },
+        voted: ['p1', 'p3', 'p6'],
+        accusedId: 'p2',
+      },
+      winner: null as any,
+    };
+  }, [state.room, activePlayers, demoPhase, demoCouncilSize]);
+
+  const myPlayerInfo = activePlayers.find((p) => p.id === effectiveRoom.me?.id) || activePlayers[activePlayers.length - 1];
   const myNickname =
     myPlayerInfo?.nickname ||
     (typeof window !== 'undefined' ? sessionStorage.getItem('werewolf_nickname') || 'Thợ Săn Bạn' : 'Thợ Săn Bạn');
 
-  const isNight = room.phase.includes('NIGHT');
-  const remainingSeconds = Math.max(0, Math.ceil(state.remainingMs / 1000));
+  const isNight = effectiveRoom.phase.includes('NIGHT');
+  const remainingSeconds = Math.max(0, Math.ceil(state.remainingMs ? state.remainingMs / 1000 : 45));
   const formatTimer = (s: number) => {
     const m = Math.floor(s / 60);
     const sec = s % 60;
@@ -97,21 +145,30 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
     setChatInput('');
   };
 
+  // Selected player for voting or night action
+  const selectedPlayer = activePlayers.find((p) => p.id === selectedTargetId);
+  const accusedPlayerId = effectiveRoom.day?.accusedId || 'p2';
+  const effectiveTally: Record<string, number> = (effectiveRoom.day?.tally as any) || { p2: 3, p6: 1 };
+  const aliveCount = activePlayers.filter((p) => p.isAlive).length;
+
   return (
     <div className="relative w-screen h-screen bg-black text-gray-100 overflow-hidden font-game select-none">
-      {/* 1. INTERACTIVE 3D LIAR'S BAR FIRST-PERSON PANORAMIC GAME ENGINE */}
+      {/* 1. INTERACTIVE 3D WEREWOLF ROUND TABLE FIRST-PERSON ENGINE */}
       <LiarsBar3DExperience
-        room={room}
+        room={effectiveRoom}
+        currentPlayerId={myPlayerInfo?.id}
         isPov2={isPov2}
         setIsPov2={setIsPov2}
-        onAimAtPlayer={(targetId: string, nickname: string) => {
-          // Highlight target
+        selectedTargetId={selectedTargetId}
+        onAimAtPlayer={(targetId: string) => {
+          // Raycast hover feedback
         }}
-        onShootPlayer={(targetId: string, nickname: string) => {
+        onSelectTarget={(targetId: string) => {
+          setSelectedTargetId(targetId);
+        }}
+        onShootPlayer={(targetId: string) => {
+          setSelectedTargetId(targetId);
           onEmitAction('day:vote', { targetId });
-        }}
-        onPlayCard={(cardName: string) => {
-          onEmitAction('day:debate', { message: `Tôi ra lá bài: ${cardName}!` });
         }}
       />
 
@@ -120,18 +177,19 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
         <div className="absolute top-20 left-1/2 -translate-x-1/2 z-20 pointer-events-none bg-red-950/90 border border-red-500/80 px-4 py-1.5 rounded-full shadow-[0_0_20px_rgba(220,38,38,0.6)] flex items-center gap-2 animate-fadeIn">
           <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
           <span className="text-xs font-black uppercase text-red-200 tracking-wider font-display">
-            ĐANG XEM: GÓC NHÌN THỨ 2 - CẬN CẢNH ĐỐI DIỆN / BÀN ĐẤU TOÀN CẢNH
+            GÓC NHÌN TOÀN CẢNH BÀN HỘI ĐỒNG (2ND POV)
           </span>
         </div>
       )}
 
-      {/* 3. TOP BAR: TURN INFO & COUNTDOWN TIMER & CAMERA TOGGLE */}
+      {/* 2. TOP BAR: TURN INFO, DYNAMIC COUNCIL SIZING & POV TOGGLE */}
       <header className="absolute top-3 inset-x-0 z-30 flex justify-center pointer-events-none px-6">
-        <div className="flex items-center gap-3 pointer-events-auto bg-black/75 backdrop-blur-md px-4 py-1.5 rounded-full border border-white/10 shadow-2xl">
+        <div className="flex items-center gap-3 pointer-events-auto bg-black/85 backdrop-blur-md px-4 py-1.5 rounded-full border border-white/10 shadow-2xl">
+          {/* Phase & Timer */}
           <div className="flex items-center gap-2 pr-3 border-r border-white/10">
-            <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
+            <span className={`w-2 h-2 rounded-full ${isNight ? 'bg-purple-500' : 'bg-red-500'} animate-ping`} />
             <span className="text-xs font-bold text-red-400 font-display uppercase tracking-wider">
-              {room.phase.replace(/_/g, ' ')}
+              {effectiveRoom.phase.replace(/_/g, ' ')}
             </span>
             <span className="text-lg font-black font-display text-red-500 neon-text-red leading-none">
               {formatTimer(remainingSeconds)}
@@ -139,9 +197,63 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
             </span>
           </div>
 
+          {/* Accused Status */}
           <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-red-950/60 border border-red-500/40 text-[11px] font-mono text-red-200">
             <span className="text-amber-400 font-bold">#02 LordVader:</span>
-            <span className="font-black text-amber-300">3/5 Phiếu</span>
+            <span className="font-black text-amber-300">3/{Math.ceil(aliveCount / 2) + 1} Phiếu</span>
+          </div>
+
+          {/* Dynamic Council Participant Sizer (4 to 16 seats) */}
+          <div className="flex items-center gap-1 pl-2 border-l border-white/10">
+            <span className="text-[9px] font-mono text-stone-400 uppercase hidden md:inline">Ghế Bàn:</span>
+            <div className="flex items-center gap-0.5 bg-zinc-900/80 p-0.5 rounded-full border border-white/10">
+              {[4, 6, 8, 10, 12, 16].map((num) => (
+                <button
+                  key={num}
+                  type="button"
+                  onClick={() => {
+                    setDemoCouncilSize(num);
+                    werewolfAudio.playVoteStamp();
+                  }}
+                  className={`px-2 py-0.5 rounded-full text-[10px] font-bold font-mono transition ${
+                    activePlayers.length === num
+                      ? 'bg-amber-600 text-white shadow-[0_0_10px_rgba(217,119,6,0.7)]'
+                      : 'text-stone-400 hover:text-white hover:bg-zinc-800'
+                  }`}
+                  title={`${num} Người tham gia bàn hội đồng`}
+                >
+                  {num}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Phase Quick Toggle for Testing (Day / Night) */}
+          <div className="flex items-center gap-1 pl-2 border-l border-white/10">
+            <button
+              type="button"
+              onClick={() => {
+                setDemoPhase('DAY_VOTING');
+                werewolfAudio.playBell();
+              }}
+              className={`px-2 py-0.5 rounded-full text-[10px] font-bold font-display transition ${
+                !isNight ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' : 'text-stone-500 hover:text-stone-300'
+              }`}
+            >
+              ☀️ Ngày
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setDemoPhase('NIGHT_WEREWOLVES');
+                werewolfAudio.playWolfHowl();
+              }}
+              className={`px-2 py-0.5 rounded-full text-[10px] font-bold font-display transition ${
+                isNight ? 'bg-purple-950 text-purple-300 border border-purple-500/60 shadow-[0_0_10px_rgba(168,85,247,0.5)]' : 'text-stone-500 hover:text-stone-300'
+              }`}
+            >
+              🌙 Đêm
+            </button>
           </div>
 
           {/* POV Camera Controls */}
@@ -177,7 +289,7 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
         </div>
       </header>
 
-      {/* 4. STREAMER WEBCAM & VOICE INDICATOR (TOP LEFT) */}
+      {/* 3. STREAMER PROFILE & WEBCAM (TOP LEFT) */}
       <aside className="absolute top-3 left-4 z-30 flex items-center gap-2 pointer-events-auto">
         <div className="flex items-center gap-2.5 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 shadow-lg">
           <div className="relative w-8 h-8 rounded-full border border-amber-400/80 bg-zinc-900 overflow-hidden flex items-center justify-center text-sm shadow">
@@ -188,7 +300,7 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
               alt="Avatar"
               className="w-full h-full object-cover object-top"
             />
-            <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-red-500 rounded-full border border-black animate-pulse" />
+            <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-500 rounded-full border border-black animate-pulse" />
           </div>
           <div className="flex flex-col">
             <span className="text-[11px] font-bold text-amber-300 font-display leading-tight">
@@ -197,65 +309,84 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
             <div className="flex items-center gap-1 text-[9px] font-mono text-emerald-400">
               <span className="w-1 h-2 bg-emerald-400 rounded-full eq-bar-1" />
               <span className="w-1 h-3 bg-emerald-400 rounded-full eq-bar-2" />
-              <span>MIC ON</span>
+              <span>MIC SỐNG</span>
             </div>
           </div>
         </div>
 
         <button
           onClick={() => (window.location.href = '/')}
-          className="px-2.5 py-1.5 rounded-full bg-black/60 backdrop-blur-md border border-white/10 text-slate-300 hover:text-white text-[11px] font-mono flex items-center gap-1"
+          className="px-2.5 py-1.5 rounded-full bg-black/60 backdrop-blur-md border border-white/10 text-slate-300 hover:text-white text-[11px] font-mono flex items-center gap-1 transition-colors"
         >
           <span className="material-symbols-outlined text-[14px]">logout</span>
           <span>Rời Bàn</span>
         </button>
       </aside>
 
-      {/* 5. LEFT HUD: SEAT STATUS ROSTER */}
-      <aside className="absolute left-4 bottom-24 z-30 w-44 flex flex-col gap-1">
-        <div className="bg-black/60 backdrop-blur-md p-2.5 rounded-xl border border-white/10 shadow-lg">
-          <div className="text-[9px] font-mono uppercase tracking-wider text-gray-400 mb-1 flex items-center justify-between pb-1 border-b border-white/10">
-            <span className="font-bold">BÀN CHƠI</span>
-            <span className="text-emerald-400 font-bold">6/8 SỐNG</span>
+      {/* 4. LEFT HUD: DYNAMIC COUNCIL ROSTER (SHOWS EXACT PARTICIPANTS) */}
+      <aside className="absolute left-4 bottom-24 z-30 w-52 flex flex-col gap-1.5 pointer-events-auto">
+        <div className="bg-black/75 backdrop-blur-md p-2.5 rounded-xl border border-white/10 shadow-2xl">
+          <div className="text-[9px] font-mono uppercase tracking-wider text-gray-400 mb-1.5 flex items-center justify-between pb-1 border-b border-white/10">
+            <span className="font-bold flex items-center gap-1 text-slate-200">
+              <span className="material-symbols-outlined text-[12px] text-amber-400">groups</span>
+              <span>HỘI ĐỒNG ({aliveCount}/{activePlayers.length})</span>
+            </span>
+            <span className="text-emerald-400 font-bold text-[9px]">SỐNG {aliveCount}</span>
           </div>
-          <div className="space-y-1 text-[10px]">
-            <div className="flex justify-between px-1.5 py-0.5 rounded text-gray-300">
-              <span>#1 Bác Sĩ</span>
-              <span className="text-emerald-400 font-bold">Sống</span>
-            </div>
-            <div className="flex justify-between px-1.5 py-0.5 rounded bg-red-950/70 border border-red-500/50 text-red-200 font-bold animate-pulse">
-              <span>#2 LordVader</span>
-              <span className="text-red-400 font-mono">3 Phiếu</span>
-            </div>
-            <div className="flex justify-between px-1.5 py-0.5 rounded text-gray-300">
-              <span>#3 Xemesis</span>
-              <span className="text-emerald-400 font-bold">Sống</span>
-            </div>
-            <div className="flex justify-between px-1.5 py-0.5 rounded text-cyan-300">
-              <span>#4 Quản Trò</span>
-              <span className="text-cyan-400">Chủ tọa</span>
-            </div>
-            <div className="flex justify-between px-1.5 py-0.5 rounded text-gray-500 line-through">
-              <span>#5 PewPew</span>
-              <span className="text-red-500">Chết</span>
-            </div>
-            <div className="flex justify-between px-1.5 py-0.5 rounded text-gray-300">
-              <span>#6 Độ Mixi</span>
-              <span className="text-emerald-400 font-bold">Sống</span>
-            </div>
-            <div className="flex justify-between px-1.5 py-0.5 rounded text-gray-300">
-              <span>#7 Mặt Nạ</span>
-              <span className="text-emerald-400 font-bold">Sống</span>
-            </div>
-            <div className="flex justify-between px-1.5 py-0.5 rounded bg-emerald-950/70 border border-emerald-400/50 text-emerald-200 font-bold">
-              <span>#8 Bạn</span>
-              <span className="text-amber-300 font-bold">Lượt bạn</span>
-            </div>
+
+          <div className="space-y-1 text-[10px] max-h-56 overflow-y-auto pr-1">
+            {activePlayers.map((p) => {
+              const isSelected = selectedTargetId === p.id;
+              const isAccused = accusedPlayerId === p.id;
+              const voteCount = effectiveTally[p.id] || 0;
+              const isMe = p.id === myPlayerInfo?.id || p.id === 'p8' || p.seat === activePlayers.length;
+
+              return (
+                <div
+                  key={p.id}
+                  onClick={() => {
+                    if (p.isAlive && !isMe) {
+                      setSelectedTargetId(p.id);
+                      werewolfAudio.playVoteStamp();
+                    }
+                  }}
+                  className={`flex items-center justify-between px-2 py-1 rounded transition-all cursor-pointer ${
+                    !p.isAlive
+                      ? 'bg-zinc-900/40 text-stone-500 line-through cursor-not-allowed opacity-60'
+                      : isSelected
+                      ? 'bg-red-950/90 border border-red-500 text-white font-bold shadow-[0_0_10px_rgba(220,38,38,0.5)]'
+                      : isAccused
+                      ? 'bg-amber-950/70 border border-amber-500/50 text-amber-200 font-bold animate-pulse'
+                      : isMe
+                      ? 'bg-emerald-950/60 border border-emerald-500/30 text-emerald-200'
+                      : 'hover:bg-zinc-800/80 text-gray-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5 truncate">
+                    <span className="font-mono text-[9px] text-stone-400">#{p.seat < 10 ? `0${p.seat}` : p.seat}</span>
+                    <span className="truncate">{p.nickname}</span>
+                    {isMe && <span className="text-[8px] bg-emerald-500/20 text-emerald-400 px-1 rounded">Bạn</span>}
+                  </div>
+
+                  <div className="shrink-0 flex items-center gap-1 font-mono text-[9px]">
+                    {!p.isAlive ? (
+                      <span className="text-stone-500 font-bold">💀 Chết</span>
+                    ) : voteCount > 0 ? (
+                      <span className="text-red-400 font-bold bg-red-950/80 px-1 rounded border border-red-500/40">
+                        {voteCount} Phiếu
+                      </span>
+                    ) : (
+                      <span className="text-emerald-400">Sống</span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       </aside>
 
-      {/* 6. RIGHT HUD: COMBAT / TRIAL LOG & CHAT STREAM */}
+      {/* 5. RIGHT HUD: COMBAT / TRIAL LOG & IN-GAME CHAT STREAM */}
       <aside className="absolute top-3 right-4 z-30 flex flex-col w-72 pointer-events-auto gap-2">
         <div className="bg-black/60 backdrop-blur-md p-3 rounded-xl border border-white/10 shadow-lg">
           <div className="flex items-center justify-between pb-1.5 border-b border-white/10 mb-2">
@@ -269,7 +400,7 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
               <span className="text-red-400 font-semibold">#06 Độ Mixi:</span> Cáo buộc #02 LordVader có biểu hiện mờ ám.
             </div>
             <div className="border-l-2 border-amber-500 pl-2 text-[11px]">
-              <span className="text-amber-300 font-semibold">#02 LordVader:</span> "Tôi là Dân làng lương thiện!"
+              <span className="text-amber-300 font-semibold">#02 LordVader:</span> &ldquo;Tôi là Dân làng lương thiện!&rdquo;
             </div>
             <div className="border-l-2 border-red-500 pl-2 text-[11px] text-red-200 font-bold">
               #02 LordVader đang có 3 phiếu kết tội.
@@ -277,7 +408,7 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
           </div>
         </div>
 
-        {/* In-Game Live Chat Box */}
+        {/* Live Chat Box */}
         <div className="bg-black/70 backdrop-blur-md p-3 rounded-xl border border-white/10 shadow-lg flex flex-col h-56 justify-between">
           <div className="flex items-center gap-1 border-b border-white/10 pb-1 mb-1">
             {(['public', 'wolves', 'lovers', 'dead'] as ChatChannel[]).map((ch) => (
@@ -324,61 +455,85 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
         </div>
       </aside>
 
-      {/* 7. BOTTOM CONTROLS & STATUS BAR */}
+      {/* 6. BOTTOM ACTION CONTROLLER BAR (PURE WEREWOLF GAME RULES) */}
+      <footer className="absolute bottom-3 inset-x-0 z-30 flex justify-center px-4 pointer-events-auto">
+        <div className="bg-black/90 backdrop-blur-md px-3.5 py-2 rounded-2xl border border-white/15 shadow-2xl flex items-center gap-2.5 max-w-2xl w-full justify-between">
+          {/* Main Action Button */}
+          {selectedPlayer && selectedPlayer.isAlive && selectedPlayer.id !== myPlayerInfo?.id ? (
+            <button
+              type="button"
+              onClick={() => {
+                if (isNight) {
+                  werewolfAudio.playWolfHowl();
+                  onEmitAction('night:wolfVote', { targetId: selectedPlayer.id });
+                } else {
+                  werewolfAudio.playGavel();
+                  onEmitAction('day:vote', { targetId: selectedPlayer.id });
+                }
+              }}
+              className="flex-1 bg-gradient-to-r from-red-700 to-rose-800 hover:from-red-600 hover:to-rose-700 border border-red-400/80 text-white rounded-xl px-3.5 py-2 flex items-center justify-between text-xs font-bold transition shadow-[0_0_20px_rgba(220,38,38,0.6)] animate-pulse"
+            >
+              <span className="flex items-center gap-2 font-display">
+                <span>{isNight ? '🐺' : '🪢'}</span>
+                <span>
+                  {isNight ? 'Biểu quyết Cắn' : 'Bỏ phiếu Treo cổ'} #{selectedPlayer.seat} {selectedPlayer.nickname}
+                </span>
+              </span>
+              <kbd className="px-1.5 py-0.5 bg-black/50 rounded text-[9px] font-mono text-red-200 border border-white/20">
+                [1]
+              </kbd>
+            </button>
+          ) : (
+            <div className="flex-1 bg-zinc-900/60 border border-white/5 rounded-xl px-3 py-2 flex items-center justify-center gap-2 text-xs text-stone-400 font-mono">
+              <span className="material-symbols-outlined text-[16px] text-amber-400">touch_app</span>
+              <span>Click chọn 1 người chơi trên bàn 3D để biểu quyết</span>
+            </div>
+          )}
 
-      {/* 8. BOTTOM ACTION CONTROLLER BAR */}
-      <footer className="absolute bottom-3 inset-x-0 z-30 flex justify-center px-4">
-        <div className="bg-black/85 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/15 shadow-2xl flex items-center gap-2 max-w-xl w-full justify-between">
+          {/* Quick Debate Button */}
           <button
             type="button"
-            onClick={() => onEmitAction('day:vote', { targetId: '#02_LORDVADER' })}
-            className="flex-1 bg-red-950/80 hover:bg-red-900 border border-red-600/80 text-white rounded-lg px-3 py-1.5 flex items-center justify-between text-xs font-bold transition shadow-[0_0_10px_rgba(220,38,38,0.4)]"
+            onClick={() => {
+              onEmitAction('day:debate', { message: 'Tôi khẳng định mình là Dân làng lương thiện!' });
+            }}
+            className="bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 hover:border-zinc-500 text-slate-200 hover:text-white rounded-xl px-3.5 py-2 flex items-center gap-2 text-xs font-bold transition shadow"
           >
             <span className="flex items-center gap-1.5 font-display">
-              <span>🪢</span> Bỏ phiếu Treo cổ #02
+              <span>🗣️</span> Tranh Luận
             </span>
-            <kbd className="px-1 py-0.2 bg-black/60 rounded text-[9px] font-mono text-gray-300 border border-white/10">
-              [1]
-            </kbd>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => onEmitAction('day:debate', { message: 'Tôi kháng cáo!' })}
-            className="flex-1 bg-gradient-to-r from-red-600 to-rose-700 hover:from-red-500 hover:to-rose-600 text-white rounded-lg px-3 py-1.5 flex items-center justify-between text-xs font-black shadow-[0_0_15px_rgba(220,38,38,0.7)] border border-red-400 transition animate-glowBeat"
-          >
-            <span className="flex items-center gap-1.5 font-display">
-              <span>🗣️</span> Tranh luận / Bào chữa
-            </span>
-            <kbd className="px-1 py-0.2 bg-black/40 rounded text-[9px] font-mono text-red-200 border border-red-300/40">
+            <kbd className="px-1.5 py-0.5 bg-black/60 rounded text-[9px] font-mono text-gray-400 border border-white/10">
               [E]
             </kbd>
           </button>
 
+          {/* Skip / Blank Vote Button */}
           <button
             type="button"
-            onClick={() => onEmitAction('day:vote', { targetId: 'SKIP' })}
-            className="flex-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-gray-300 hover:text-white rounded-lg px-3 py-1.5 flex items-center justify-between text-xs font-bold transition"
+            onClick={() => {
+              werewolfAudio.playVoteStamp();
+              onEmitAction('day:vote', { targetId: 'SKIP' });
+            }}
+            className="bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 hover:border-zinc-500 text-gray-300 hover:text-white rounded-xl px-3.5 py-2 flex items-center gap-2 text-xs font-bold transition"
           >
             <span className="flex items-center gap-1.5 font-display">
-              <span>🕊️</span> Bỏ phiếu trắng
+              <span>🕊️</span> Phiếu Trắng
             </span>
-            <kbd className="px-1 py-0.2 bg-black/60 rounded text-[9px] font-mono text-gray-400 border border-white/10">
+            <kbd className="px-1.5 py-0.5 bg-black/60 rounded text-[9px] font-mono text-gray-400 border border-white/10">
               [SPACE]
             </kbd>
           </button>
         </div>
       </footer>
 
-      {/* 8. GAME OVER VICTORY / DEFEAT MODAL */}
-      {(room.phase === 'GAME_OVER' || room.winner) && (
+      {/* 7. GAME OVER VICTORY / DEFEAT MODAL */}
+      {(effectiveRoom.phase === 'GAME_OVER' || (effectiveRoom as any).winner) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4">
           <div className="bg-[#111622] border border-amber-500/50 rounded-2xl p-8 max-w-lg w-full text-center shadow-[0_0_50px_rgba(245,158,11,0.3)] animate-fadeIn">
-            <span className="text-4xl block mb-2">{room.winner === 'WEREWOLF' ? '🐺' : '🏆'}</span>
+            <span className="text-4xl block mb-2">{(effectiveRoom as any).winner === 'WEREWOLF' ? '🐺' : '🏆'}</span>
             <h2 className="font-syne font-extrabold text-2xl uppercase text-amber-400 tracking-wider">
-              {room.winner === 'WEREWOLF'
+              {(effectiveRoom as any).winner === 'WEREWOLF'
                 ? 'PHE MA SÓI THẮNG!'
-                : room.winner === 'VILLAGE'
+                : (effectiveRoom as any).winner === 'VILLAGE'
                 ? 'PHE DÂN LÀNG THẮNG!'
                 : 'TRÒ CHƠI KẾT THÚC!'}
             </h2>
@@ -414,3 +569,5 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
     </div>
   );
 };
+
+export default WerewolfGameApp;

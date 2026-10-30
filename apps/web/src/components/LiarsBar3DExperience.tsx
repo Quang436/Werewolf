@@ -1,14 +1,14 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { ClientRoomView } from '@werewolf/shared';
+import { ClientRoomView, PublicPlayerView } from '@werewolf/shared';
 
 // ============================================================================
-// 1. TAVERN WEB AUDIO SYNTHESIZER (IMMERSIVE SFX)
+// 1. WEREWOLF WEB AUDIO SYNTHESIZER (TAVERN NOIR SFX)
 // ============================================================================
-class TavernAudioEngine {
+export class WerewolfAudioEngine {
   private ctx: AudioContext | null = null;
 
   private init() {
@@ -18,135 +18,121 @@ class TavernAudioEngine {
     }
   }
 
-  public playGunCock() {
+  // Wooden Gavel Strike for Voting / Verdicts
+  public playGavel() {
     this.init();
     if (!this.ctx) return;
     const now = this.ctx.currentTime;
+
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
     osc.type = 'triangle';
-    osc.frequency.setValueAtTime(750, now);
-    osc.frequency.exponentialRampToValueAtTime(1550, now + 0.08);
-    gain.gain.setValueAtTime(0.35, now);
-    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.12);
+    osc.frequency.setValueAtTime(160, now);
+    osc.frequency.exponentialRampToValueAtTime(45, now + 0.18);
+
+    gain.gain.setValueAtTime(0.7, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+
     osc.connect(gain);
     gain.connect(this.ctx.destination);
     osc.start(now);
-    osc.stop(now + 0.12);
+    osc.stop(now + 0.22);
   }
 
-  public playCylinderSpin() {
-    this.init();
-    if (!this.ctx) return;
-    for (let i = 0; i < 7; i++) {
-      const t = this.ctx.currentTime + i * 0.04;
-      const osc = this.ctx.createOscillator();
-      const gain = this.ctx.createGain();
-      osc.type = 'square';
-      osc.frequency.setValueAtTime(1100 + i * 65, t);
-      gain.gain.setValueAtTime(0.12, t);
-      gain.gain.exponentialRampToValueAtTime(0.01, t + 0.02);
-      osc.connect(gain);
-      gain.connect(this.ctx.destination);
-      osc.start(t);
-      osc.stop(t + 0.02);
-    }
-  }
-
-  public playDryFire() {
+  // Eerie Wolf Howl in the Night
+  public playWolfHowl() {
     this.init();
     if (!this.ctx) return;
     const now = this.ctx.currentTime;
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-    osc.type = 'triangle';
-    osc.frequency.setValueAtTime(1200, now);
-    osc.frequency.exponentialRampToValueAtTime(300, now + 0.04);
-    gain.gain.setValueAtTime(0.5, now);
-    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.05);
-    osc.connect(gain);
-    gain.connect(this.ctx.destination);
-    osc.start(now);
-    osc.stop(now + 0.05);
-  }
 
-  public playGunshot() {
-    this.init();
-    if (!this.ctx) return;
-    const now = this.ctx.currentTime;
-    const bufferSize = this.ctx.sampleRate * 0.65;
-    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) {
-      data[i] = Math.random() * 2 - 1;
-    }
-    const noise = this.ctx.createBufferSource();
-    noise.buffer = buffer;
-
-    const filter = this.ctx.createBiquadFilter();
-    filter.type = 'lowpass';
-    filter.frequency.setValueAtTime(1600, now);
-    filter.frequency.exponentialRampToValueAtTime(40, now + 0.55);
-
-    const gain = this.ctx.createGain();
-    gain.gain.setValueAtTime(1.0, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.6);
-
-    noise.connect(filter);
-    filter.connect(gain);
-    gain.connect(this.ctx.destination);
-    noise.start(now);
-    noise.stop(now + 0.6);
-  }
-
-  public playCardFlip() {
-    this.init();
-    if (!this.ctx) return;
-    const now = this.ctx.currentTime;
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
     osc.type = 'sine';
-    osc.frequency.setValueAtTime(340, now);
-    osc.frequency.exponentialRampToValueAtTime(620, now + 0.06);
-    gain.gain.setValueAtTime(0.28, now);
-    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.08);
+    osc.frequency.setValueAtTime(220, now);
+    osc.frequency.exponentialRampToValueAtTime(480, now + 0.4);
+    osc.frequency.exponentialRampToValueAtTime(180, now + 1.2);
+
+    gain.gain.setValueAtTime(0.01, now);
+    gain.gain.linearRampToValueAtTime(0.35, now + 0.35);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 1.25);
+
     osc.connect(gain);
     gain.connect(this.ctx.destination);
     osc.start(now);
-    osc.stop(now + 0.08);
+    osc.stop(now + 1.25);
+  }
+
+  // Daybreak Bell Toll
+  public playBell() {
+    this.init();
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(440, now);
+    osc.frequency.exponentialRampToValueAtTime(330, now + 1.5);
+
+    gain.gain.setValueAtTime(0.35, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 1.5);
+
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start(now);
+    osc.stop(now + 1.5);
+  }
+
+  // Night Mystical Whisper
+  public playWhisper() {
+    this.init();
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(580, now);
+    osc.frequency.exponentialRampToValueAtTime(280, now + 0.9);
+
+    gain.gain.setValueAtTime(0.12, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.9);
+
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.9);
+  }
+
+  // Crisp Vote Token Selection Sound
+  public playVoteStamp() {
+    this.init();
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(520, now);
+    osc.frequency.exponentialRampToValueAtTime(120, now + 0.06);
+
+    gain.gain.setValueAtTime(0.35, now);
+    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.07);
+
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.07);
   }
 }
 
-const tavernAudio = new TavernAudioEngine();
+export const werewolfAudio = new WerewolfAudioEngine();
 
 // ============================================================================
-// 2. TYPES & 3D CHARACTER HELPERS (NO T-POSE, ANTHROPOMORPHIC WEREWOLF)
+// 2. 3D POSE & CHARACTER PROCEDURAL HELPERS
 // ============================================================================
-export interface TableOpponent {
-  id: string;
-  seatNumber: number;
-  nickname: string;
-  roleHint: string;
-  isDead: boolean;
-  votes: number;
-  dialogue?: string;
-  modelFile: string;
-  scale: number;
-}
 
-export interface LiarsBar3DProps {
-  room?: ClientRoomView | any;
-  currentPlayerId?: string;
-  isPov2?: boolean;
-  setIsPov2?: (v: boolean | ((p: boolean) => boolean)) => void;
-  onAimAtPlayer?: (targetId: string, nickname: string) => void;
-  onShootPlayer?: (targetId: string, nickname: string) => void;
-  onPlayCard?: (cardName: string) => void;
-  onSpinChamber?: () => void;
-  onPullRouletteTrigger?: () => boolean;
-}
-
-// Natural seated poker table poses for humanoid characters (removes awkward T-pose)
+// Natural seated poker table poses for humanoid characters (NO T-POSE!)
 function applyPokerSittingPose(model: THREE.Object3D, isGirl = false) {
   const upperL = model.getObjectByName('UpperArmL');
   const lowerL = model.getObjectByName('LowerArmL');
@@ -157,7 +143,7 @@ function applyPokerSittingPose(model: THREE.Object3D, isGirl = false) {
 
   if (upperL && lowerL && upperR && lowerR) {
     if (isGirl) {
-      // Demure folded hands pose resting on the table
+      // Demure folded hands pose resting on table
       upperL.rotation.set(0.40, 0.25, 1.25);
       lowerL.rotation.set(0.20, 0.90, -0.75);
       upperR.rotation.set(0.40, -0.25, -1.25);
@@ -175,7 +161,23 @@ function applyPokerSittingPose(model: THREE.Object3D, isGirl = false) {
   if (head) head.rotation.x = -0.04;
 }
 
-// Attach 3D Lupine Werewolf features to create authentic Liar's Bar style Ma Sói
+// Slump dead character forward onto table felt (in defeat/death)
+function applyDeadSlumpPose(model: THREE.Object3D) {
+  model.position.y = -0.24;
+  model.rotation.x = -0.45;
+
+  const head = model.getObjectByName('Head');
+  if (head) {
+    head.rotation.x = -0.65;
+    head.rotation.z = 0.25;
+  }
+  const upperL = model.getObjectByName('UpperArmL');
+  const upperR = model.getObjectByName('UpperArmR');
+  if (upperL) upperL.rotation.set(0.6, 0.1, 1.4);
+  if (upperR) upperR.rotation.set(0.6, -0.1, -1.4);
+}
+
+// Attach 3D Lupine Werewolf features (Wolf snout, wolf ears, fangs, glowing eyes)
 function attachWolfHeadFeatures(model: THREE.Object3D) {
   const headBone = model.getObjectByName('Head');
   if (!headBone) return;
@@ -226,142 +228,226 @@ function attachWolfHeadFeatures(model: THREE.Object3D) {
   earR.rotation.x = -0.15;
   wolfGroup.add(earR);
 
-  // 3. Piercing Predatory Werewolf Eyes
-  const eyeMat = new THREE.MeshBasicMaterial({ color: 0xff2200 });
-  const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.024, 8, 8), eyeMat);
-  eyeL.position.set(-0.065, 0.07, 0.135);
+  // 3. Glowing Predatory Red Eyes
+  const eyeMat = new THREE.MeshBasicMaterial({ color: 0xff1122 });
+  const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.022, 8, 8), eyeMat);
+  eyeL.position.set(-0.055, 0.085, 0.145);
   wolfGroup.add(eyeL);
 
-  const eyeR = new THREE.Mesh(new THREE.SphereGeometry(0.024, 8, 8), eyeMat);
-  eyeR.position.set(0.065, 0.07, 0.135);
+  const eyeR = new THREE.Mesh(new THREE.SphereGeometry(0.022, 8, 8), eyeMat);
+  eyeR.position.set(0.055, 0.085, 0.145);
   wolfGroup.add(eyeR);
+
+  // Subtle red eye point light for eerie glow
+  const eyeGlow = new THREE.PointLight(0xff1122, 1.4, 1.2, 2.0);
+  eyeGlow.position.set(0, 0.085, 0.18);
+  wolfGroup.add(eyeGlow);
 
   headBone.add(wolfGroup);
 }
 
+// Seat configuration type
+export interface TableSeat {
+  id: string;
+  seatNumber: number;
+  nickname: string;
+  isAlive: boolean;
+  isHost: boolean;
+  isAccused: boolean;
+  votes: number;
+  dialogue?: string;
+  modelFile: string;
+  isWerewolf: boolean;
+  isGirl: boolean;
+  pos: [number, number, number];
+  chairPos: [number, number, number];
+  angle: number;
+}
+
+export interface LiarsBar3DProps {
+  room?: ClientRoomView | any;
+  currentPlayerId?: string;
+  isPov2?: boolean;
+  setIsPov2?: (v: boolean | ((p: boolean) => boolean)) => void;
+  selectedTargetId?: string | null;
+  onAimAtPlayer?: (targetId: string, nickname: string) => void;
+  onSelectTarget?: (targetId: string, nickname: string) => void;
+  onShootPlayer?: (targetId: string, nickname: string) => void; // Keep for backward compatibility
+  onPlayCard?: (cardName: string) => void; // Keep for backward compatibility
+}
+
+// Available 3D Humanoid Model Assets
+const MODEL_PRESETS = [
+  { file: '/models/punk_mobster.glb', isWolf: true, isGirl: false },   // 0: Ma Sói
+  { file: '/models/village_girl.glb', isWolf: false, isGirl: true },    // 1: Cô Gái Dân Làng
+  { file: '/models/suit_mobster.glb', isWolf: false, isGirl: false },   // 2: Trưởng Làng
+  { file: '/models/cowboy_mobster.glb', isWolf: false, isGirl: false }, // 3: Thợ Săn
+  { file: '/models/enforcer.glb', isWolf: false, isGirl: false },       // 4: Bảo Vệ
+];
+
 export function LiarsBar3DExperience({
   room,
   currentPlayerId,
-  isPov2,
+  isPov2 = false,
   setIsPov2,
+  selectedTargetId,
   onAimAtPlayer,
+  onSelectTarget,
   onShootPlayer,
-  onPlayCard,
 }: LiarsBar3DProps) {
   const mountRef = useRef<HTMLDivElement>(null);
+  const [hoveredSeatId, setHoveredSeatId] = useState<string | null>(null);
 
-  // Gameplay state
-  const [isAimingGun, setIsAimingGun] = useState(false);
-  const [hoveredTargetId, setHoveredTargetId] = useState<string | null>(null);
-  const [revolverFired, setRevolverFired] = useState(false);
-  const [rouletteOpen, setRouletteOpen] = useState(false);
-  const [chamberSlot, setChamberSlot] = useState(1);
-  const [bulletLoadedSlot] = useState(() => Math.floor(Math.random() * 6) + 1);
-  const [rouletteResult, setRouletteResult] = useState<string | null>(null);
-
-  // Screen-projected positions for 3D nametags / dialogue
+  // Screen-projected 2D coordinates for 3D nametags and vote counters
   const [screenPos, setScreenPos] = useState<{ [id: string]: { x: number; y: number; visible: boolean } }>({});
 
-  const accusedId = room?.day?.accusedId || 'wolf';
+  // 1. DYNAMIC PLAYER LIST RESOLUTION
+  // Extract actual players from room or fallback to 8-player council
+  const playersList: PublicPlayerView[] = useMemo(() => {
+    if (room?.players && room.players.length > 0) {
+      return room.players;
+    }
+    return [
+      { id: 'p1', seat: 1, nickname: 'Bác Sĩ', avatarUrl: null, isHost: false, isAlive: true, ready: true, connection: 'ONLINE' },
+      { id: 'p2', seat: 2, nickname: 'LordVader', avatarUrl: null, isHost: false, isAlive: true, ready: true, connection: 'ONLINE' },
+      { id: 'p3', seat: 3, nickname: 'Xemesis', avatarUrl: null, isHost: false, isAlive: true, ready: true, connection: 'ONLINE' },
+      { id: 'p4', seat: 4, nickname: 'Quản Trò', avatarUrl: null, isHost: true, isAlive: true, ready: true, connection: 'ONLINE' },
+      { id: 'p5', seat: 5, nickname: 'PewPew', avatarUrl: null, isHost: false, isAlive: false, ready: true, connection: 'ONLINE' },
+      { id: 'p6', seat: 6, nickname: 'Độ Mixi', avatarUrl: null, isHost: false, isAlive: true, ready: true, connection: 'ONLINE' },
+      { id: 'p7', seat: 7, nickname: 'Mặt Nạ', avatarUrl: null, isHost: false, isAlive: true, ready: true, connection: 'ONLINE' },
+      { id: 'p8', seat: 8, nickname: 'Bạn', avatarUrl: null, isHost: false, isAlive: true, ready: true, connection: 'ONLINE' },
+    ];
+  }, [room?.players]);
 
-  // Refs for reactive values inside Three.js animation loop without rebuilding scene
-  const isAimingGunRef = useRef(isAimingGun);
-  useEffect(() => {
-    isAimingGunRef.current = isAimingGun;
-  }, [isAimingGun]);
+  const totalSeats = playersList.length;
 
-  const hoveredTargetIdRef = useRef(hoveredTargetId);
-  useEffect(() => {
-    hoveredTargetIdRef.current = hoveredTargetId;
-  }, [hoveredTargetId]);
+  // Identify local viewer seat
+  const localPlayer = useMemo(() => {
+    return (
+      playersList.find((p) => p.id === currentPlayerId || p.id === room?.me?.id) ||
+      playersList[playersList.length - 1]
+    );
+  }, [playersList, currentPlayerId, room?.me?.id]);
 
-  const accusedIdRef = useRef(accusedId);
-  useEffect(() => {
-    accusedIdRef.current = accusedId;
-  }, [accusedId]);
+  // Accused player (e.g. #02 LordVader with highest votes)
+  const accusedId = room?.day?.accusedId || 'p2';
 
-  // 4 3D Opponents sitting at the poker table: Ma Sói, Bố Già, Cô Gái, Thợ Săn
-  const [opponents, setOpponents] = useState<TableOpponent[]>([
-    {
-      id: 'wolf',
-      seatNumber: 1,
-      nickname: '#01 MA SÓI (WEREWOLF)',
-      roleHint: 'Bóng Ma Khát Máu',
-      isDead: false,
-      votes: 1,
-      dialogue: 'Mùi máu tươi của lũ cừu non... Đêm nay ai sẽ là bữa tối của ta?!',
-      modelFile: '/models/punk_mobster.glb',
-      scale: 0.94,
-    },
-    {
-      id: 'mobster',
-      seatNumber: 2,
-      nickname: '#02 BỐ GIÀ (THE DON)',
-      roleHint: 'Trùm Mafia Sòng Bạc',
-      isDead: false,
-      votes: 0,
-      dialogue: 'Cứ bình tĩnh... Hãy đặt cược số phận của các ngươi lên bàn poker này.',
-      modelFile: '/models/suit_mobster.glb',
-      scale: 0.94,
-    },
-    {
-      id: 'girl',
-      seatNumber: 3,
-      nickname: '#03 CÔ GÁI (VILLAGER)',
-      roleHint: 'Dân Làng Vô Tội',
-      isDead: false,
-      votes: 0,
-      dialogue: 'Làm ơn tin tôi đi, tôi thực sự chỉ là dân làng thôi mà...',
-      modelFile: '/models/village_girl.glb',
-      scale: 0.94,
-    },
-    {
-      id: 'hunter',
-      seatNumber: 4,
-      nickname: '#04 THỢ SĂN (HUNTER)',
-      roleHint: 'Xạ Thủ Bạc Đạn',
-      isDead: false,
-      votes: 2,
-      dialogue: 'Khẩu súng này không bao giờ bắn trượt một con sói nào!',
-      modelFile: '/models/cowboy_mobster.glb',
-      scale: 0.94,
-    },
-  ]);
+  // Vote tallies from room day state or demo tallies
+  const voteTally: Record<string, number> = useMemo(() => {
+    if (room?.day?.tally) return room.day.tally;
+    return { p2: 3, p6: 1 };
+  }, [room?.day?.tally]);
 
-  // Cards on hand
-  const [handCards] = useState([
-    { id: 1, name: 'TIÊN TRI', sub: 'SOI ĐÊM', type: 'seer', icon: '🔮', desc: 'Tìm diệt Ma Sói trong làng' },
-    { id: 2, name: 'TREO CỔ', sub: '#04 TAY ANH CHỊ', type: 'verdict', icon: '⚖️', desc: '3/5 Phiếu phán quyết' },
-    { id: 3, name: 'DÂN LÀNG', sub: 'LƯƠNG THIỆN', type: 'village', icon: '🧑🌾', desc: 'Bầu chọn treo cổ kẻ ác' },
-    { id: 4, name: 'PHIẾU TRẮNG', sub: 'TRUNG LẬP', type: 'skip', icon: '🕊️', desc: 'Từ chối phán quyết' },
-  ]);
-  const [inspectedCardId, setInspectedCardId] = useState<number | null>(null);
+  // Dialogue lines for atmospheric immersion
+  const dialogues: Record<string, string> = {
+    p1: 'Đêm qua tôi đã dùng bình thuốc cứu một người!',
+    p2: 'Tôi là Dân làng lương thiện, đừng nghe kẻ xấu!',
+    p3: 'Mặt Nạ và PewPew có hành tung rất đáng ngờ...',
+    p4: 'Mọi người hãy biểu quyết trong trật tự!',
+    p5: '...', // Dead
+    p6: 'Cáo buộc #02 LordVader có biểu hiện mờ ám!',
+    p7: 'Tôi chỉ là thôn nữ gánh nước thôi mà...',
+  };
 
-  // Refs for animation loop
+  // 2. DYNAMIC TABLE RADIUS SIZING (Expands smoothly for 4 to 16 players)
+  // Arc length per seated person is kept at ~1.30m
+  const dynamicTableRadius = useMemo(() => {
+    return Math.max(1.35, (totalSeats * 1.30) / (2 * Math.PI));
+  }, [totalSeats]);
+
+  // 3. SEAT POSITIONS GENERATION AROUND CIRCLE
+  const opponentSeats: TableSeat[] = useMemo(() => {
+    const seats: TableSeat[] = [];
+    const otherPlayers = playersList.filter((p) => p.id !== localPlayer?.id);
+    const count = otherPlayers.length;
+
+    const seatDist = dynamicTableRadius + 0.18;
+    const chairDist = dynamicTableRadius + 0.35;
+
+    otherPlayers.forEach((p, idx) => {
+      // Evenly distribute along the panoramic arc opposite to local player
+      const fraction = count > 0 ? (idx + 1) / (count + 1) : 0.5;
+      const angle = Math.PI / 2 + (fraction - 0.5) * Math.PI * 1.65 + Math.PI;
+
+      const x = Math.cos(angle) * seatDist;
+      const z = Math.sin(angle) * seatDist;
+
+      const chairX = Math.cos(angle) * chairDist;
+      const chairZ = Math.sin(angle) * chairDist;
+
+      // Select model preset
+      const preset = MODEL_PRESETS[idx % MODEL_PRESETS.length];
+
+      seats.push({
+        id: p.id,
+        seatNumber: p.seat,
+        nickname: `#0${p.seat} ${p.nickname}`,
+        isAlive: p.isAlive,
+        isHost: p.isHost,
+        isAccused: accusedId === p.id,
+        votes: voteTally[p.id] || 0,
+        dialogue: p.isAlive ? dialogues[p.id] || '' : undefined,
+        modelFile: preset.file,
+        isWerewolf: preset.isWolf,
+        isGirl: preset.isGirl,
+        pos: [x, 0.04, z],
+        chairPos: [chairX, 0, chairZ],
+        angle,
+      });
+    });
+
+    return seats;
+  }, [playersList, localPlayer, dynamicTableRadius, accusedId, voteTally]);
+
+  // Unique key to prevent re-building 3D scene when only votes change
+  const seatsRosterKey = useMemo(() => {
+    return playersList.map((p) => `${p.id}:${p.isAlive}`).join(',');
+  }, [playersList]);
+
+  // Refs for reactive values in animation loop
   const mouseRef = useRef({ targetYaw: 0, targetPitch: 0 });
+  const hoveredSeatIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    hoveredSeatIdRef.current = hoveredSeatId;
+  }, [hoveredSeatId]);
+
+  const selectedTargetIdRef = useRef<string | null | undefined>(selectedTargetId);
+  useEffect(() => {
+    selectedTargetIdRef.current = selectedTargetId;
+  }, [selectedTargetId]);
+
+  const isPov2Ref = useRef(isPov2);
+  useEffect(() => {
+    isPov2Ref.current = isPov2;
+  }, [isPov2]);
+
+  const isNightRef = useRef(Boolean(room?.phase && room.phase.includes('NIGHT')));
+  useEffect(() => {
+    isNightRef.current = Boolean(room?.phase && room.phase.includes('NIGHT'));
+  }, [room?.phase]);
+
   const threeRef = useRef<{
     renderer: THREE.WebGLRenderer;
     scene: THREE.Scene;
     camera: THREE.PerspectiveCamera;
-    revolverGroup: THREE.Group;
-    muzzleLight: THREE.PointLight;
+    ambientLight: THREE.AmbientLight;
+    lanternLight: THREE.PointLight;
     lampGroup: THREE.Group;
-    playedCardsGroup: THREE.Group;
     candleLight1: THREE.PointLight;
     candleLight2: THREE.PointLight;
+    accusedSpot: THREE.SpotLight;
     raycaster: THREE.Raycaster;
-    shootRecoil: number;
     charObjects: {
       [id: string]: {
         root: THREE.Object3D;
         baseY: number;
+        isAlive: boolean;
       };
     };
   } | null>(null);
 
   // ============================================================================
-  // 3. INITIALIZE 100% PURE REAL-TIME 3D WEBGL ENGINE SCENE (LIKE LIAR'S BAR)
-  // ZERO 2D BACKGROUND IMAGES! FULLY 3D MODELED WORLD!
+  // 4. INITIALIZE DYNAMIC 3D NOIR TAVERN SCENE
   // ============================================================================
   useEffect(() => {
     if (!mountRef.current) return;
@@ -369,48 +455,51 @@ export function LiarsBar3DExperience({
     const width = container.clientWidth || window.innerWidth;
     const height = container.clientHeight || window.innerHeight;
 
-    // A. RENDERER (Cinematic Dark Mode Noir Speakeasy)
+    // A. RENDERER (Cinematic Dark Mode Noir)
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' });
     renderer.setSize(width, height);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.0;
+    renderer.toneMappingExposure = 1.05;
     container.replaceChildren(renderer.domElement);
 
-    // B. SCENE & ATMOSPHERE (Deep Noir Dark Speakeasy Tavern)
+    // B. SCENE & ATMOSPHERE (Deep Speakeasy Noir)
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x0a0706);
-    scene.fog = new THREE.Fog(0x0a0706, 6, 22);
+    const initialBgColor = isNightRef.current ? 0x05070c : 0x0a0706;
+    scene.background = new THREE.Color(initialBgColor);
+    scene.fog = new THREE.Fog(initialBgColor, 6, 26);
 
-    // C. CAMERA (FPS Perspective)
-    const camera = new THREE.PerspectiveCamera(58, width / height, 0.1, 40);
-    camera.position.set(0, 1.52, 2.05);
-    camera.lookAt(0, 1.15, -0.4);
+    // C. CAMERA (FPS View seated at table)
+    const camera = new THREE.PerspectiveCamera(62, width / height, 0.1, 40);
+    camera.position.set(0, 1.55, dynamicTableRadius + 0.50);
+    camera.lookAt(0, 1.05, -dynamicTableRadius * 0.20);
 
-    // D. MULTI-SOURCE CINEMATIC LIGHTING (DARK MODE BALANCED)
-    // 1. Subtle Warm Ambient Fill (leaves deep cinematic shadows)
-    const ambientLight = new THREE.AmbientLight(0xffecd2, 0.75);
+    // D. MULTI-SOURCE NOIR LIGHTING
+    // 1. Ambient Fill
+    const ambientLight = new THREE.AmbientLight(isNightRef.current ? 0x1a2639 : 0xffecd2, 0.75);
     scene.add(ambientLight);
 
-    // 2. Deep Floor Bounce
+    // 2. Floor Bounce
     const hemiLight = new THREE.HemisphereLight(0x3d2417, 0x0a0705, 0.55);
     scene.add(hemiLight);
 
-    // 3. Overhead Swinging Brass Lantern
+    // 3. Overhead Brass Chandelier
     const lampGroup = new THREE.Group();
-    lampGroup.position.set(0, 3.4, 0);
+    lampGroup.position.set(0, 3.6 + dynamicTableRadius * 0.15, 0);
 
-    const chainGeo = new THREE.CylinderGeometry(0.015, 0.015, 1.2, 8);
-    const metalMat = new THREE.MeshStandardMaterial({ color: 0x1f1915, roughness: 0.7, metalness: 0.8 });
-    const chainMesh = new THREE.Mesh(chainGeo, metalMat);
+    const chainMesh = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.015, 0.015, 1.2, 8),
+      new THREE.MeshStandardMaterial({ color: 0x1f1915, roughness: 0.7, metalness: 0.8 })
+    );
     chainMesh.position.y = -0.6;
     lampGroup.add(chainMesh);
 
-    const shadeGeo = new THREE.ConeGeometry(0.44, 0.30, 24, 1, true);
-    const brassMat = new THREE.MeshStandardMaterial({ color: 0x92400e, roughness: 0.4, metalness: 0.8 });
-    const shadeMesh = new THREE.Mesh(shadeGeo, brassMat);
+    const shadeMesh = new THREE.Mesh(
+      new THREE.ConeGeometry(0.48, 0.32, 24, 1, true),
+      new THREE.MeshStandardMaterial({ color: 0x92400e, roughness: 0.4, metalness: 0.8 })
+    );
     shadeMesh.position.y = -1.2;
     shadeMesh.rotation.x = Math.PI;
     lampGroup.add(shadeMesh);
@@ -422,252 +511,170 @@ export function LiarsBar3DExperience({
     bulbMesh.position.y = -1.25;
     lampGroup.add(bulbMesh);
 
-    const lanternLight = new THREE.PointLight(0xff9922, 5.0, 9, 1.2);
+    const lanternLight = new THREE.PointLight(isNightRef.current ? 0x60a5fa : 0xff9922, 5.0, 10 + dynamicTableRadius, 1.2);
     lanternLight.position.set(0, -1.3, 0);
     lanternLight.castShadow = true;
     lampGroup.add(lanternLight);
     scene.add(lampGroup);
 
-    // 4. Focused Table Spotlight (Pool of warm light on felt)
-    const tableSpot = new THREE.SpotLight(0xffe0b2, 9.0, 9, Math.PI / 3.4, 0.5, 1.2);
-    tableSpot.position.set(0, 3.2, 0);
+    // 4. Central Table Spotlight
+    const tableSpot = new THREE.SpotLight(0xffe0b2, 9.0, 10 + dynamicTableRadius, Math.PI / 3.2, 0.5, 1.2);
+    tableSpot.position.set(0, 3.5 + dynamicTableRadius * 0.2, 0);
     tableSpot.target.position.set(0, 1.0, 0);
     tableSpot.castShadow = true;
     scene.add(tableSpot);
     scene.add(tableSpot.target);
 
-    // 5. Dynamic Flickering Table Candlelights
+    // 5. Flickering Candles on Table
     const candleLight1 = new THREE.PointLight(0xff9922, 2.2, 3.5, 1.2);
-    candleLight1.position.set(-0.65, 1.15, -0.2);
+    candleLight1.position.set(-dynamicTableRadius * 0.45, 1.15, -0.2);
     scene.add(candleLight1);
 
     const candleLight2 = new THREE.PointLight(0xff9922, 2.2, 3.5, 1.2);
-    candleLight2.position.set(0.65, 1.15, -0.2);
+    candleLight2.position.set(dynamicTableRadius * 0.45, 1.15, -0.2);
     scene.add(candleLight2);
 
-    // 6. Character Face & Body Key Lights (Dedicated dramatic lighting for each seat)
-    const charLights = [
-      { pos: [-1.45, 1.70, -0.45], color: 0xffd59e, intensity: 2.8 }, // Seat 1
-      { pos: [-0.65, 1.75, -1.30], color: 0xffe2b8, intensity: 2.8 }, // Seat 2
-      { pos: [0.65, 1.75, -1.30], color: 0xffe2b8, intensity: 2.8 },  // Seat 3
-      { pos: [1.45, 1.70, -0.45], color: 0xffd59e, intensity: 2.8 },  // Seat 4
-    ];
-    charLights.forEach((cl) => {
-      const pl = new THREE.PointLight(cl.color, cl.intensity, 4.0, 1.2);
-      pl.position.set(...(cl.pos as [number, number, number]));
-      scene.add(pl);
-    });
+    // 6. Accused Execution Spotlight (Dramatic Red beam)
+    const accusedSpot = new THREE.SpotLight(0xef4444, 0, 12, Math.PI / 4.5, 0.3, 1.2);
+    accusedSpot.position.set(0, 3.8, 0);
+    accusedSpot.castShadow = true;
+    scene.add(accusedSpot);
+    scene.add(accusedSpot.target);
 
-    // Muzzle flash light
-    const muzzleLight = new THREE.PointLight(0xfff5e6, 0, 8, 1.5);
-    muzzleLight.position.set(0, -0.1, -0.3);
-    camera.add(muzzleLight);
-
-    // E. 100% REAL 3D TAVERN ROOM (DARK NOIR SPEAKEASY)
+    // E. 100% REAL 3D ROOM (DARK NOIR)
     // 1. Dark Smoked Parquet Floor
-    const floorGeo = new THREE.PlaneGeometry(16, 16);
-    const floorMat = new THREE.MeshStandardMaterial({ color: 0x150e09, roughness: 0.6, metalness: 0.1 });
-    const floorMesh = new THREE.Mesh(floorGeo, floorMat);
+    const floorMesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(28, 28),
+      new THREE.MeshStandardMaterial({ color: 0x150e09, roughness: 0.6, metalness: 0.1 })
+    );
     floorMesh.rotation.x = -Math.PI / 2;
     floorMesh.receiveShadow = true;
     scene.add(floorMesh);
 
-    // 2. Dark Rustic Timber Ceiling
-    const ceilingGeo = new THREE.PlaneGeometry(16, 16);
-    const ceilingMat = new THREE.MeshStandardMaterial({ color: 0x0d0805, roughness: 0.85 });
-    const ceilingMesh = new THREE.Mesh(ceilingGeo, ceilingMat);
-    ceilingMesh.position.y = 4.2;
+    // 2. Dark Timber Ceiling & Beams
+    const ceilingMesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(28, 28),
+      new THREE.MeshStandardMaterial({ color: 0x0d0805, roughness: 0.85 })
+    );
+    ceilingMesh.position.y = 4.4;
     ceilingMesh.rotation.x = Math.PI / 2;
     scene.add(ceilingMesh);
 
-    for (let beam = -3; beam <= 3; beam += 2) {
-      const beamGeo = new THREE.BoxGeometry(16, 0.35, 0.25);
-      const beamMat = new THREE.MeshStandardMaterial({ color: 0x100804, roughness: 0.75 });
-      const beamMesh = new THREE.Mesh(beamGeo, beamMat);
-      beamMesh.position.set(0, 4.05, beam);
+    for (let beam = -6; beam <= 6; beam += 2) {
+      const beamMesh = new THREE.Mesh(
+        new THREE.BoxGeometry(28, 0.35, 0.25),
+        new THREE.MeshStandardMaterial({ color: 0x100804, roughness: 0.75 })
+      );
+      beamMesh.position.set(0, 4.25, beam);
       scene.add(beamMesh);
     }
 
     // 3. Dark Mahogany Back Wall with Bar & Shelves
-    const backWallGeo = new THREE.PlaneGeometry(16, 5);
-    const backWallMat = new THREE.MeshStandardMaterial({ color: 0x1a1008, roughness: 0.7 });
-    const backWall = new THREE.Mesh(backWallGeo, backWallMat);
-    backWall.position.set(0, 2.5, -3.8);
+    const backWallDist = Math.max(4.0, dynamicTableRadius + 2.4);
+    const backWall = new THREE.Mesh(
+      new THREE.PlaneGeometry(28, 6),
+      new THREE.MeshStandardMaterial({ color: 0x1a1008, roughness: 0.7 })
+    );
+    backWall.position.set(0, 3.0, -backWallDist);
     backWall.receiveShadow = true;
     scene.add(backWall);
 
-    // Bar Mirror
-    const mirrorGeo = new THREE.PlaneGeometry(6.2, 1.8);
-    const mirrorMat = new THREE.MeshStandardMaterial({ color: 0x1e2530, roughness: 0.2, metalness: 0.8 });
-    const mirror = new THREE.Mesh(mirrorGeo, mirrorMat);
-    mirror.position.set(0, 2.4, -3.75);
-    scene.add(mirror);
-
-    // 3 Tiers of Polished Wood Shelves
+    // Shelves with bottles
     const shelfHeights = [1.6, 2.2, 2.8];
-    shelfHeights.forEach((shY) => {
-      const shGeo = new THREE.BoxGeometry(6.6, 0.08, 0.38);
-      const shMat = new THREE.MeshStandardMaterial({ color: 0x150b05, roughness: 0.5, metalness: 0.1 });
-      const shMesh = new THREE.Mesh(shGeo, shMat);
-      shMesh.position.set(0, shY, -3.6);
-      scene.add(shMesh);
-
-      // Under-shelf warm strip light
-      const stripLight = new THREE.PointLight(0xff9922, 0.8, 3, 1.5);
-      stripLight.position.set(0, shY - 0.05, -3.5);
-      scene.add(stripLight);
-    });
-
-    // Radiant Liquor Bottles on the Shelves
     const bottlePalettes = [0xef4444, 0xf59e0b, 0x10b981, 0x3b82f6, 0xd97706];
     shelfHeights.forEach((shY) => {
-      for (let b = 0; b < 14; b++) {
+      const shMesh = new THREE.Mesh(
+        new THREE.BoxGeometry(12.0, 0.08, 0.38),
+        new THREE.MeshStandardMaterial({ color: 0x150b05, roughness: 0.5, metalness: 0.1 })
+      );
+      shMesh.position.set(0, shY, -backWallDist + 0.2);
+      scene.add(shMesh);
+
+      for (let b = 0; b < 22; b++) {
         const bottleColor = bottlePalettes[(b + Math.floor(shY * 3)) % bottlePalettes.length];
-        const bottleGeo = new THREE.CylinderGeometry(0.045, 0.055, 0.28, 8);
-        const bottleMat = new THREE.MeshStandardMaterial({
-          color: bottleColor,
-          roughness: 0.15,
-          metalness: 0.3,
-          transparent: true,
-          opacity: 0.88,
-        });
-        const bottle = new THREE.Mesh(bottleGeo, bottleMat);
-        bottle.position.set(-2.8 + b * 0.43, shY + 0.16, -3.58);
+        const bottle = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.045, 0.055, 0.28, 8),
+          new THREE.MeshStandardMaterial({ color: bottleColor, roughness: 0.15, metalness: 0.3, transparent: true, opacity: 0.88 })
+        );
+        bottle.position.set(-5.0 + b * 0.48, shY + 0.16, -backWallDist + 0.22);
         scene.add(bottle);
       }
     });
 
-    // Glowing Neon "LIAR'S BAR" Sign
-    const neonFrameGeo = new THREE.BoxGeometry(2.4, 0.65, 0.08);
-    const neonFrameMat = new THREE.MeshStandardMaterial({ color: 0x0f0f12, roughness: 0.8 });
-    const neonFrame = new THREE.Mesh(neonFrameGeo, neonFrameMat);
-    neonFrame.position.set(0, 3.4, -3.72);
+    // Glowing Neon "HỘI ĐỒNG MA SÓI" Sign
+    const neonFrame = new THREE.Mesh(
+      new THREE.BoxGeometry(3.6, 0.65, 0.08),
+      new THREE.MeshStandardMaterial({ color: 0x0f0f12, roughness: 0.8 })
+    );
+    neonFrame.position.set(0, 3.5, -backWallDist + 0.08);
     scene.add(neonFrame);
 
-    const neonSignGeo = new THREE.BoxGeometry(2.1, 0.45, 0.04);
-    const neonSignMat = new THREE.MeshBasicMaterial({ color: 0xef4444 });
-    const neonSign = new THREE.Mesh(neonSignGeo, neonSignMat);
-    neonSign.position.set(0, 3.4, -3.68);
+    const neonSign = new THREE.Mesh(
+      new THREE.BoxGeometry(3.3, 0.45, 0.04),
+      new THREE.MeshBasicMaterial({ color: 0xef4444 })
+    );
+    neonSign.position.set(0, 3.5, -backWallDist + 0.12);
     scene.add(neonSign);
 
-    // Left and Right Walls
-    const sideWallGeo = new THREE.PlaneGeometry(16, 5);
-    const sideWallMat = new THREE.MeshStandardMaterial({ color: 0x180f08, roughness: 0.7 });
-
-    const leftWall = new THREE.Mesh(sideWallGeo, sideWallMat);
-    leftWall.position.set(-4.2, 2.5, 0);
-    leftWall.rotation.y = Math.PI / 2;
-    scene.add(leftWall);
-
-    const rightWall = new THREE.Mesh(sideWallGeo, sideWallMat);
-    rightWall.position.set(4.2, 2.5, 0);
-    rightWall.rotation.y = -Math.PI / 2;
-    scene.add(rightWall);
-
-    // F. 100% REAL 3D CASINO POKER TABLE (DEEP EMERALD NOIR)
+    // F. DYNAMICALLY SIZED COUNCIL TABLE (SCALES PROPORTIONALLY WITH PLAYER COUNT)
     const tableGroup = new THREE.Group();
     tableGroup.position.set(0, 0, 0);
 
-    // Deep Velvet Emerald Green Poker Felt
-    const feltGeo = new THREE.CylinderGeometry(1.68, 1.68, 0.08, 48);
-    const feltMat = new THREE.MeshStandardMaterial({ color: 0x0e4726, roughness: 0.72, metalness: 0.05 });
-    const feltMesh = new THREE.Mesh(feltGeo, feltMat);
+    // Deep Velvet Emerald Green Table Felt
+    const feltMesh = new THREE.Mesh(
+      new THREE.CylinderGeometry(dynamicTableRadius, dynamicTableRadius, 0.08, 48),
+      new THREE.MeshStandardMaterial({ color: 0x0e4726, roughness: 0.72, metalness: 0.05 })
+    );
     feltMesh.position.y = 1.0;
     feltMesh.receiveShadow = true;
     tableGroup.add(feltMesh);
 
-    // Inner Polished Golden Betting Ring
-    const betRingGeo = new THREE.TorusGeometry(1.22, 0.016, 8, 48);
-    const goldMat = new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.3, metalness: 0.85 });
-    const betRing = new THREE.Mesh(betRingGeo, goldMat);
+    // Golden Council Ring
+    const betRing = new THREE.Mesh(
+      new THREE.TorusGeometry(dynamicTableRadius * 0.76, 0.016, 8, 48),
+      new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.3, metalness: 0.85 })
+    );
     betRing.rotation.x = Math.PI / 2;
     betRing.position.y = 1.045;
     tableGroup.add(betRing);
 
-    // Outer Dark Mahogany Beveled Armrest
-    const rimGeo = new THREE.TorusGeometry(1.75, 0.15, 16, 48);
-    const woodMat = new THREE.MeshStandardMaterial({ color: 0x2e1408, roughness: 0.35, metalness: 0.15 });
-    const rimMesh = new THREE.Mesh(rimGeo, woodMat);
+    // Dark Mahogany Armrest Rim
+    const rimMesh = new THREE.Mesh(
+      new THREE.TorusGeometry(dynamicTableRadius + 0.08, 0.14, 16, 48),
+      new THREE.MeshStandardMaterial({ color: 0x2e1408, roughness: 0.35, metalness: 0.15 })
+    );
     rimMesh.rotation.x = Math.PI / 2;
     rimMesh.position.y = 1.04;
     rimMesh.castShadow = true;
     rimMesh.receiveShadow = true;
     tableGroup.add(rimMesh);
 
-    // Heavy Central Pedestal Base
-    const pillarGeo = new THREE.CylinderGeometry(0.38, 0.65, 1.0, 24);
-    const pillarMesh = new THREE.Mesh(pillarGeo, woodMat);
+    // Central Pillar Base
+    const pillarMesh = new THREE.Mesh(
+      new THREE.CylinderGeometry(dynamicTableRadius * 0.28, dynamicTableRadius * 0.45, 1.0, 24),
+      new THREE.MeshStandardMaterial({ color: 0x2e1408, roughness: 0.35 })
+    );
     pillarMesh.position.y = 0.5;
-    pillarMesh.castShadow = true;
     tableGroup.add(pillarMesh);
 
-    // Table Props: Stacks of Casino Poker Chips
-    const chipColors = [0xef4444, 0x3b82f6, 0x10b981, 0xf59e0b];
-    for (let i = 0; i < 8; i++) {
-      const ang = (i / 8) * Math.PI * 1.65 - 0.82;
-      const chipStackGeo = new THREE.CylinderGeometry(0.07, 0.07, 0.05 + (i % 3) * 0.035, 16);
-      const chipMat = new THREE.MeshStandardMaterial({ color: chipColors[i % chipColors.length], roughness: 0.3 });
-      const stack = new THREE.Mesh(chipStackGeo, chipMat);
-      stack.position.set(Math.sin(ang) * 1.25, 1.06, Math.cos(ang) * 1.25);
-      stack.castShadow = true;
-      tableGroup.add(stack);
+    // Stacks of council vote tokens around table
+    for (let i = 0; i < totalSeats; i++) {
+      const ang = (i / totalSeats) * Math.PI * 2;
+      const chipStack = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.065, 0.065, 0.06, 16),
+        new THREE.MeshStandardMaterial({ color: i % 2 === 0 ? 0xef4444 : 0xf59e0b, roughness: 0.3 })
+      );
+      chipStack.position.set(Math.cos(ang) * (dynamicTableRadius * 0.82), 1.06, Math.sin(ang) * (dynamicTableRadius * 0.82));
+      tableGroup.add(chipStack);
     }
 
-    // Whiskey Glasses with Amber Bourbon on Table
-    for (let g = 0; g < 3; g++) {
-      const gAng = [-0.9, 0, 0.9][g];
-      const glassGroup = new THREE.Group();
-      glassGroup.position.set(Math.sin(gAng) * 1.35, 1.05, Math.cos(gAng) * 1.35);
-
-      const glassCup = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.055, 0.05, 0.12, 16, 1, true),
-        new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.1, transparent: true, opacity: 0.45 })
-      );
-      glassCup.position.y = 0.06;
-      glassGroup.add(glassCup);
-
-      const whiskeyLiquid = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.048, 0.045, 0.06, 16),
-        new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.2, metalness: 0.1 })
-      );
-      whiskeyLiquid.position.y = 0.035;
-      glassGroup.add(whiskeyLiquid);
-      tableGroup.add(glassGroup);
-    }
-
-    // Real 3D Candles on the table
-    const candleGeo = new THREE.CylinderGeometry(0.025, 0.025, 0.16, 12);
-    const candleMat = new THREE.MeshStandardMaterial({ color: 0xfef08a, roughness: 0.3 });
-    const candle1 = new THREE.Mesh(candleGeo, candleMat);
-    candle1.position.set(-0.65, 1.12, -0.2);
-    tableGroup.add(candle1);
-
-    const candle2 = new THREE.Mesh(candleGeo, candleMat);
-    candle2.position.set(0.65, 1.12, -0.2);
-    tableGroup.add(candle2);
-
-    // Dealt cards in front of each seat
-    const cardGeo = new THREE.BoxGeometry(0.14, 0.004, 0.20);
-    const cardBackMat = new THREE.MeshStandardMaterial({ color: 0x991b1b, roughness: 0.4 });
-    const seatAngles = [-Math.PI / 3, -Math.PI / 8, Math.PI / 8, Math.PI / 3];
-    seatAngles.forEach((ang) => {
-      const cMesh = new THREE.Mesh(cardGeo, cardBackMat);
-      cMesh.position.set(Math.sin(ang) * 1.1, 1.045, -Math.cos(ang) * 1.1 + 0.3);
-      cMesh.rotation.y = ang + Math.PI;
-      tableGroup.add(cMesh);
-    });
-
-    // Played cards group
-    const playedCardsGroup = new THREE.Group();
-    playedCardsGroup.position.set(0, 1.045, 0);
-    tableGroup.add(playedCardsGroup);
     scene.add(tableGroup);
 
-    // G. LOAD 3D CHAIRS & REAL 3D BIPEDAL CHARACTERS SITTING AT TABLE
+    // G. LOAD 3D CHAIRS & DYNAMIC 3D CHARACTERS SITTING AT TABLE
     const gltfLoader = new GLTFLoader();
-    const charObjects: { [id: string]: { root: THREE.Object3D; baseY: number } } = {};
+    const charObjects: { [id: string]: { root: THREE.Object3D; baseY: number; isAlive: boolean } } = {};
 
-    // 1. Load 3D Chairs at proper human scale (0.78x scale = 1.35m height)
+    // 1. Load 3D Chairs
     gltfLoader.load(
       '/models/chair.glb',
       (gltf) => {
@@ -678,24 +685,18 @@ export function LiarsBar3DExperience({
             node.receiveShadow = true;
             if (node.material) {
               node.material = node.material.clone();
-              node.material.color.setHex(0x5c3014); // Polished mahogany saloon chair
-              node.material.roughness = 0.45;
+              node.material.color.setHex(0x3d1f0d);
+              node.material.roughness = 0.5;
             }
           }
         });
 
-        const chairConfigs = [
-          { pos: [-1.76, 0, -0.78], rotY: 1.15 },
-          { pos: [-0.78, 0, -1.80], rotY: 0.38 },
-          { pos: [0.78, 0, -1.80], rotY: -0.38 },
-          { pos: [1.76, 0, -0.78], rotY: -1.15 },
-        ];
-
-        chairConfigs.forEach((c) => {
+        // Place a chair behind each seat
+        opponentSeats.forEach((seat) => {
           const chair = chairModel.clone();
           chair.scale.set(0.78, 0.78, 0.78);
-          chair.position.set(...(c.pos as [number, number, number]));
-          chair.rotation.y = c.rotY;
+          chair.position.set(...seat.chairPos);
+          chair.lookAt(0, 0.5, 0);
           scene.add(chair);
         });
       },
@@ -703,57 +704,26 @@ export function LiarsBar3DExperience({
       (err) => console.error('Failed to load chair.glb:', err)
     );
 
-    // 2. Load 4 Real 3D Characters: Ma Sói, Bố Già, Cô Gái, Thợ Săn (0.94x human scale)
-    const charSeatData = [
-      {
-        id: 'wolf',
-        file: '/models/punk_mobster.glb',
-        pos: [-1.62, 0.04, -0.72] as [number, number, number],
-        rotY: 1.15,
-        scale: 0.94,
-      },
-      {
-        id: 'mobster',
-        file: '/models/suit_mobster.glb',
-        pos: [-0.72, 0.04, -1.65] as [number, number, number],
-        rotY: 0.38,
-        scale: 0.94,
-      },
-      {
-        id: 'girl',
-        file: '/models/village_girl.glb',
-        pos: [0.72, 0.04, -1.65] as [number, number, number],
-        rotY: -0.38,
-        scale: 0.94,
-      },
-      {
-        id: 'hunter',
-        file: '/models/cowboy_mobster.glb',
-        pos: [1.62, 0.04, -0.72] as [number, number, number],
-        rotY: -1.15,
-        scale: 0.94,
-      },
-    ];
-
-    charSeatData.forEach((seat) => {
+    // 2. Load and place all opponent characters
+    opponentSeats.forEach((seat) => {
       gltfLoader.load(
-        seat.file,
+        seat.modelFile,
         (gltf) => {
           const model = gltf.scene;
-          model.scale.set(seat.scale, seat.scale, seat.scale);
+          model.scale.set(0.94, 0.94, 0.94);
           model.position.set(...seat.pos);
-          model.rotation.y = seat.rotY;
+          model.lookAt(0, 1.10, 0);
           model.name = seat.id;
 
-          // 1. Natural Poker Table Sitting Pose (NO T-POSE! Arms rested naturally on table)
-          applyPokerSittingPose(model, seat.id === 'girl');
+          // 1. Natural Sitting Pose (NO T-POSE!)
+          applyPokerSittingPose(model, seat.isGirl);
 
-          // 2. If Ma Sói (Werewolf): Attach 3D wolf ears, snout, fangs, and glowing red eyes
-          if (seat.id === 'wolf') {
+          // 2. If Ma Sói (Werewolf): Attach 3D wolf head features
+          if (seat.isWerewolf) {
             attachWolfHeadFeatures(model);
           }
 
-          // 3. Materials & Shading tuned for rich Dark Mode Noir atmosphere
+          // 3. Shading & Materials
           model.traverse((node: any) => {
             if (node.isMesh) {
               node.castShadow = true;
@@ -763,8 +733,8 @@ export function LiarsBar3DExperience({
                 node.material.roughness = 0.55;
                 node.material.metalness = 0.08;
 
-                // For Werewolf: turn skin & hair to dark charcoal wolf fur
-                if (seat.id === 'wolf') {
+                // Werewolf styling
+                if (seat.isWerewolf) {
                   const mName = (node.material.name || '').toLowerCase();
                   if (mName.includes('skin')) {
                     node.material.color.setHex(0x32353e); // Wolf grey fur
@@ -772,67 +742,50 @@ export function LiarsBar3DExperience({
                     node.material.color.setHex(0x181a1f); // Dark charcoal wolf mane
                   }
                 }
+
+                // If player is dead: desaturate/darken into tombstone tones
+                if (!seat.isAlive) {
+                  node.material.color.multiplyScalar(0.42);
+                }
               }
             }
           });
 
+          // 4. Dead player pose: Slump head onto table
+          if (!seat.isAlive) {
+            applyDeadSlumpPose(model);
+          }
+
           scene.add(model);
-          charObjects[seat.id] = { root: model, baseY: seat.pos[1] };
-          console.log(`[LiarsBar3D] Character ${seat.id} loaded and posed successfully.`);
+          charObjects[seat.id] = { root: model, baseY: seat.pos[1], isAlive: seat.isAlive };
         },
         undefined,
-        (err) => console.error(`[LiarsBar3D] Failed to load ${seat.file}:`, err)
+        (err) => console.error(`[LiarsBar3D] Failed to load ${seat.modelFile}:`, err)
       );
     });
 
-    // H. LOAD PLAYER'S 3D FIRST-PERSON REVOLVER (FPS WEAPON)
-    const revolverGroup = new THREE.Group();
-    revolverGroup.position.set(0.22, -0.22, -0.42);
-
-    gltfLoader.load('/models/revolver.glb', (gltf) => {
-      const gunModel = gltf.scene;
-      gunModel.scale.set(0.12, 0.12, 0.12);
-      gunModel.rotation.y = -Math.PI / 2;
-      gunModel.traverse((node: any) => {
-        if (node.isMesh) {
-          node.castShadow = true;
-          if (node.material) {
-            node.material = node.material.clone();
-            const matName = (node.material.name || '').toLowerCase();
-            if (matName.includes('grip') || matName.includes('wood')) {
-              node.material.color.setHex(0x5c3014); // Walnut wood grip
-              node.material.roughness = 0.45;
-            } else {
-              node.material.color.setHex(0x8a939d); // Polished blued steel barrel
-              node.material.metalness = 0.85;
-              node.material.roughness = 0.3;
-            }
-          }
-        }
-      });
-      revolverGroup.add(gunModel);
+    // Dedicated key lights for each seat
+    opponentSeats.forEach((seat) => {
+      const light = new THREE.PointLight(0xffecd2, 2.8, 4.5, 1.2);
+      light.position.set(seat.pos[0] * 0.85, 1.70, seat.pos[2] * 0.85);
+      scene.add(light);
     });
 
-    camera.add(revolverGroup);
-    scene.add(camera);
-
-    // Save refs for animation loop
     threeRef.current = {
       renderer,
       scene,
       camera,
-      revolverGroup,
-      muzzleLight,
+      ambientLight,
+      lanternLight,
       lampGroup,
-      playedCardsGroup,
       candleLight1,
       candleLight2,
+      accusedSpot,
       raycaster: new THREE.Raycaster(),
-      shootRecoil: 0,
       charObjects,
     };
 
-    // I. RESIZE HANDLER
+    // H. RESIZE HANDLER
     const handleResize = () => {
       if (!mountRef.current) return;
       const w = mountRef.current.clientWidth;
@@ -843,83 +796,90 @@ export function LiarsBar3DExperience({
     };
     window.addEventListener('resize', handleResize);
 
-    // J. ANIMATION LOOP
+    // I. ANIMATION LOOP
     let animationFrameId: number;
-    let clock = new THREE.Clock();
+    const clock = new THREE.Clock();
 
     const animate = () => {
       animationFrameId = requestAnimationFrame(animate);
-      const delta = clock.getDelta();
       const t = clock.getElapsedTime();
       const state = threeRef.current;
       if (!state) return;
 
-      // 1. Smooth Camera FPS Look
+      // 1. Smooth Camera POV Positioning & Looking
+      const isPov2Active = isPov2Ref.current;
+      const pov2Y = 2.85 + dynamicTableRadius * 0.22;
+      const pov2Z = dynamicTableRadius + 1.80;
+      const targetY = isPov2Active ? pov2Y : 1.55 + Math.sin(t * 1.5) * 0.005;
+      const targetZ = isPov2Active ? pov2Z : dynamicTableRadius + 0.50;
+
+      camera.position.y += (targetY - camera.position.y) * 0.06;
+      camera.position.z += (targetZ - camera.position.z) * 0.06;
+
       const targetYaw = mouseRef.current.targetYaw;
-      const targetPitch = mouseRef.current.targetPitch;
+      const targetPitch = mouseRef.current.targetPitch + (isPov2Active ? -0.28 : 0);
       camera.rotation.y += (targetYaw - camera.rotation.y) * 0.08;
       camera.rotation.x += (targetPitch - camera.rotation.x) * 0.08;
 
-      // Subtle breathing camera sway
-      camera.position.y = 1.52 + Math.sin(t * 1.6) * 0.005;
+      // 2. Day / Night Atmosphere Transition
+      const isNight = isNightRef.current;
+      if (isNight) {
+        state.ambientLight.color.lerp(new THREE.Color(0x1a2639), 0.05);
+        state.lanternLight.color.lerp(new THREE.Color(0x60a5fa), 0.05);
+        scene.background = new THREE.Color(0x05070c);
+        if (scene.fog) scene.fog.color.lerp(new THREE.Color(0x05070c), 0.05);
+      } else {
+        state.ambientLight.color.lerp(new THREE.Color(0xffecd2), 0.05);
+        state.lanternLight.color.lerp(new THREE.Color(0xff9922), 0.05);
+        scene.background = new THREE.Color(0x0a0706);
+        if (scene.fog) scene.fog.color.lerp(new THREE.Color(0x0a0706), 0.05);
+      }
 
-      // 2. Hanging Lamp Swing
-      state.lampGroup.rotation.z = Math.sin(t * 1.4) * 0.025;
-      state.lampGroup.rotation.x = Math.cos(t * 1.1) * 0.018;
+      // 3. Chandelier & Candle Flicker
+      state.lampGroup.rotation.z = Math.sin(t * 1.3) * 0.02;
+      state.candleLight1.intensity = 2.2 + Math.sin(t * 12) * 0.25;
+      state.candleLight2.intensity = 2.2 + Math.cos(t * 14) * 0.25;
 
-      // 3. Candle Flame Light Flicker
-      state.candleLight1.intensity = 3.5 + Math.sin(t * 12) * 0.3;
-      state.candleLight2.intensity = 3.5 + Math.cos(t * 14) * 0.3;
+      // 4. Alive Character Breathing & Hover / Selection Reaction
+      const curHovered = hoveredSeatIdRef.current;
+      const curSelected = selectedTargetIdRef.current;
 
-      // 4. Subtle Character Breathing & Hover Reaction
       Object.entries(state.charObjects).forEach(([id, char], idx) => {
-        const isHovered = hoveredTargetIdRef.current === id;
-        const breath = Math.sin(t * 2.0 + idx * 1.2) * 0.005;
+        if (!char.isAlive) return; // Dead players stay slumped
+
+        const isHovered = curHovered === id;
+        const isSelected = curSelected === id;
+        const breath = Math.sin(t * 2.0 + idx * 1.1) * 0.005;
         char.root.position.y = char.baseY + breath;
 
-        // Subtle head turn towards camera
+        // Subtle head turn
         const head = char.root.getObjectByName('Head');
         if (head) {
-          head.rotation.y = Math.sin(t * 1.2 + idx) * 0.08;
+          head.rotation.y = Math.sin(t * 1.2 + idx) * 0.06;
         }
 
-        // Proper human scale with subtle emphasis when hovered
-        const targetScale = isHovered ? 0.98 : 0.94;
+        const targetScale = isSelected ? 1.02 : isHovered ? 0.98 : 0.94;
         char.root.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), 0.12);
       });
 
-      // 5. Player's Revolver Stance (Hip vs ADS Aiming)
-      const targetGunPos = isAimingGunRef.current
-        ? new THREE.Vector3(0, -0.13, -0.32) // Center ADS
-        : new THREE.Vector3(0.22, -0.22, -0.42); // Hip
-
-      // Apply recoil recovery
-      state.shootRecoil = THREE.MathUtils.lerp(state.shootRecoil, 0, 0.14);
-      const recoilOffset = new THREE.Vector3(0, state.shootRecoil * 0.08, state.shootRecoil * 0.12);
-
-      state.revolverGroup.position.lerp(targetGunPos.clone().add(recoilOffset), 0.15);
-      state.revolverGroup.rotation.x = isAimingGunRef.current
-        ? state.shootRecoil * 0.4
-        : THREE.MathUtils.lerp(state.revolverGroup.rotation.x, 0.05, 0.1);
-
-      // 6. Update Screen Positions for 3D Nametags
-      const projectToScreen = (root?: THREE.Object3D) => {
+      // 5. Update Screen Positions for 3D Nametags
+      const projectToScreen = (root?: THREE.Object3D, isAlive = true) => {
         if (!root) return { x: 0, y: 0, visible: false };
         const v = new THREE.Vector3();
         root.getWorldPosition(v);
-        v.y += 1.88; // above 3D character head
+        v.y += isAlive ? 1.88 : 1.25; // Dead player nametag sits lower
         v.project(camera);
         const sx = ((v.x + 1) * width) / 2;
         const sy = ((-v.y + 1) * height) / 2;
         return { x: sx, y: sy, visible: v.z < 1 };
       };
 
-      setScreenPos({
-        wolf: projectToScreen(state.charObjects['wolf']?.root),
-        mobster: projectToScreen(state.charObjects['mobster']?.root),
-        girl: projectToScreen(state.charObjects['girl']?.root),
-        hunter: projectToScreen(state.charObjects['hunter']?.root),
+      const newPos: { [id: string]: { x: number; y: number; visible: boolean } } = {};
+      opponentSeats.forEach((s) => {
+        const obj = state.charObjects[s.id];
+        newPos[s.id] = projectToScreen(obj?.root, s.isAlive);
       });
+      setScreenPos(newPos);
 
       // Render 3D Scene
       renderer.render(scene, camera);
@@ -932,19 +892,18 @@ export function LiarsBar3DExperience({
       window.removeEventListener('resize', handleResize);
       renderer.dispose();
     };
-  }, []);
+  }, [dynamicTableRadius, totalSeats, seatsRosterKey]);
 
-  // Mouse move handler for 3D FPS rotation & Raycasting
+  // Mouse Move Handler: Look around & Raycast hover on 3D players
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!mountRef.current) return;
     const rect = mountRef.current.getBoundingClientRect();
     const normX = (e.clientX - rect.left) / rect.width - 0.5;
     const normY = (e.clientY - rect.top) / rect.height - 0.5;
 
-    mouseRef.current.targetYaw = -normX * 0.72;
-    mouseRef.current.targetPitch = -normY * 0.42;
+    mouseRef.current.targetYaw = -normX * 0.85;
+    mouseRef.current.targetPitch = -normY * 0.38;
 
-    // Raycast to detect hover on 3D character models
     if (threeRef.current) {
       const mouse = new THREE.Vector2(normX * 2, -normY * 2);
       threeRef.current.raycaster.setFromCamera(mouse, threeRef.current.camera);
@@ -952,8 +911,10 @@ export function LiarsBar3DExperience({
       const targets: THREE.Object3D[] = [];
       const charIds: string[] = [];
       for (const [id, char] of Object.entries(threeRef.current.charObjects)) {
-        targets.push(char.root);
-        charIds.push(id);
+        if (char.isAlive) {
+          targets.push(char.root);
+          charIds.push(id);
+        }
       }
 
       const intersects = threeRef.current.raycaster.intersectObjects(targets, true);
@@ -962,183 +923,115 @@ export function LiarsBar3DExperience({
         while (hit.parent && !charIds.includes(hit.name)) {
           for (const id of charIds) {
             if (threeRef.current.charObjects[id]?.root === hit) {
-              setHoveredTargetId(id);
+              setHoveredSeatId(id);
+              if (onAimAtPlayer) onAimAtPlayer(id, id);
               return;
             }
           }
           hit = hit.parent;
         }
         if (charIds.includes(hit.name)) {
-          setHoveredTargetId(hit.name);
+          setHoveredSeatId(hit.name);
+          if (onAimAtPlayer) onAimAtPlayer(hit.name, hit.name);
           return;
         }
       } else {
-        setHoveredTargetId(null);
+        setHoveredSeatId(null);
       }
     }
   };
 
-  // Keyboard controls [R] and [F]
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-      if (e.key === 'r' || e.key === 'R') {
-        tavernAudio.playGunCock();
-        setIsAimingGun((prev) => !prev);
-      }
-      if (e.key === 'f' || e.key === 'F') {
-        tavernAudio.playCylinderSpin();
-        setChamberSlot((prev) => (prev % 6) + 1);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  // Click on 3D Player to Vote / Inspect / Target
+  const handlePlayerClick = (targetId: string, nickname: string) => {
+    const seat = opponentSeats.find((s) => s.id === targetId);
+    if (!seat || !seat.isAlive) return;
 
-  // Fire gun at opponent
-  const handleFireAtOpponent = (targetId: string) => {
-    const target = opponents.find((o) => o.id === targetId);
-    if (!target || target.isDead) return;
-
-    tavernAudio.playGunCock();
-    setTimeout(() => {
-      tavernAudio.playGunshot();
-      setRevolverFired(true);
-
-      if (threeRef.current) {
-        threeRef.current.shootRecoil = 1.0;
-        threeRef.current.muzzleLight.intensity = 9.0;
-        setTimeout(() => {
-          if (threeRef.current) threeRef.current.muzzleLight.intensity = 0;
-          setRevolverFired(false);
-        }, 60);
-
-        // Character death animation in 3D: flinch and drop
-        const char = threeRef.current.charObjects[targetId];
-        if (char) {
-          char.root.rotation.x -= 0.6;
-          char.root.position.y -= 0.5;
-        }
-      }
-
-      setOpponents((prev) => prev.map((o) => (o.id === targetId ? { ...o, isDead: true } : o)));
-
-      if (onShootPlayer) onShootPlayer(target.id, target.nickname);
-    }, 50);
-  };
-
-  // Play card onto 3D table felt
-  const handlePlayCardToTable = (card: { id: number; name: string }) => {
-    tavernAudio.playCardFlip();
-
-    if (threeRef.current) {
-      const cardGeo = new THREE.BoxGeometry(0.18, 0.004, 0.26);
-      const cardMat = new THREE.MeshStandardMaterial({ color: 0xfef08a, roughness: 0.5 });
-      const cardMesh = new THREE.Mesh(cardGeo, cardMat);
-
-      const randX = (Math.random() - 0.5) * 0.6;
-      const randZ = (Math.random() - 0.5) * 0.4;
-      const randRotY = (Math.random() - 0.5) * 0.8;
-
-      cardMesh.position.set(randX, 0.01, randZ);
-      cardMesh.rotation.y = randRotY;
-      cardMesh.castShadow = true;
-      cardMesh.receiveShadow = true;
-      threeRef.current.playedCardsGroup.add(cardMesh);
+    werewolfAudio.playGavel();
+    if (onSelectTarget) {
+      onSelectTarget(targetId, nickname);
+    } else if (onShootPlayer) {
+      onShootPlayer(targetId, nickname);
     }
-
-    if (onPlayCard) onPlayCard(card.name);
-  };
-
-  // Russian Roulette pull trigger
-  const handlePullRouletteTrigger = () => {
-    tavernAudio.playGunCock();
-    setTimeout(() => {
-      if (chamberSlot === bulletLoadedSlot) {
-        tavernAudio.playGunshot();
-        setRevolverFired(true);
-        if (threeRef.current) {
-          threeRef.current.shootRecoil = 1.2;
-          threeRef.current.muzzleLight.intensity = 9.0;
-          setTimeout(() => {
-            if (threeRef.current) threeRef.current.muzzleLight.intensity = 0;
-            setRevolverFired(false);
-          }, 80);
-        }
-        setRouletteResult('💥 BANG! BẠN ĐÃ TRÚNG ĐẠN VÀ TỬ TRẬN!');
-      } else {
-        tavernAudio.playDryFire();
-        setRouletteResult('✨ CLICK! Ổ ĐẠN TRỐNG, BẠN VẪN SỐNG SÓT!');
-        setChamberSlot((prev) => (prev % 6) + 1);
-      }
-    }, 120);
   };
 
   return (
     <div
       onMouseMove={handleMouseMove}
-      onClick={() => {
-        if (isAimingGun && hoveredTargetId) {
-          handleFireAtOpponent(hoveredTargetId);
-        }
-      }}
-      className="relative w-full h-full overflow-hidden bg-black select-none cursor-crosshair"
+      className="relative w-full h-full overflow-hidden bg-black select-none cursor-default"
     >
       {/* 1. 100% PURE REAL-TIME 3D WEBGL ENGINE VIEWPORT */}
       <div ref={mountRef} className="absolute inset-0 w-full h-full" />
 
       {/* 2. REALTIME 3D PROJECTED NAMETAGS & DIALOGUE IN 3D SPACE */}
-      {opponents.map((opp) => {
-        const pos = screenPos[opp.id];
-        if (!pos || !pos.visible || opp.isDead) return null;
-        const isTargeted = hoveredTargetId === opp.id;
-        const isAccused = accusedId === opp.id;
+      {opponentSeats.map((seat) => {
+        const pos = screenPos[seat.id];
+        if (!pos || !pos.visible) return null;
+        const isTargeted = hoveredSeatId === seat.id;
+        const isSelected = selectedTargetId === seat.id;
+        const isAccused = accusedId === seat.id;
 
         return (
           <div
-            key={opp.id}
+            key={seat.id}
             style={{ left: `${pos.x}px`, top: `${pos.y}px` }}
-            className="absolute -translate-x-1/2 -translate-y-full pointer-events-none z-20 flex flex-col items-center gap-1.5 transition-transform duration-75"
+            onClick={() => handlePlayerClick(seat.id, seat.nickname)}
+            className="absolute -translate-x-1/2 -translate-y-full pointer-events-auto z-20 flex flex-col items-center gap-1.5 cursor-pointer transition-transform duration-75 hover:scale-105"
           >
-            {/* Dialogue Bubble */}
-            {opp.dialogue && (
+            {/* Live Dialogue Bubble */}
+            {seat.dialogue && (
               <div
                 className={`px-3 py-1.5 rounded-xl border backdrop-blur-md shadow-2xl text-center max-w-[240px] ${
                   isAccused
                     ? 'bg-red-950/95 border-red-500 text-red-200 animate-bounce'
+                    : isSelected
+                    ? 'bg-amber-950/95 border-amber-400 text-amber-200 shadow-[0_0_20px_rgba(251,191,36,0.6)]'
                     : isTargeted
-                    ? 'bg-amber-950/95 border-amber-400 text-amber-200 shadow-[0_0_20px_rgba(251,191,36,0.5)]'
-                    : 'bg-black/85 border-stone-600/60 text-stone-300'
+                    ? 'bg-zinc-900/95 border-amber-500/60 text-amber-100'
+                    : 'bg-zinc-950/90 border-zinc-800 text-zinc-300'
                 }`}
               >
                 <p className="font-space text-[10px] font-bold leading-tight">
-                  &ldquo;{opp.dialogue}&rdquo;
+                  &ldquo;{seat.dialogue}&rdquo;
                 </p>
               </div>
             )}
 
-            {/* Nametag */}
+            {/* Nametag & Vote Badge */}
             <div
-              className={`px-2.5 py-0.5 rounded-xl backdrop-blur-md border text-center transition-all whitespace-nowrap shadow-2xl ${
-                isAccused
-                  ? 'bg-red-950/95 border-red-500 text-red-200 animate-pulse'
+              className={`px-3 py-1 rounded-xl backdrop-blur-md border text-center transition-all whitespace-nowrap shadow-2xl flex items-center gap-2 ${
+                !seat.isAlive
+                  ? 'bg-zinc-950/90 border-stone-800 text-stone-500 opacity-70'
+                  : isSelected
+                  ? 'bg-red-950/95 border-red-400 text-white scale-110 shadow-[0_0_25px_rgba(239,68,68,0.9)] ring-2 ring-red-500'
+                  : isAccused
+                  ? 'bg-red-950/95 border-red-500 text-red-200 animate-pulse shadow-[0_0_25px_rgba(239,68,68,0.8)]'
                   : isTargeted
-                  ? 'bg-amber-950/95 border-amber-400 text-amber-200 scale-110 shadow-[0_0_25px_rgba(251,191,36,0.8)]'
-                  : 'bg-[#0b0f17]/90 border-white/15 text-slate-200'
+                  ? 'bg-amber-950/95 border-amber-400 text-amber-200 scale-105 shadow-[0_0_20px_rgba(251,191,36,0.7)]'
+                  : 'bg-zinc-950/90 border-zinc-800 text-zinc-200'
               }`}
             >
-              <div className="flex items-center justify-center gap-1.5">
+              <div className="flex items-center gap-1.5">
                 <span
                   className={`w-2 h-2 rounded-full ${
-                    isAccused ? 'bg-red-500 animate-ping' : isTargeted ? 'bg-amber-400' : 'bg-emerald-400'
+                    !seat.isAlive
+                      ? 'bg-stone-600'
+                      : isSelected
+                      ? 'bg-red-400 animate-ping'
+                      : isAccused
+                      ? 'bg-red-500 animate-ping'
+                      : isTargeted
+                      ? 'bg-amber-400'
+                      : 'bg-emerald-400'
                   }`}
                 />
                 <span className="font-space font-bold text-[10px] uppercase tracking-wider">
-                  {opp.nickname}
+                  {!seat.isAlive ? `💀 [CHẾT] ${seat.nickname}` : seat.nickname}
                 </span>
-                {opp.votes > 0 && (
-                  <span className="px-1.5 py-0.2 rounded bg-red-600 text-white font-mono font-bold text-[9px]">
-                    {opp.votes} PHIẾU
+
+                {/* Vote Counter Badge */}
+                {seat.votes > 0 && seat.isAlive && (
+                  <span className="px-1.5 py-0.2 rounded bg-red-600 text-white font-mono font-black text-[9px] shadow animate-pulse">
+                    🔥 {seat.votes} PHIẾU
                   </span>
                 )}
               </div>
@@ -1146,194 +1039,6 @@ export function LiarsBar3DExperience({
           </div>
         );
       })}
-
-      {/* 3. FPS AIMING RETICLE */}
-      {isAimingGun && (
-        <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none z-30 flex items-center justify-center">
-          <div className="w-10 h-10 rounded-full border-2 border-red-500/90 flex items-center justify-center shadow-[0_0_20px_rgba(239,68,68,0.9)]">
-            <div className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
-          </div>
-          <div className="absolute w-16 h-[1.5px] bg-red-500/80" />
-          <div className="absolute h-16 w-[1.5px] bg-red-500/80" />
-        </div>
-      )}
-
-      {/* 4. FLASH ON GUNSHOT */}
-      {revolverFired && (
-        <div className="fixed inset-0 z-40 bg-white/70 pointer-events-none animate-ping" />
-      )}
-
-      {/* 5. INTERACTIVE CARDS ON HAND */}
-      {!isAimingGun && (
-        <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-30 pointer-events-none flex items-end justify-center">
-          <div className="pointer-events-auto relative flex items-end -space-x-8 mb-2">
-            {handCards.map((card, idx) => {
-              const isHovered = inspectedCardId === card.id;
-              const tilt = (idx - 1.5) * 6;
-              const translateY = isHovered ? -42 : 0;
-
-              return (
-                <div
-                  key={card.id}
-                  onMouseEnter={() => {
-                    setInspectedCardId(card.id);
-                    tavernAudio.playCardFlip();
-                  }}
-                  onMouseLeave={() => setInspectedCardId(null)}
-                  onClick={() => handlePlayCardToTable(card)}
-                  className="relative cursor-pointer transition-all duration-300 ease-out group"
-                  style={{
-                    transform: `translateY(${translateY}px) rotate(${tilt}deg) scale(${
-                      isHovered ? 1.18 : 1
-                    })`,
-                    transformOrigin: 'bottom center',
-                    zIndex: isHovered ? 60 : idx + 10,
-                  }}
-                >
-                  <div
-                    className={`w-32 h-48 rounded-2xl p-2.5 border flex flex-col justify-between backdrop-blur-xl transition-all shadow-2xl ${
-                      isHovered
-                        ? 'bg-gradient-to-t from-amber-950 via-slate-900 to-amber-900/95 border-amber-400 shadow-[0_0_35px_rgba(245,158,11,0.7)]'
-                        : 'bg-gradient-to-t from-slate-950/95 via-slate-900/95 to-slate-800/90 border-slate-700/80 text-slate-300'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between text-[10px] font-space font-bold uppercase text-amber-400">
-                      <span>{card.type}</span>
-                      <span>{card.icon}</span>
-                    </div>
-
-                    <div className="text-center my-auto">
-                      <span className="text-3xl block group-hover:scale-125 transition-transform">
-                        {card.icon}
-                      </span>
-                      <span className="font-space font-bold text-xs uppercase tracking-wider block mt-1.5 text-white">
-                        {card.name}
-                      </span>
-                      <span className="text-[9px] font-mono text-amber-300/80 block mt-0.5">
-                        {card.sub}
-                      </span>
-                    </div>
-
-                    <div className="text-center">
-                      <span className="text-[8px] font-geist text-slate-400 block group-hover:text-amber-300">
-                        {isHovered ? 'CLICK ĐỂ ĐÁNH BÀI' : card.desc}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* 6. BOTTOM CONTROLS & WEAPON ACTIONS */}
-      <div className="absolute bottom-4 right-6 z-40 pointer-events-auto flex items-center gap-2.5">
-        {/* Nút Cò Súng Nga */}
-        <button
-          onClick={() => {
-            tavernAudio.playCylinderSpin();
-            setRouletteOpen(true);
-          }}
-          className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-red-950 to-stone-900 border border-red-500/80 hover:border-red-400 text-red-200 hover:text-white font-space font-bold text-[11px] uppercase tracking-wider flex items-center gap-1.5 shadow-[0_0_20px_rgba(220,38,38,0.4)] transition-all hover:scale-105 active:scale-95"
-        >
-          <span>🎲</span>
-          <span>CÒ SÚNG NGA (1/6)</span>
-        </button>
-
-        {/* Nút Rút / Hạ Súng [R] */}
-        <button
-          onClick={() => {
-            tavernAudio.playGunCock();
-            setIsAimingGun((prev) => !prev);
-          }}
-          className={`px-5 py-2.5 rounded-xl border font-space font-bold text-[11px] uppercase tracking-wider flex items-center gap-1.5 shadow-2xl transition-all hover:scale-105 active:scale-95 ${
-            isAimingGun
-              ? 'bg-red-600 border-red-400 text-white shadow-[0_0_30px_rgba(239,68,68,0.8)] animate-pulse'
-              : 'bg-stone-900/90 border-amber-500/80 text-amber-300 hover:border-amber-400 hover:bg-stone-800'
-          }`}
-        >
-          <span>🔫</span>
-          <span>{isAimingGun ? 'HẠ SÚNG [R]' : 'RÚT SÚNG [R]'}</span>
-        </button>
-      </div>
-
-      {/* 7. RUSSIAN ROULETTE MODAL */}
-      {rouletteOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-fadeIn">
-          <div className="relative w-full max-w-md bg-stone-950 border border-red-600/80 rounded-2xl p-6 shadow-[0_0_60px_rgba(220,38,38,0.5)] text-center font-geist">
-            <h3 className="font-space font-black text-xl text-red-400 tracking-wider uppercase mb-1">
-              🎲 CÒ QUAY NGA — RUSSIAN ROULETTE
-            </h3>
-            <p className="text-xs text-slate-400 mb-6">
-              Ổ đạn 6 lỗ có đúng 1 viên đạn. Thử vận may của bạn!
-            </p>
-
-            <div className="relative w-44 h-44 mx-auto mb-6 flex items-center justify-center">
-              <div className="w-36 h-36 rounded-full bg-stone-900 border-2 border-stone-700 flex items-center justify-center relative">
-                {[1, 2, 3, 4, 5, 6].map((slot) => {
-                  const ang = ((slot - 1) / 6) * Math.PI * 2;
-                  const x = Math.sin(ang) * 45;
-                  const y = -Math.cos(ang) * 45;
-                  const isCurrent = slot === chamberSlot;
-
-                  return (
-                    <div
-                      key={slot}
-                      className={`absolute w-7 h-7 rounded-full border flex items-center justify-center text-xs font-space font-bold transition-all ${
-                        isCurrent
-                          ? 'bg-red-600 border-red-300 text-white scale-125 shadow-[0_0_15px_rgba(239,68,68,1)]'
-                          : 'bg-stone-800 border-stone-600 text-slate-400'
-                      }`}
-                      style={{ transform: `translate(${x}px, ${y}px)` }}
-                    >
-                      {slot}
-                    </div>
-                  );
-                })}
-                <span className="text-2xl">💀</span>
-              </div>
-            </div>
-
-            {rouletteResult && (
-              <div
-                className={`p-3 rounded-xl mb-4 font-space font-bold text-sm uppercase ${
-                  rouletteResult.includes('BANG')
-                    ? 'bg-red-950/90 border border-red-500 text-red-200 animate-bounce'
-                    : 'bg-emerald-950/90 border border-emerald-500 text-emerald-200'
-                }`}
-              >
-                {rouletteResult}
-              </div>
-            )}
-
-            <div className="flex gap-3 justify-center">
-              <button
-                onClick={() => {
-                  tavernAudio.playCylinderSpin();
-                  setChamberSlot((prev) => (prev % 6) + 1);
-                  setRouletteResult(null);
-                }}
-                className="px-4 py-2.5 rounded-xl bg-stone-800 hover:bg-stone-700 border border-stone-600 text-slate-200 font-space text-xs font-bold uppercase transition-all"
-              >
-                🔄 XOAY Ổ ĐẠN [F]
-              </button>
-              <button
-                onClick={handlePullRouletteTrigger}
-                className="px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-space text-xs font-bold uppercase tracking-wider transition-all shadow-[0_0_20px_rgba(239,68,68,0.7)]"
-              >
-                💥 BÓP CÒ
-              </button>
-              <button
-                onClick={() => setRouletteOpen(false)}
-                className="px-4 py-2.5 rounded-xl bg-stone-900 hover:bg-stone-800 border border-stone-700 text-slate-400 font-space text-xs font-bold uppercase"
-              >
-                ĐÓNG
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

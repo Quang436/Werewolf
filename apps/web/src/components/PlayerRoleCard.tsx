@@ -106,214 +106,213 @@ export const PlayerRoleCard: React.FC<PlayerRoleCardProps> = ({
   return (
     <>
       {/* =========================================================================
-          1. DOCKED INTERACTIVE 3D ROLE CARD WIDGET (BOTTOM LEFT HUD)
+          1. DOCKED COMPACT ROLE BADGE (WHEN HIDDEN - FREES UP 90% SCREEN SPACE)
          ========================================================================= */}
-      <div className="relative group select-none pointer-events-auto">
-        {/* Glow Aura behind card */}
-        <div
-          className={`absolute -inset-2 rounded-2xl blur-xl opacity-60 transition-all duration-500 pointer-events-none ${
-            isCardRevealed ? visuals.glowColor : 'shadow-[0_0_15px_rgba(255,255,255,0.15)]'
-          }`}
-          style={{ background: isCardRevealed ? visuals.auraColor : 'rgba(0,0,0,0.5)' }}
-        />
-
-        {/* 3D Card Flip Perspective Container */}
-        <div
-          className="relative w-64 md:w-72 h-[340px] cursor-pointer"
-          style={{ perspective: '1000px' }}
-          onClick={() => {
-            werewolfAudio.playVoteStamp();
-            onToggleReveal();
-          }}
-          title="Click hoặc nhấn [C] để Lật / Ẩn lá bài chống nhìn lén"
-        >
-          <div
-            className="w-full h-full relative transition-transform duration-700 ease-out"
-            style={{
-              transformStyle: 'preserve-3d',
-              transform: isCardRevealed ? 'rotateY(0deg)' : 'rotateY(180deg)',
+      {!isCardRevealed && (
+        <div className="relative select-none pointer-events-auto animate-fadeIn">
+          <button
+            type="button"
+            onClick={() => {
+              werewolfAudio.playCardDeal();
+              onToggleReveal();
             }}
+            className="group flex items-center gap-2.5 px-3.5 py-2 rounded-2xl bg-zinc-950/90 hover:bg-zinc-900 border border-amber-500/50 shadow-[0_0_20px_rgba(0,0,0,0.8)] hover:shadow-[0_0_25px_rgba(245,158,11,0.5)] backdrop-blur-md transition-all duration-200 transform hover:scale-105 active:scale-95 cursor-pointer"
+            title="Mở lá bài để xem chi tiết vai trò [C]"
           >
-            {/* =============================================================
-                CARD FRONT: 100% COMPLETE UNCROPPED ARTWORK, TITLE, ABILITIES
-               ============================================================= */}
-            <div
-              className={`absolute inset-0 rounded-2xl overflow-hidden border-2 ${visuals.cardBorder} bg-[#0b0f17] shadow-2xl flex flex-col justify-between`}
-              style={{
-                backfaceVisibility: 'hidden',
-                WebkitBackfaceVisibility: 'hidden',
-              }}
-            >
-              {/* Top Banner Image with 100% Complete Uncropped Artwork */}
-              <div className="relative h-44 w-full overflow-hidden bg-black/85 flex items-center justify-center p-2 border-b border-white/10">
-                <img
-                  src={roleInfo.image}
-                  alt={roleInfo.nameVN}
-                  className="max-w-full max-h-full object-contain filter drop-shadow-[0_4px_10px_rgba(0,0,0,0.9)] rounded-md transition-transform duration-300 group-hover:scale-105"
-                />
-
-                {/* Top Badges */}
-                <div className="absolute top-2 inset-x-2 flex items-center justify-between pointer-events-none">
-                  <div
-                    className={`flex items-center gap-1 px-2.5 py-0.5 rounded-full ${visuals.badgeBg} border ${visuals.badgeBorder} backdrop-blur-md shadow-md`}
-                  >
-                    <span className="text-xs">{visuals.sealEmoji}</span>
-                    <span className={`text-[10px] font-black uppercase font-display tracking-wider ${visuals.badgeText}`}>
-                      {visuals.teamLabel}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-1 bg-black/80 backdrop-blur-md px-2 py-0.5 rounded-full border border-white/10 text-[10px] font-mono text-amber-300">
-                    <span>{roleInfo.points}</span>
-                  </div>
-                </div>
-
-                {/* Alive / Dead status watermark */}
-                {!isAlive && (
-                  <div className="absolute inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center">
-                    <span className="px-3 py-1 bg-red-950 border border-red-500 rounded-lg text-red-200 font-display font-black text-xs uppercase tracking-widest shadow-2xl animate-pulse">
-                      💀 ĐÃ HI SINH
-                    </span>
-                  </div>
-                )}
+            <div className="w-8 h-8 rounded-xl overflow-hidden border border-amber-400/60 bg-black/80 flex items-center justify-center shrink-0 shadow">
+              <img
+                src={roleInfo.image}
+                alt={roleInfo.nameVN}
+                className="w-full h-full object-cover object-top filter drop-shadow"
+              />
+            </div>
+            <div className="flex flex-col text-left">
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-display font-black text-amber-300 uppercase tracking-wide group-hover:text-amber-200">
+                  {roleInfo.nameVN}
+                </span>
+                <span
+                  className={`text-[9px] font-mono px-1.5 py-0.2 rounded-full ${visuals.badgeBg} ${visuals.badgeBorder} ${visuals.badgeText} border font-bold`}
+                >
+                  {roleInfo.categoryLabel}
+                </span>
               </div>
+              <span className="text-[10px] font-mono text-stone-400 flex items-center gap-1">
+                <span>👁️ Mở lá bài</span>
+                <kbd className="text-[8px] bg-black/60 px-1 py-0.2 rounded border border-white/10 text-amber-300 font-bold">
+                  [C]
+                </kbd>
+              </span>
+            </div>
+          </button>
+        </div>
+      )}
 
-              {/* Middle Section: Title & Role Identity */}
-              <div className="px-3.5 py-1 relative z-10 flex-1 flex flex-col justify-center">
-                <div className="flex items-baseline justify-between">
-                  <div className="truncate pr-1">
-                    <h3 className={`font-display font-black text-base md:text-lg leading-tight uppercase tracking-wide truncate ${visuals.titleColor}`}>
-                      {roleInfo.nameVN}
-                    </h3>
-                    <p className="text-[10px] font-mono text-stone-400 uppercase tracking-wider truncate">
-                      {roleInfo.nameEN}
-                    </p>
-                  </div>
+      {/* 2. DOCKED FULL ROLE CARD (WHEN REVEALED) */}
+      {isCardRevealed && (
+        <div className="relative group select-none pointer-events-auto animate-fadeIn">
+          {/* Glow Aura behind card */}
+          <div
+            className={`absolute -inset-2 rounded-2xl blur-xl opacity-60 transition-all duration-500 pointer-events-none ${visuals.glowColor}`}
+            style={{ background: visuals.auraColor }}
+          />
 
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-900 border border-white/10 text-stone-300 font-mono shrink-0">
-                    {roleInfo.time}
+          <div className={`relative w-64 md:w-72 h-[340px] rounded-2xl overflow-hidden border-2 ${visuals.cardBorder} bg-[#0b0f17] shadow-2xl flex flex-col justify-between`}>
+            {/* Top Banner Image with 100% Complete Uncropped Artwork */}
+            <div className="relative h-44 w-full overflow-hidden bg-black/85 flex items-center justify-center p-2 border-b border-white/10">
+              <img
+                src={roleInfo.image}
+                alt={roleInfo.nameVN}
+                className="max-w-full max-h-full object-contain filter drop-shadow-[0_4px_10px_rgba(0,0,0,0.9)] rounded-md transition-transform duration-300 group-hover:scale-105"
+              />
+
+              {/* Top Badges & Hide Button */}
+              <div className="absolute top-2 inset-x-2 flex items-center justify-between">
+                <div
+                  className={`flex items-center gap-1 px-2.5 py-0.5 rounded-full ${visuals.badgeBg} border ${visuals.badgeBorder} backdrop-blur-md shadow-md pointer-events-none`}
+                >
+                  <span className="text-xs">{visuals.sealEmoji}</span>
+                  <span className={`text-[10px] font-black uppercase font-display tracking-wider ${visuals.badgeText}`}>
+                    {visuals.teamLabel}
                   </span>
                 </div>
 
-                {/* Ability snippet */}
-                <p className="text-[11px] text-slate-300 line-clamp-2 mt-1 leading-snug font-sans">
-                  {roleInfo.desc}
-                </p>
-
-                {/* Extra badge if Werewolf Pack or Lovers */}
-                {roleInfo.category === 'werewolf' && wolfTeammates.length > 0 && (
-                  <div className="mt-1 px-2 py-0.5 bg-red-950/80 border border-red-500/40 rounded flex items-center gap-1.5 text-[10px] text-red-300">
-                    <span>🐺</span>
-                    <span className="font-bold">Đồng đội:</span>
-                    <span className="truncate">
-                      {wolfTeammates.map((w) => w.nickname).join(', ')}
-                    </span>
+                <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1 bg-black/80 backdrop-blur-md px-2 py-0.5 rounded-full border border-white/10 text-[10px] font-mono text-amber-300 pointer-events-none">
+                    <span>{roleInfo.points}</span>
                   </div>
-                )}
 
-                {lover && (
-                  <div className="mt-1 px-2 py-0.5 bg-rose-950/80 border border-rose-500/40 rounded flex items-center gap-1.5 text-[10px] text-rose-300">
-                    <span>💘</span>
-                    <span className="font-bold">Người yêu:</span>
-                    <span className="truncate">{lover.partnerNickname}</span>
-                  </div>
-                )}
-              </div>
-
-              {/* Bottom Quick Controls & Actions */}
-              <div className="p-2 bg-black/80 border-t border-white/10 flex items-center justify-between gap-1">
-                {onOpenCenterReveal && (
+                  {/* Hide / Minimize Button */}
                   <button
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
                       werewolfAudio.playVoteStamp();
-                      onOpenCenterReveal();
+                      onToggleReveal();
                     }}
-                    className="py-1 px-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-amber-500/40 text-amber-300 hover:text-white text-[10px] font-bold font-display uppercase tracking-wider flex items-center gap-1 transition"
-                    title="Phóng to lá bài lên trung tâm màn hình"
+                    className="w-6 h-6 rounded-full bg-black/80 hover:bg-zinc-800 border border-white/20 hover:border-amber-400 text-stone-300 hover:text-white flex items-center justify-center transition shadow cursor-pointer"
+                    title="Ẩn lá bài thu gọn [C]"
                   >
-                    <span className="material-symbols-outlined text-[13px]">fullscreen</span>
-                    <span>Xem Bài</span>
+                    <span className="material-symbols-outlined text-[14px]">expand_more</span>
                   </button>
-                )}
+                </div>
+              </div>
 
+              {/* Alive / Dead status watermark */}
+              {!isAlive && (
+                <div className="absolute inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center">
+                  <span className="px-3 py-1 bg-red-950 border border-red-500 rounded-lg text-red-200 font-display font-black text-xs uppercase tracking-widest shadow-2xl animate-pulse">
+                    💀 ĐÃ HI SINH
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Middle Section: Title & Role Identity */}
+            <div className="px-3.5 py-1 relative z-10 flex-1 flex flex-col justify-center">
+              <div className="flex items-baseline justify-between">
+                <div className="truncate pr-1">
+                  <h3 className={`font-display font-black text-base md:text-lg leading-tight uppercase tracking-wide truncate ${visuals.titleColor}`}>
+                    {roleInfo.nameVN}
+                  </h3>
+                  <p className="text-[10px] font-mono text-stone-400 uppercase tracking-wider truncate">
+                    {roleInfo.nameEN}
+                  </p>
+                </div>
+
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-900 border border-white/10 text-stone-300 font-mono shrink-0">
+                  {roleInfo.time}
+                </span>
+              </div>
+
+              {/* Ability snippet */}
+              <p className="text-[11px] text-slate-300 line-clamp-2 mt-1 leading-snug font-sans">
+                {roleInfo.desc}
+              </p>
+
+              {/* Extra badge if Werewolf Pack or Lovers */}
+              {roleInfo.category === 'werewolf' && wolfTeammates.length > 0 && (
+                <div className="mt-1 px-2 py-0.5 bg-red-950/80 border border-red-500/40 rounded flex items-center gap-1.5 text-[10px] text-red-300">
+                  <span>🐺</span>
+                  <span className="font-bold">Đồng đội:</span>
+                  <span className="truncate">
+                    {wolfTeammates.map((w) => w.nickname).join(', ')}
+                  </span>
+                </div>
+              )}
+
+              {lover && (
+                <div className="mt-1 px-2 py-0.5 bg-rose-950/80 border border-rose-500/40 rounded flex items-center gap-1.5 text-[10px] text-rose-300">
+                  <span>💘</span>
+                  <span className="font-bold">Người yêu:</span>
+                  <span className="truncate">{lover.partnerNickname}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Bottom Quick Controls & Actions */}
+            <div className="p-2 bg-black/80 border-t border-white/10 flex items-center justify-between gap-1">
+              {onOpenCenterReveal && (
                 <button
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
-                    werewolfAudio.playBell();
-                    setIsDetailModalOpen(true);
+                    werewolfAudio.playVoteStamp();
+                    onOpenCenterReveal();
                   }}
-                  className="flex-1 py-1 px-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-stone-300 hover:text-white text-[10px] font-bold font-display uppercase tracking-wider flex items-center justify-center gap-1 transition"
+                  className="py-1 px-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-amber-500/40 text-amber-300 hover:text-white text-[10px] font-bold font-display uppercase tracking-wider flex items-center gap-1 transition"
+                  title="Phóng to lá bài lên trung tâm màn hình"
                 >
-                  <span className="material-symbols-outlined text-[13px] text-amber-400">menu_book</span>
-                  <span>Sổ Tay</span>
+                  <span className="material-symbols-outlined text-[13px]">fullscreen</span>
+                  <span>Xem Bài</span>
                 </button>
+              )}
 
-                {onSelectRoleTest && (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      werewolfAudio.playVoteStamp();
-                      setIsRolePickerOpen(true);
-                    }}
-                    className="py-1 px-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-amber-400 hover:text-amber-300 text-[10px] font-bold font-mono flex items-center gap-0.5 transition"
-                    title="Đổi thử vai khác (Dành cho kiểm thử)"
-                  >
-                    <span>🎴 Đổi</span>
-                  </button>
-                )}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  werewolfAudio.playBell();
+                  setIsDetailModalOpen(true);
+                }}
+                className="flex-1 py-1 px-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-stone-300 hover:text-white text-[10px] font-bold font-display uppercase tracking-wider flex items-center justify-center gap-1 transition"
+              >
+                <span className="material-symbols-outlined text-[13px] text-amber-400">menu_book</span>
+                <span>Sổ Tay</span>
+              </button>
 
-                <div
-                  className="px-1.5 py-1 rounded-lg bg-zinc-900/90 border border-white/10 text-[9px] font-mono text-stone-400 flex items-center gap-0.5"
-                  title="Nhấn C hoặc click bài để úp bài"
+              {onSelectRoleTest && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    werewolfAudio.playVoteStamp();
+                    setIsRolePickerOpen(true);
+                  }}
+                  className="py-1 px-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-amber-400 hover:text-amber-300 text-[10px] font-bold font-mono flex items-center gap-0.5 transition"
+                  title="Đổi thử vai khác (Dành cho kiểm thử)"
                 >
-                  <span className="material-symbols-outlined text-[11px] text-emerald-400">visibility</span>
-                  <span className="font-bold text-emerald-400">[C]</span>
-                </div>
-              </div>
-            </div>
+                  <span>🎴 Đổi</span>
+                </button>
+              )}
 
-            {/* =============================================================
-                CARD BACK: VINTAGE NOIR WATERMARK SEAL (ANTI-PEEK MODE)
-               ============================================================= */}
-            <div
-              className="absolute inset-0 rounded-2xl overflow-hidden border-2 border-amber-600/60 bg-[#0a0d14] shadow-2xl flex flex-col items-center justify-between p-4"
-              style={{
-                backfaceVisibility: 'hidden',
-                WebkitBackfaceVisibility: 'hidden',
-                transform: 'rotateY(180deg)',
-              }}
-            >
-              {/* Top Seal Badge */}
-              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-950/80 border border-amber-500/50 text-[10px] font-mono text-amber-300 uppercase tracking-widest">
-                <span>🛡️ BẢO VỆ DANH TÍNH</span>
-              </div>
-
-              {/* Mystic Werewolf Emblem */}
-              <div className="relative flex flex-col items-center justify-center my-auto">
-                <div className="w-24 h-24 rounded-full border-2 border-dashed border-amber-500/40 flex items-center justify-center bg-black/60 shadow-[0_0_30px_rgba(217,119,6,0.3)] animate-pulse">
-                  <span className="text-5xl">🐺</span>
-                </div>
-                <h4 className="mt-3 font-display font-black text-sm uppercase tracking-widest text-amber-400 neon-text-red">
-                  LÁ BÀI ĐANG ẨN
-                </h4>
-                <p className="text-[10px] font-mono text-stone-400 text-center max-w-[180px] mt-1">
-                  Đã kích hoạt chế độ chống nhìn lén. Click hoặc nhấn phím <kbd className="text-amber-300 font-bold">[C]</kbd> để mở bài.
-                </p>
-              </div>
-
-              {/* Bottom hint */}
-              <div className="text-[9px] font-mono text-stone-500 uppercase tracking-wider flex items-center gap-1">
-                <span className="material-symbols-outlined text-[12px]">lock</span>
-                <span>LIAR&apos;S BAR COUNCIL &bull; CONFIDENTIAL</span>
-              </div>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  werewolfAudio.playVoteStamp();
+                  onToggleReveal();
+                }}
+                className="px-2 py-1 rounded-lg bg-zinc-900/90 hover:bg-zinc-800 border border-amber-500/40 hover:border-amber-400 text-[10px] font-mono text-amber-300 hover:text-white flex items-center gap-1 transition shadow cursor-pointer"
+                title="Ẩn lá bài thu gọn vào góc màn hình [C]"
+              >
+                <span className="material-symbols-outlined text-[12px] text-amber-400">visibility_off</span>
+                <span className="font-bold">Ẩn [C]</span>
+              </button>
             </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* =========================================================================
           2. FULL ROLE DETAILS, LORE & TACTICAL MANUAL MODAL

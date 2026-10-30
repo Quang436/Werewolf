@@ -99,8 +99,11 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
         werewolfAudio.playVoteStamp();
         onEmitAction('day:vote', { targetId: 'SKIP' });
       } else if (e.code === 'KeyC') {
-        setIsCenterRevealOpen((prev) => !prev);
-        store.toggleCardReveal();
+        if (isCenterRevealOpen) {
+          setIsCenterRevealOpen(false);
+        } else {
+          store.toggleCardReveal();
+        }
         werewolfAudio.playCardDeal();
       }
     };

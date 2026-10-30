@@ -27,8 +27,9 @@ export const CenterRoleRevealModal: React.FC<CenterRoleRevealModalProps> = ({
   onClose,
   onOpenTacticalBook,
 }) => {
+  const [hasEntered, setHasEntered] = useState(false);
   const [isFlipped, setIsFlipped] = useState(false);
-  const [countdown, setCountdown] = useState(12);
+  const [countdown, setCountdown] = useState(30);
 
   const onCloseRef = useRef(onClose);
   useEffect(() => {
@@ -39,22 +40,34 @@ export const CenterRoleRevealModal: React.FC<CenterRoleRevealModalProps> = ({
   const roleExtra = getRoleDetailExtra(role);
   const visuals = getFactionVisuals(roleInfo.category);
 
-  // Trigger dramatic 3D card flip once when modal opens
+  // Cinematic 3-Stage Entrance & Slow Majestic Flip Sequence
   useEffect(() => {
     if (!isOpen) {
+      setHasEntered(false);
       setIsFlipped(false);
       return;
     }
 
+    setHasEntered(false);
     setIsFlipped(false);
-    setCountdown(12);
+    setCountdown(30);
 
-    // Play card deal sound initially
+    // Initial audio cue: card swoosh as it rises up into view
     werewolfAudio.playCardDeal();
 
-    // Flip card after 350ms
+    // Stage 1: Card rises smoothly from bottom / table into the center
+    const enterTimer = setTimeout(() => {
+      setHasEntered(true);
+    }, 60);
+
+    // Stage 2: Card begins slow & majestic 3D flip rotation (1.2s duration)
     const flipTimer = setTimeout(() => {
       setIsFlipped(true);
+      werewolfAudio.playVoteStamp();
+    }, 850);
+
+    // Stage 3: Play faction ambient chime (wolf howl / bell / whisper) mid-flip
+    const soundTimer = setTimeout(() => {
       const cat = getRoleInfo(role).category;
       if (cat === 'werewolf') {
         werewolfAudio.playWolfHowl();
@@ -63,14 +76,16 @@ export const CenterRoleRevealModal: React.FC<CenterRoleRevealModalProps> = ({
       } else {
         werewolfAudio.playBell();
       }
-    }, 350);
+    }, 1450);
 
     return () => {
+      clearTimeout(enterTimer);
       clearTimeout(flipTimer);
+      clearTimeout(soundTimer);
     };
   }, [isOpen, role]);
 
-  // 12s countdown ticker (pure state update, NO side effects during state update!)
+  // 30s countdown ticker (pure state update, NO side effects during state update!)
   useEffect(() => {
     if (!isOpen) return;
 
@@ -106,7 +121,7 @@ export const CenterRoleRevealModal: React.FC<CenterRoleRevealModalProps> = ({
   return (
     <div
       onClick={() => onCloseRef.current()}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-xl p-4 animate-fadeIn pointer-events-auto select-none"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-fadeIn pointer-events-auto select-none"
     >
       {/* Background Ambience Particles / Glow */}
       <div
@@ -129,20 +144,27 @@ export const CenterRoleRevealModal: React.FC<CenterRoleRevealModalProps> = ({
           ✕
         </button>
 
-        {/* Top Announcement Tag */}
-        <div className="mb-3 text-center">
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-zinc-900/90 border border-amber-500/50 shadow-[0_0_20px_rgba(245,158,11,0.4)]">
+        {/* Top Announcement Tag with Countdown */}
+        <div className="mb-3 text-center flex flex-col items-center gap-1">
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-zinc-900/95 border border-amber-500/50 shadow-[0_0_20px_rgba(245,158,11,0.4)]">
             <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
             <span className="text-xs font-display font-black text-amber-300 uppercase tracking-widest">
               LÁ BÀI VAI TRÒ CỦA BẠN
             </span>
           </div>
+          <span className="text-[10px] font-mono text-stone-400">
+            Tự động thu gọn sau <span className="text-amber-400 font-bold">{countdown}s</span> &bull; Bấm [✕] hoặc [C] để thu gọn
+          </span>
         </div>
 
-        {/* 3D Flipping Grand Card Container */}
+        {/* 3D Flipping Grand Card Container with Slow Majestic Rise and Flip */}
         <div
-          className="relative w-[340px] md:w-[380px] h-[520px] md:h-[550px] cursor-pointer"
-          style={{ perspective: '1200px' }}
+          className="relative w-[340px] md:w-[380px] h-[520px] md:h-[550px] cursor-pointer transition-all duration-1000 ease-out"
+          style={{
+            perspective: '1400px',
+            transform: hasEntered ? 'translateY(0) scale(1)' : 'translateY(100px) scale(0.70)',
+            opacity: hasEntered ? 1 : 0,
+          }}
           onClick={() => {
             setIsFlipped((prev) => !prev);
             werewolfAudio.playVoteStamp();
@@ -150,9 +172,10 @@ export const CenterRoleRevealModal: React.FC<CenterRoleRevealModalProps> = ({
           title="Click để lật mở / lật úp lá bài"
         >
           <div
-            className="w-full h-full relative transition-transform duration-700 ease-out"
+            className="w-full h-full relative transition-transform duration-[1200ms]"
             style={{
               transformStyle: 'preserve-3d',
+              transitionTimingFunction: 'cubic-bezier(0.25, 0.1, 0.25, 1)',
               transform: isFlipped ? 'rotateY(0deg)' : 'rotateY(180deg)',
             }}
           >

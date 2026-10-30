@@ -485,52 +485,18 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
         </div>
       </header>
 
-      {/* 2.5. GRAND CINEMATIC 5.0S DEALING SEQUENCE OVERLAY */}
-      {isDealingSequence && (
-        <div className="absolute inset-0 z-50 pointer-events-none flex flex-col items-center justify-center bg-black/60 backdrop-blur-[3px] transition-all duration-300 animate-fadeIn">
-          <div className="flex flex-col items-center gap-3.5 bg-gradient-to-b from-zinc-900/95 via-black/95 to-zinc-950/95 border-2 border-amber-500/80 px-8 py-6 rounded-3xl shadow-[0_0_60px_rgba(245,158,11,0.65)] max-w-lg text-center pointer-events-auto">
-            {/* Animated Dealing Icon */}
-            <div className="relative">
-              <div className="w-16 h-16 rounded-2xl bg-amber-500/20 border border-amber-400 flex items-center justify-center text-4xl shadow-[0_0_25px_rgba(245,158,11,0.6)] animate-bounce">
-                🎴
-              </div>
-              <span className="absolute -top-1 -right-1 w-4 h-4 bg-amber-400 rounded-full animate-ping" />
-            </div>
-
-            <div className="flex flex-col gap-1">
-              <h3 className="font-display font-black text-xl text-amber-200 tracking-wider uppercase drop-shadow-[0_2px_10px_rgba(0,0,0,0.8)]">
-                QUẢN TRÒ ĐANG PHÁT BÀI ĐỊNH MỆNH
-              </h3>
-              <p className="font-sans text-xs text-stone-300 max-w-sm leading-relaxed">
-                Các lá bài bí mật đang lần lượt bay đến vị trí của <span className="text-amber-400 font-bold">{activePlayers.length} thành viên</span> tại bàn Hội Đồng...
-              </p>
-            </div>
-
-            {/* Glowing Dealing Progress Bar (5.0s animation) */}
-            <div className="w-full bg-zinc-800/90 h-2.5 rounded-full overflow-hidden border border-amber-500/40 mt-1 shadow-inner">
-              <div
-                className="h-full bg-gradient-to-r from-amber-600 via-amber-300 to-amber-500 rounded-full shadow-[0_0_15px_rgba(245,158,11,0.9)]"
-                style={{
-                  animation: 'dealingProgress 5s cubic-bezier(0.2, 0, 0.4, 1) forwards',
-                }}
-              />
-            </div>
-
-            <div className="flex items-center justify-between w-full text-[10px] font-mono text-amber-400/90 px-1 font-bold">
-              <span>🐺 LIAR&apos;S BAR • MA SÓI</span>
-              <span>ĐANG PHÁT BÀI... 5.0S</span>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Floating Status Pill when not in dealing sequence */}
-      {!isDealingSequence && dealNotification && (
-        <div className="absolute top-14 left-1/2 -translate-x-1/2 z-40 bg-gradient-to-r from-amber-950 via-zinc-950 to-amber-950 border-2 border-amber-500/80 px-6 py-2 rounded-2xl shadow-[0_0_35px_rgba(245,158,11,0.7)] flex items-center gap-3 animate-fadeIn">
-          <span className="text-xl animate-bounce">🎴</span>
-          <span className="text-xs font-display font-black text-amber-200 tracking-wide uppercase">
-            {dealNotification}
+      {/* Discreet Top Status Pill during dealing (Clean & Unobstructed 3D Table View) */}
+      {(isDealingSequence || dealNotification) && (
+        <div className="absolute top-14 left-1/2 -translate-x-1/2 z-40 bg-zinc-950/85 backdrop-blur-md border border-amber-500/50 px-5 py-1.5 rounded-full shadow-[0_0_20px_rgba(245,158,11,0.35)] flex items-center gap-2.5 animate-fadeIn pointer-events-none">
+          <span className="text-base animate-bounce">🎴</span>
+          <span className="text-[11px] font-display font-bold text-amber-200 tracking-wider uppercase">
+            {isDealingSequence
+              ? `Quản Trò đang chia bài cho ${activePlayers.length} thành viên Hội Đồng...`
+              : dealNotification}
           </span>
+          {isDealingSequence && (
+            <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping ml-1" />
+          )}
         </div>
       )}
 

@@ -386,6 +386,7 @@ export interface LiarsBar3DProps {
   setIsPov2?: (v: boolean | ((p: boolean) => boolean)) => void;
   selectedTargetId?: string | null;
   isDealing?: boolean;
+  hasDealtCards?: boolean;
   onAimAtPlayer?: (targetId: string, nickname: string) => void;
   onSelectTarget?: (targetId: string, nickname: string) => void;
   onShootPlayer?: (targetId: string, nickname: string) => void; // Keep for backward compatibility
@@ -408,6 +409,7 @@ export function LiarsBar3DExperience({
   setIsPov2,
   selectedTargetId,
   isDealing = false,
+  hasDealtCards = false,
   onAimAtPlayer,
   onSelectTarget,
   onShootPlayer,
@@ -547,6 +549,11 @@ export function LiarsBar3DExperience({
   useEffect(() => {
     isDealingRef.current = isDealing;
   }, [isDealing]);
+
+  const hasDealtRef = useRef(hasDealtCards);
+  useEffect(() => {
+    hasDealtRef.current = hasDealtCards;
+  }, [hasDealtCards]);
 
   const threeRef = useRef<{
     renderer: THREE.WebGLRenderer;
@@ -850,6 +857,8 @@ export function LiarsBar3DExperience({
       card.rotation.y = targetRotY;
       card.castShadow = true;
       card.receiveShadow = true;
+      // Start hidden if cards have not been dealt yet
+      card.visible = hasDealtRef.current;
       tableGroup.add(card);
 
       seatCards.push({
@@ -1055,38 +1064,56 @@ export function LiarsBar3DExperience({
         char.root.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), 0.12);
       });
 
-      // 4.5. Card Dealing Flight Animation across Council Table
+      // 4.5. Card Dealing Flight Animation across Council Table (Slow, Majestic & Smooth ~3.5s)
       if (isDealingRef.current) {
         if (dealStartTime === null) {
           dealStartTime = t;
         }
         const dealElapsed = t - dealStartTime;
+        const totalDealTime = 3.2; // 3.2s total flight window
+        const flightDuration = 0.85; // 0.85s per card smooth flight
+
         seatCards.forEach(({ mesh, targetPos, targetRotY, seatIdx }) => {
-          const cardDelay = (seatIdx / totalSeats) * 0.7;
-          const progress = Math.min(1, Math.max(0, (dealElapsed - cardDelay) / 0.45));
-          if (progress <= 0) {
-            mesh.position.set(0, 1.08, 0);
-            mesh.scale.set(0.01, 0.01, 0.01);
-          } else if (progress < 1) {
-            const ease = 1 - Math.pow(1 - progress, 3);
+          // Stagger card launch times sequentially around the table
+          const cardLaunchTime = (seatIdx / totalSeats) * (totalDealTime - flightDuration);
+          const elapsed = dealElapsed - cardLaunchTime;
+
+          if (elapsed <= 0) {
+            mesh.visible = false;
+            mesh.position.set(0, 1.06, 0);
+            mesh.scale.set(0.001, 0.001, 0.001);
+          } else if (elapsed < flightDuration) {
+            mesh.visible = true;
             mesh.scale.set(1, 1, 1);
+            const progress = elapsed / flightDuration;
+            // easeOutCubic for luxurious smooth flight
+            const ease = 1 - Math.pow(1 - progress, 3);
             mesh.position.x = THREE.MathUtils.lerp(0, targetPos.x, ease);
             mesh.position.z = THREE.MathUtils.lerp(0, targetPos.z, ease);
-            mesh.position.y = THREE.MathUtils.lerp(1.10, targetPos.y, ease) + Math.sin(progress * Math.PI) * 0.28;
-            mesh.rotation.y = targetRotY + (1 - progress) * Math.PI * 2;
-            mesh.rotation.z = Math.sin(progress * Math.PI) * 0.2;
+            mesh.position.y = THREE.MathUtils.lerp(1.10, targetPos.y, ease) + Math.sin(progress * Math.PI) * 0.35;
+            mesh.rotation.y = targetRotY + (1 - progress) * Math.PI * 1.5;
+            mesh.rotation.z = Math.sin(progress * Math.PI) * 0.15;
           } else {
+            mesh.visible = true;
             mesh.scale.set(1, 1, 1);
             mesh.position.copy(targetPos);
             mesh.rotation.set(0, targetRotY, 0);
           }
         });
-      } else {
+      } else if (hasDealtRef.current) {
         dealStartTime = null;
         seatCards.forEach(({ mesh, targetPos, targetRotY }) => {
+          mesh.visible = true;
           mesh.scale.set(1, 1, 1);
           mesh.position.copy(targetPos);
           mesh.rotation.set(0, targetRotY, 0);
+        });
+      } else {
+        // When entering room or before dealing: NO cards on the table yet!
+        dealStartTime = null;
+        seatCards.forEach(({ mesh }) => {
+          mesh.visible = false;
+          mesh.scale.set(0.001, 0.001, 0.001);
         });
       }
 

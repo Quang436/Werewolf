@@ -16,10 +16,12 @@ export interface PlayerRoleCardProps {
   wolfTeammates?: Array<{ id: string; nickname: string }>;
   lover?: { partnerId: string; partnerNickname: string; partnerRole?: Role };
   isCardRevealed: boolean;
+  hasDealt?: boolean;
   onToggleReveal: () => void;
   onOpenCenterReveal?: () => void;
   onRoleAction?: (actionType: string) => void;
   onSelectRoleTest?: (role: Role) => void;
+  onDealNow?: () => void;
   isAlive?: boolean;
 }
 
@@ -29,10 +31,12 @@ export const PlayerRoleCard: React.FC<PlayerRoleCardProps> = ({
   wolfTeammates = [],
   lover,
   isCardRevealed,
+  hasDealt = true,
   onToggleReveal,
   onOpenCenterReveal,
   onRoleAction,
   onSelectRoleTest,
+  onDealNow,
   isAlive = true,
 }) => {
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
@@ -41,6 +45,63 @@ export const PlayerRoleCard: React.FC<PlayerRoleCardProps> = ({
   const roleInfo = getRoleInfo(role);
   const roleExtra = getRoleDetailExtra(role);
   const visuals = getFactionVisuals(roleInfo.category);
+
+  // When cards haven't been dealt yet, display waiting placeholder widget
+  if (!hasDealt) {
+    return (
+      <div className="relative group select-none pointer-events-auto">
+        {/* Subtle amber pulsing glow */}
+        <div className="absolute -inset-2 rounded-2xl blur-xl opacity-40 bg-amber-600/30 transition-all pointer-events-none animate-pulse" />
+
+        <div className="relative w-64 md:w-72 h-[340px] rounded-2xl overflow-hidden border-2 border-amber-500/40 bg-gradient-to-b from-[#131722] via-[#0d1017] to-black shadow-2xl flex flex-col justify-between p-4">
+          {/* Header */}
+          <div className="flex items-center justify-between pb-2 border-b border-white/10">
+            <span className="text-[10px] font-mono text-amber-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
+              <span>🛡️</span> HỘI ĐỒNG LIAR&apos;S BAR
+            </span>
+            <span className="text-[9px] font-mono bg-amber-950/80 border border-amber-500/40 text-amber-300 px-2 py-0.5 rounded-full font-bold">
+              CHƯA PHÁT BÀI
+            </span>
+          </div>
+
+          {/* Central Emblem & Waiting Message */}
+          <div className="flex flex-col items-center justify-center text-center my-auto">
+            <div className="relative w-20 h-20 rounded-2xl border border-dashed border-amber-500/50 bg-black/60 flex items-center justify-center shadow-[0_0_25px_rgba(245,158,11,0.2)] mb-3">
+              <span className="text-4xl animate-bounce">🎴</span>
+              <span className="absolute -bottom-1 -right-1 w-3 h-3 bg-amber-500 rounded-full animate-ping" />
+            </div>
+
+            <h3 className="font-display font-black text-sm uppercase tracking-wider text-amber-300 mb-1">
+              CHƯA CÓ LÁ BÀI
+            </h3>
+            <p className="text-[11px] font-mono text-stone-400 max-w-[200px] leading-relaxed">
+              Phòng đang chờ Quản Trò phát bài ngẫu nhiên cho toàn bộ thành viên.
+            </p>
+          </div>
+
+          {/* Bottom Action Prompt */}
+          <div className="pt-2 border-t border-white/10 flex flex-col gap-1.5 text-center">
+            {onDealNow && (
+              <button
+                type="button"
+                onClick={() => {
+                  werewolfAudio.playCardDeal();
+                  onDealNow();
+                }}
+                className="w-full py-2 px-3 rounded-xl bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-black font-display font-black text-[11px] uppercase tracking-wider shadow-lg shadow-amber-950/50 border border-amber-300 transition-all flex items-center justify-center gap-1.5 transform active:scale-95"
+              >
+                <span>🎴</span>
+                <span>Phát Bài Ngay</span>
+              </button>
+            )}
+            <span className="text-[9px] font-mono text-stone-500">
+              Hoặc bấm nút [Phát Bài Ngẫu Nhiên] ở thanh trên
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>

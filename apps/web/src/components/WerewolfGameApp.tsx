@@ -56,6 +56,7 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
   const [demoPhase, setDemoPhase] = useState<'DAY_VOTING' | 'NIGHT_WEREWOLVES' | 'DAY_DEFENSE'>('DAY_VOTING');
   const [isDealingSequence, setIsDealingSequence] = useState(false);
   const [isCenterRevealOpen, setIsCenterRevealOpen] = useState(false);
+  const [hasDealt, setHasDealt] = useState(false);
 
   const handleCloseCenterReveal = useCallback(() => {
     setIsCenterRevealOpen(false);
@@ -158,36 +159,57 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
     return state.assignedRole || (effectiveRoom.me?.role as Role) || 'SEER';
   }, [state.assignedRole, effectiveRoom.me?.role]);
 
+  // If entering an ongoing active game where roles are already assigned and not in lobby:
+  useEffect(() => {
+    if (state.assignedRole || (effectiveRoom.phase !== 'LOBBY' && (effectiveRoom.me as any)?.role && effectiveRoom.phase !== 'ASSIGN_ROLES')) {
+      setHasDealt(true);
+    }
+  }, [state.assignedRole, effectiveRoom.phase, effectiveRoom.me]);
+
   // Trigger dealing animation automatically when game phase enters ASSIGN_ROLES (only once per phase entry)
   const lastPhaseRef = useRef<string | null>(null);
   useEffect(() => {
     if (effectiveRoom.phase === 'ASSIGN_ROLES' && lastPhaseRef.current !== 'ASSIGN_ROLES') {
       lastPhaseRef.current = 'ASSIGN_ROLES';
       setIsDealingSequence(true);
+      setHasDealt(false);
       setIsCenterRevealOpen(false);
-      werewolfAudio.playCardDeal();
+
+      const count = activePlayers.length;
+      for (let i = 0; i < count; i++) {
+        const delay = (i / count) * 2400;
+        setTimeout(() => {
+          werewolfAudio.playCardDeal();
+        }, delay);
+      }
+
       const timer = setTimeout(() => {
         setIsDealingSequence(false);
+        setHasDealt(true);
         setIsCenterRevealOpen(true);
-      }, 1500);
+      }, 3500);
       return () => clearTimeout(timer);
     } else if (effectiveRoom.phase !== 'ASSIGN_ROLES') {
       lastPhaseRef.current = effectiveRoom.phase;
     }
-  }, [effectiveRoom.phase]);
+  }, [effectiveRoom.phase, activePlayers.length]);
 
   const handleRandomDeal = useCallback(() => {
     if (isDealingSequence) return;
     // 1. Play dealing audio and trigger 3D table card flight
     setIsDealingSequence(true);
+    setHasDealt(false);
     setIsCenterRevealOpen(false);
 
-    werewolfAudio.playCardDeal();
-    setTimeout(() => werewolfAudio.playCardDeal(), 220);
-    setTimeout(() => werewolfAudio.playCardDeal(), 450);
-    setTimeout(() => werewolfAudio.playCardDeal(), 700);
-
     const count = activePlayers.length;
+    // Play sequential card deal swooshes synchronized with 3D card flight
+    for (let i = 0; i < count; i++) {
+      const delay = (i / count) * 2400;
+      setTimeout(() => {
+        werewolfAudio.playCardDeal();
+      }, delay);
+    }
+
     const balancedDeck = generateBalancedDeck(count);
     const shuffled = shuffleArray(balancedDeck);
 
@@ -219,16 +241,17 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
       `🎴 Đang chia bài cho ${count} thành viên Hội Đồng...`
     );
 
-    // 2. After 1.5s dealing animation across table, grand reveal in center of screen
+    // 2. After 3.5s slow & smooth dealing animation across table, grand reveal in center of screen
     setTimeout(() => {
       setIsDealingSequence(false);
+      setHasDealt(true);
       setIsCenterRevealOpen(true);
 
       setDealNotification(
         `✨ Bạn nhận lá bài: ${myRoleInfo.nameVN} (${myRoleInfo.categoryLabel})`
       );
       setTimeout(() => setDealNotification(null), 4000);
-    }, 1500);
+    }, 3500);
   }, [activePlayers, isDealingSequence, myPlayerInfo?.id, store]);
 
   const isNight = effectiveRoom.phase.includes('NIGHT');
@@ -262,6 +285,7 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
         setIsPov2={setIsPov2}
         selectedTargetId={selectedTargetId}
         isDealing={isDealingSequence}
+        hasDealtCards={hasDealt}
         onAimAtPlayer={(targetId: string) => {
           // Raycast hover feedback
         }}
@@ -519,6 +543,8 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
           wolfTeammates={state.wolfTeammates}
           lover={(effectiveRoom.me as any)?.lover}
           isCardRevealed={state.isCardRevealed}
+          hasDealt={hasDealt}
+          onDealNow={handleRandomDeal}
           onToggleReveal={() => {
             store.toggleCardReveal();
             werewolfAudio.playCardDeal();
@@ -536,6 +562,7 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
               role: newRole,
               team: team as any,
             });
+            setHasDealt(true);
             werewolfAudio.playCardDeal();
           }}
           isAlive={myPlayerInfo?.isAlive}
@@ -723,18 +750,36 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
         </div>
       )}
 
-      {/* 8. DEALING ANIMATION BANNER */}
+      {/* 8. DEALING ANIMATION BANNER (3.5S SMOOTH PROGRESSION) */}
       {isDealingSequence && (
-        <div className="fixed inset-0 z-40 pointer-events-none flex flex-col items-center justify-center bg-black/40 backdrop-blur-[2px] animate-fadeIn">
-          <div className="bg-zinc-950/95 border-2 border-amber-500/90 px-6 py-3.5 rounded-2xl shadow-[0_0_50px_rgba(245,158,11,0.6)] flex items-center gap-3.5 animate-pulse">
-            <span className="text-3xl animate-bounce">🎴</span>
-            <div className="flex flex-col">
-              <span className="text-sm font-display font-black text-amber-300 tracking-wider uppercase">
-                QUẢN TRÒ ĐANG CHIA BÀI CHO HỘI ĐỒNG...
-              </span>
-              <span className="text-[11px] font-mono text-stone-300">
-                Lá bài số phận đang bay tới từng vị trí trên bàn phán quyết
-              </span>
+        <div className="fixed inset-0 z-40 pointer-events-none flex flex-col items-center justify-center bg-black/60 backdrop-blur-[3px] animate-fadeIn">
+          <style>{`
+            @keyframes dealingProgressBar {
+              0% { width: 0%; }
+              100% { width: 100%; }
+            }
+          `}</style>
+          <div className="bg-zinc-950/95 border-2 border-amber-500/90 px-8 py-5 rounded-3xl shadow-[0_0_60px_rgba(245,158,11,0.7)] flex flex-col items-center gap-3.5 max-w-md w-full mx-4 text-center animate-pulse">
+            <div className="flex items-center gap-3.5">
+              <span className="text-4xl animate-bounce">🎴</span>
+              <div className="text-left">
+                <span className="text-sm font-display font-black text-amber-300 tracking-wider uppercase block">
+                  QUẢN TRÒ ĐANG CHIA BÀI CHO HỘI ĐỒNG...
+                </span>
+                <span className="text-xs font-mono text-stone-300 block mt-0.5">
+                  Lá bài số phận đang bay lướt tới từng người chơi (3.5s)
+                </span>
+              </div>
+            </div>
+
+            {/* Smooth 3.5s progress indicator bar */}
+            <div className="w-full bg-zinc-900 rounded-full h-2 overflow-hidden border border-white/10 mt-1">
+              <div
+                className="bg-gradient-to-r from-amber-600 via-amber-400 to-amber-500 h-full rounded-full shadow-[0_0_12px_rgba(245,158,11,0.9)]"
+                style={{
+                  animation: 'dealingProgressBar 3.5s linear forwards',
+                }}
+              />
             </div>
           </div>
         </div>

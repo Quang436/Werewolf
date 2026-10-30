@@ -169,6 +169,24 @@ export function LiarsBar3DExperience({
   // Screen-projected positions for 3D nametags / dialogue
   const [screenPos, setScreenPos] = useState<{ [id: string]: { x: number; y: number; visible: boolean } }>({});
 
+  const accusedId = room?.day?.accusedId || 'punk';
+
+  // Refs for reactive values inside Three.js animation loop without rebuilding scene
+  const isAimingGunRef = useRef(isAimingGun);
+  useEffect(() => {
+    isAimingGunRef.current = isAimingGun;
+  }, [isAimingGun]);
+
+  const hoveredTargetIdRef = useRef(hoveredTargetId);
+  useEffect(() => {
+    hoveredTargetIdRef.current = hoveredTargetId;
+  }, [hoveredTargetId]);
+
+  const accusedIdRef = useRef(accusedId);
+  useEffect(() => {
+    accusedIdRef.current = accusedId;
+  }, [accusedId]);
+
   // 4 3D Opponents sitting at the poker table
   const [opponents, setOpponents] = useState<TableOpponent[]>([
     {
@@ -180,7 +198,7 @@ export function LiarsBar3DExperience({
       votes: 1,
       dialogue: 'Đừng có giở trò với tao. Tao đã thấy ngươi rút bài gian lận!',
       modelFile: '/models/cowboy_mobster.glb',
-      scale: 92.0,
+      scale: 0.94,
     },
     {
       id: 'mobster',
@@ -191,7 +209,7 @@ export function LiarsBar3DExperience({
       votes: 0,
       dialogue: 'Cứ bình tĩnh... Hãy đặt cược số phận của các ngươi lên bàn poker này.',
       modelFile: '/models/suit_mobster.glb',
-      scale: 92.0,
+      scale: 0.94,
     },
     {
       id: 'girl',
@@ -202,7 +220,7 @@ export function LiarsBar3DExperience({
       votes: 0,
       dialogue: 'Làm ơn tin tôi đi, tôi thực sự chỉ là dân làng thôi mà...',
       modelFile: '/models/village_girl.glb',
-      scale: 92.0,
+      scale: 0.94,
     },
     {
       id: 'punk',
@@ -213,7 +231,7 @@ export function LiarsBar3DExperience({
       votes: 2,
       dialogue: 'Cứ thử bóp cò đi! Xem đứa nào nằm xuống trước!',
       modelFile: '/models/punk_mobster.glb',
-      scale: 92.0,
+      scale: 0.94,
     },
   ]);
 
@@ -225,8 +243,6 @@ export function LiarsBar3DExperience({
     { id: 4, name: 'PHIẾU TRẮNG', sub: 'TRUNG LẬP', type: 'skip', icon: '🕊️', desc: 'Từ chối phán quyết' },
   ]);
   const [inspectedCardId, setInspectedCardId] = useState<number | null>(null);
-
-  const accusedId = room?.day?.accusedId || 'punk';
 
   // Refs for animation loop
   const mouseRef = useRef({ targetYaw: 0, targetPitch: 0 });
@@ -336,14 +352,18 @@ export function LiarsBar3DExperience({
     candleLight2.position.set(0.65, 1.15, -0.2);
     scene.add(candleLight2);
 
-    // 6. Character Face & Body Key Lights
-    const keyLightL = new THREE.PointLight(0xffd59e, 5.5, 6.0, 1.0);
-    keyLightL.position.set(-1.4, 1.7, -0.3);
-    scene.add(keyLightL);
-
-    const keyLightR = new THREE.PointLight(0xffd59e, 5.5, 6.0, 1.0);
-    keyLightR.position.set(1.4, 1.7, -0.3);
-    scene.add(keyLightR);
+    // 6. Character Face & Body Key Lights (Dedicated dramatic lighting for each seat)
+    const charLights = [
+      { pos: [-1.45, 1.70, -0.45], color: 0xffd59e, intensity: 6.0 }, // Cowboy
+      { pos: [-0.65, 1.75, -1.30], color: 0xffe2b8, intensity: 6.5 }, // Mobster
+      { pos: [0.65, 1.75, -1.30], color: 0xffe2b8, intensity: 6.5 },  // Girl
+      { pos: [1.45, 1.70, -0.45], color: 0xffd59e, intensity: 6.0 },  // Punk
+    ];
+    charLights.forEach((cl) => {
+      const pl = new THREE.PointLight(cl.color, cl.intensity, 5.0, 1.2);
+      pl.position.set(...(cl.pos as [number, number, number]));
+      scene.add(pl);
+    });
 
     // Muzzle flash light
     const muzzleLight = new THREE.PointLight(0xfff5e6, 0, 8, 1.5);
@@ -554,128 +574,108 @@ export function LiarsBar3DExperience({
     const gltfLoader = new GLTFLoader();
     const charObjects: { [id: string]: { root: THREE.Object3D; baseY: number } } = {};
 
-    // 1. Load 3D Chairs
-    gltfLoader.load('/models/chair.glb', (gltf) => {
-      const chairModel = gltf.scene;
-      chairModel.traverse((node: any) => {
-        if (node.isMesh) {
-          node.castShadow = true;
-          node.receiveShadow = true;
-          if (node.material) {
-            node.material = node.material.clone();
-            node.material.color.setHex(0x5c3014); // Polished mahogany chair
-            node.material.roughness = 0.45;
-          }
-        }
-      });
-
-      const chairConfigs = [
-        { pos: [-1.45, 0, -0.65], rotY: Math.PI / 3 },
-        { pos: [-0.60, 0, -1.60], rotY: Math.PI / 8 },
-        { pos: [0.60, 0, -1.60], rotY: -Math.PI / 8 },
-        { pos: [1.45, 0, -0.65], rotY: -Math.PI / 3 },
-      ];
-
-      chairConfigs.forEach((c) => {
-        const chair = chairModel.clone();
-        chair.scale.set(48.0, 48.0, 48.0);
-        chair.position.set(...(c.pos as [number, number, number]));
-        chair.rotation.y = c.rotY;
-        scene.add(chair);
-      });
-    });
-
-    // 2. Load 4 Real 3D Characters at true 1.7m human scale
-    const charSeatData = [
-      {
-        id: 'cowboy',
-        file: '/models/cowboy_mobster.glb',
-        pos: [-1.45, 0.0, -0.65] as [number, number, number],
-        rotY: Math.PI / 3,
-        scale: 92.0,
-        colorMap: {
-          Brown: 0x784f30,
-          Brown2: 0x5a3820,
-          Skin: 0xd4a373,
-          Green: 0x334155,
-          Black: 0x18181b,
-        },
-      },
-      {
-        id: 'mobster',
-        file: '/models/suit_mobster.glb',
-        pos: [-0.60, 0.0, -1.60] as [number, number, number],
-        rotY: Math.PI / 8,
-        scale: 92.0,
-        colorMap: {
-          Suit: 0x253347,
-          Tie: 0xdc2626,
-          White: 0xffffff,
-          Skin: 0xd4a373,
-          Black: 0x0f172a,
-        },
-      },
-      {
-        id: 'girl',
-        file: '/models/village_girl.glb',
-        pos: [0.60, 0.0, -1.60] as [number, number, number],
-        rotY: -Math.PI / 8,
-        scale: 92.0,
-        colorMap: {
-          Skin: 0xf5d0b0,
-          Hair: 0x5c3014,
-          White: 0xf8fafc,
-        },
-      },
-      {
-        id: 'punk',
-        file: '/models/punk_mobster.glb',
-        pos: [1.45, 0.0, -0.65] as [number, number, number],
-        rotY: -Math.PI / 3,
-        scale: 92.0,
-        colorMap: {
-          Black: 0x1e293b,
-          Red: 0xdc2626,
-          Skin: 0xdeb887,
-        },
-      },
-    ];
-
-    charSeatData.forEach((seat) => {
-      gltfLoader.load(seat.file, (gltf) => {
-        const model = gltf.scene;
-        model.scale.set(seat.scale, seat.scale, seat.scale);
-        model.position.set(...seat.pos);
-        model.rotation.y = seat.rotY;
-        model.name = seat.id;
-
-        // Adjust materials and colors for high visibility
-        model.traverse((node: any) => {
+    // 1. Load 3D Chairs at proper human scale (0.78x scale = 1.35m height)
+    gltfLoader.load(
+      '/models/chair.glb',
+      (gltf) => {
+        const chairModel = gltf.scene;
+        chairModel.traverse((node: any) => {
           if (node.isMesh) {
             node.castShadow = true;
             node.receiveShadow = true;
             if (node.material) {
               node.material = node.material.clone();
-              node.material.roughness = 0.55;
-              node.material.metalness = 0.15;
-
-              const matName = node.material.name;
-              if (seat.colorMap && (seat.colorMap as any)[matName]) {
-                node.material.color.setHex((seat.colorMap as any)[matName]);
-              } else if (
-                node.material.color.r < 0.25 &&
-                node.material.color.g < 0.25 &&
-                node.material.color.b < 0.25
-              ) {
-                node.material.color.setHex(0x5c3d2e);
-              }
+              node.material.color.setHex(0x5c3014); // Polished mahogany saloon chair
+              node.material.roughness = 0.45;
             }
           }
         });
 
-        scene.add(model);
-        charObjects[seat.id] = { root: model, baseY: seat.pos[1] };
-      });
+        const chairConfigs = [
+          { pos: [-1.76, 0, -0.78], rotY: 1.15 },
+          { pos: [-0.78, 0, -1.80], rotY: 0.38 },
+          { pos: [0.78, 0, -1.80], rotY: -0.38 },
+          { pos: [1.76, 0, -0.78], rotY: -1.15 },
+        ];
+
+        chairConfigs.forEach((c) => {
+          const chair = chairModel.clone();
+          chair.scale.set(0.78, 0.78, 0.78);
+          chair.position.set(...(c.pos as [number, number, number]));
+          chair.rotation.y = c.rotY;
+          scene.add(chair);
+        });
+      },
+      undefined,
+      (err) => console.error('Failed to load chair.glb:', err)
+    );
+
+    // 2. Load 4 Real 3D Characters at true 1.75m human scale (0.94x scale)
+    const charSeatData = [
+      {
+        id: 'cowboy',
+        file: '/models/cowboy_mobster.glb',
+        pos: [-1.62, 0.04, -0.72] as [number, number, number],
+        rotY: 1.15,
+        scale: 0.94,
+      },
+      {
+        id: 'mobster',
+        file: '/models/suit_mobster.glb',
+        pos: [-0.72, 0.04, -1.65] as [number, number, number],
+        rotY: 0.38,
+        scale: 0.94,
+      },
+      {
+        id: 'girl',
+        file: '/models/village_girl.glb',
+        pos: [0.72, 0.04, -1.65] as [number, number, number],
+        rotY: -0.38,
+        scale: 0.94,
+      },
+      {
+        id: 'punk',
+        file: '/models/punk_mobster.glb',
+        pos: [1.62, 0.04, -0.72] as [number, number, number],
+        rotY: -1.15,
+        scale: 0.94,
+      },
+    ];
+
+    charSeatData.forEach((seat) => {
+      gltfLoader.load(
+        seat.file,
+        (gltf) => {
+          const model = gltf.scene;
+          model.scale.set(seat.scale, seat.scale, seat.scale);
+          model.position.set(...seat.pos);
+          model.rotation.y = seat.rotY;
+          model.name = seat.id;
+
+          // Preserve rich hand-crafted low-poly materials and colors
+          model.traverse((node: any) => {
+            if (node.isMesh) {
+              node.castShadow = true;
+              node.receiveShadow = true;
+              if (node.material) {
+                node.material = node.material.clone();
+                node.material.roughness = 0.50;
+                node.material.metalness = 0.10;
+                if (node.material.color) {
+                  // Boost brightness slightly so they pop under tavern spotlight
+                  node.material.color.multiplyScalar(1.20);
+                }
+              }
+            }
+          });
+
+          scene.add(model);
+          charObjects[seat.id] = { root: model, baseY: seat.pos[1] };
+          console.log(`[LiarsBar3D] Character ${seat.id} loaded successfully.`);
+        },
+        undefined,
+        (err) => console.error(`[LiarsBar3D] Failed to load ${seat.file}:`, err)
+      );
     });
 
     // H. LOAD PLAYER'S 3D FIRST-PERSON REVOLVER (FPS WEAPON)
@@ -766,8 +766,8 @@ export function LiarsBar3DExperience({
 
       // 4. Subtle Character Breathing & Hover Reaction
       Object.entries(state.charObjects).forEach(([id, char], idx) => {
-        const isHovered = hoveredTargetId === id;
-        const breath = Math.sin(t * 2.0 + idx * 1.2) * 0.004;
+        const isHovered = hoveredTargetIdRef.current === id;
+        const breath = Math.sin(t * 2.0 + idx * 1.2) * 0.005;
         char.root.position.y = char.baseY + breath;
 
         // Subtle head turn towards camera
@@ -776,13 +776,13 @@ export function LiarsBar3DExperience({
           head.rotation.y = Math.sin(t * 1.2 + idx) * 0.08;
         }
 
-        // Slight scale emphasis when hovered
-        const targetScale = isHovered ? 96.0 : 92.0;
+        // Proper human scale with subtle emphasis when hovered
+        const targetScale = isHovered ? 0.98 : 0.94;
         char.root.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), 0.12);
       });
 
       // 5. Player's Revolver Stance (Hip vs ADS Aiming)
-      const targetGunPos = isAimingGun
+      const targetGunPos = isAimingGunRef.current
         ? new THREE.Vector3(0, -0.13, -0.32) // Center ADS
         : new THREE.Vector3(0.22, -0.22, -0.42); // Hip
 
@@ -791,7 +791,7 @@ export function LiarsBar3DExperience({
       const recoilOffset = new THREE.Vector3(0, state.shootRecoil * 0.08, state.shootRecoil * 0.12);
 
       state.revolverGroup.position.lerp(targetGunPos.clone().add(recoilOffset), 0.15);
-      state.revolverGroup.rotation.x = isAimingGun
+      state.revolverGroup.rotation.x = isAimingGunRef.current
         ? state.shootRecoil * 0.4
         : THREE.MathUtils.lerp(state.revolverGroup.rotation.x, 0.05, 0.1);
 
@@ -800,7 +800,7 @@ export function LiarsBar3DExperience({
         if (!root) return { x: 0, y: 0, visible: false };
         const v = new THREE.Vector3();
         root.getWorldPosition(v);
-        v.y += 1.85; // above 3D character head
+        v.y += 1.88; // above 3D character head
         v.project(camera);
         const sx = ((v.x + 1) * width) / 2;
         const sy = ((-v.y + 1) * height) / 2;
@@ -825,7 +825,7 @@ export function LiarsBar3DExperience({
       window.removeEventListener('resize', handleResize);
       renderer.dispose();
     };
-  }, [isAimingGun, hoveredTargetId, accusedId]);
+  }, []);
 
   // Mouse move handler for 3D FPS rotation & Raycasting
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {

@@ -10,6 +10,7 @@ import {
 import { GameStateManager } from '../stores/game.store';
 import { LiarsBar3DExperience, werewolfAudio } from './LiarsBar3DExperience';
 import { PlayerRoleCard } from './PlayerRoleCard';
+import { CenterRoleRevealModal } from './CenterRoleRevealModal';
 import {
   generateBalancedDeck,
   getRoleInfo,
@@ -53,6 +54,8 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
   const [selectedTargetId, setSelectedTargetId] = useState<string | null>('p2');
   const [demoCouncilSize, setDemoCouncilSize] = useState<number>(8);
   const [demoPhase, setDemoPhase] = useState<'DAY_VOTING' | 'NIGHT_WEREWOLVES' | 'DAY_DEFENSE'>('DAY_VOTING');
+  const [isDealingSequence, setIsDealingSequence] = useState(false);
+  const [isCenterRevealOpen, setIsCenterRevealOpen] = useState(false);
 
   useEffect(() => {
     return store.subscribe((newState) => {
@@ -146,8 +149,30 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
     return state.assignedRole || (effectiveRoom.me?.role as Role) || 'SEER';
   }, [state.assignedRole, effectiveRoom.me?.role]);
 
+  // Trigger dealing animation automatically when game phase enters ASSIGN_ROLES
+  useEffect(() => {
+    if (effectiveRoom.phase === 'ASSIGN_ROLES') {
+      setIsDealingSequence(true);
+      setIsCenterRevealOpen(false);
+      werewolfAudio.playCardDeal();
+      const timer = setTimeout(() => {
+        setIsDealingSequence(false);
+        setIsCenterRevealOpen(true);
+      }, 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [effectiveRoom.phase]);
+
   const handleRandomDeal = () => {
+    // 1. Play dealing audio and trigger 3D table card flight
+    setIsDealingSequence(true);
+    setIsCenterRevealOpen(false);
+
     werewolfAudio.playCardDeal();
+    setTimeout(() => werewolfAudio.playCardDeal(), 220);
+    setTimeout(() => werewolfAudio.playCardDeal(), 450);
+    setTimeout(() => werewolfAudio.playCardDeal(), 700);
+
     const count = activePlayers.length;
     const balancedDeck = generateBalancedDeck(count);
     const shuffled = shuffleArray(balancedDeck);
@@ -176,16 +201,28 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
     });
     store.setCardRevealed(true);
 
-    if (myRoleInfo.category === 'werewolf') {
-      werewolfAudio.playWolfHowl();
-    } else {
-      werewolfAudio.playBell();
-    }
-
     setDealNotification(
-      `🎴 Đã phát bài ngẫu nhiên cho ${count} người chơi! Bạn nhận lá bài: ${myRoleInfo.nameVN} (${myRoleInfo.categoryLabel})`
+      `🎴 Đang chia bài cho ${count} thành viên Hội Đồng...`
     );
-    setTimeout(() => setDealNotification(null), 4500);
+
+    // 2. After 1.5s dealing animation across table, grand reveal in center of screen
+    setTimeout(() => {
+      setIsDealingSequence(false);
+      setIsCenterRevealOpen(true);
+
+      if (myRoleInfo.category === 'werewolf') {
+        werewolfAudio.playWolfHowl();
+      } else if (myRoleInfo.category === 'third') {
+        werewolfAudio.playWhisper();
+      } else {
+        werewolfAudio.playBell();
+      }
+
+      setDealNotification(
+        `✨ Bạn nhận lá bài: ${myRoleInfo.nameVN} (${myRoleInfo.categoryLabel})`
+      );
+      setTimeout(() => setDealNotification(null), 4000);
+    }, 1500);
   };
 
   const isNight = effectiveRoom.phase.includes('NIGHT');
@@ -218,6 +255,7 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
         isPov2={isPov2}
         setIsPov2={setIsPov2}
         selectedTargetId={selectedTargetId}
+        isDealing={isDealingSequence}
         onAimAtPlayer={(targetId: string) => {
           // Raycast hover feedback
         }}
@@ -479,6 +517,7 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
             store.toggleCardReveal();
             werewolfAudio.playCardDeal();
           }}
+          onOpenCenterReveal={() => setIsCenterRevealOpen(true)}
           onSelectRoleTest={(newRole) => {
             const roleInfo = getRoleInfo(newRole);
             const team =
@@ -677,6 +716,33 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
           </div>
         </div>
       )}
+
+      {/* 8. DEALING ANIMATION BANNER */}
+      {isDealingSequence && (
+        <div className="fixed inset-0 z-40 pointer-events-none flex flex-col items-center justify-center bg-black/40 backdrop-blur-[2px] animate-fadeIn">
+          <div className="bg-zinc-950/95 border-2 border-amber-500/90 px-6 py-3.5 rounded-2xl shadow-[0_0_50px_rgba(245,158,11,0.6)] flex items-center gap-3.5 animate-pulse">
+            <span className="text-3xl animate-bounce">🎴</span>
+            <div className="flex flex-col">
+              <span className="text-sm font-display font-black text-amber-300 tracking-wider uppercase">
+                QUẢN TRÒ ĐANG CHIA BÀI CHO HỘI ĐỒNG...
+              </span>
+              <span className="text-[11px] font-mono text-stone-300">
+                Lá bài số phận đang bay tới từng vị trí trên bàn phán quyết
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 9. CENTER-SCREEN GRAND ROLE CARD REVEAL (100% COMPLETE UNCROPPED ARTWORK) */}
+      <CenterRoleRevealModal
+        isOpen={isCenterRevealOpen}
+        role={myCurrentRole}
+        team={state.assignedTeam}
+        wolfTeammates={state.wolfTeammates}
+        lover={(effectiveRoom.me as any)?.lover}
+        onClose={() => setIsCenterRevealOpen(false)}
+      />
     </div>
   );
 };

@@ -17,6 +17,7 @@ export interface PlayerRoleCardProps {
   lover?: { partnerId: string; partnerNickname: string; partnerRole?: Role };
   isCardRevealed: boolean;
   onToggleReveal: () => void;
+  onOpenCenterReveal?: () => void;
   onRoleAction?: (actionType: string) => void;
   onSelectRoleTest?: (role: Role) => void;
   isAlive?: boolean;
@@ -29,6 +30,7 @@ export const PlayerRoleCard: React.FC<PlayerRoleCardProps> = ({
   lover,
   isCardRevealed,
   onToggleReveal,
+  onOpenCenterReveal,
   onRoleAction,
   onSelectRoleTest,
   isAlive = true,
@@ -72,7 +74,7 @@ export const PlayerRoleCard: React.FC<PlayerRoleCardProps> = ({
             }}
           >
             {/* =============================================================
-                CARD FRONT: FULL ARTWORK, ROLE NAME, FACTION, ABILITIES
+                CARD FRONT: 100% COMPLETE UNCROPPED ARTWORK, TITLE, ABILITIES
                ============================================================= */}
             <div
               className={`absolute inset-0 rounded-2xl overflow-hidden border-2 ${visuals.cardBorder} bg-[#0b0f17] shadow-2xl flex flex-col justify-between`}
@@ -81,17 +83,16 @@ export const PlayerRoleCard: React.FC<PlayerRoleCardProps> = ({
                 WebkitBackfaceVisibility: 'hidden',
               }}
             >
-              {/* Top Banner Image with Gradient Overlay */}
-              <div className="relative h-44 w-full overflow-hidden bg-black/60">
+              {/* Top Banner Image with 100% Complete Uncropped Artwork */}
+              <div className="relative h-44 w-full overflow-hidden bg-black/85 flex items-center justify-center p-2 border-b border-white/10">
                 <img
                   src={roleInfo.image}
                   alt={roleInfo.nameVN}
-                  className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500"
+                  className="max-w-full max-h-full object-contain filter drop-shadow-[0_4px_10px_rgba(0,0,0,0.9)] rounded-md transition-transform duration-300 group-hover:scale-105"
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-[#0b0f17] via-transparent to-black/60" />
 
                 {/* Top Badges */}
-                <div className="absolute top-2.5 inset-x-2.5 flex items-center justify-between">
+                <div className="absolute top-2 inset-x-2 flex items-center justify-between pointer-events-none">
                   <div
                     className={`flex items-center gap-1 px-2.5 py-0.5 rounded-full ${visuals.badgeBg} border ${visuals.badgeBorder} backdrop-blur-md shadow-md`}
                   >
@@ -117,18 +118,18 @@ export const PlayerRoleCard: React.FC<PlayerRoleCardProps> = ({
               </div>
 
               {/* Middle Section: Title & Role Identity */}
-              <div className="px-3.5 -mt-3 relative z-10">
+              <div className="px-3.5 py-1 relative z-10 flex-1 flex flex-col justify-center">
                 <div className="flex items-baseline justify-between">
-                  <div>
-                    <h3 className={`font-display font-black text-lg leading-tight uppercase tracking-wide ${visuals.titleColor}`}>
+                  <div className="truncate pr-1">
+                    <h3 className={`font-display font-black text-base md:text-lg leading-tight uppercase tracking-wide truncate ${visuals.titleColor}`}>
                       {roleInfo.nameVN}
                     </h3>
-                    <p className="text-[10px] font-mono text-stone-400 uppercase tracking-wider">
+                    <p className="text-[10px] font-mono text-stone-400 uppercase tracking-wider truncate">
                       {roleInfo.nameEN}
                     </p>
                   </div>
 
-                  <span className="text-xs px-2 py-0.5 rounded bg-zinc-900 border border-white/10 text-stone-300 font-mono">
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-900 border border-white/10 text-stone-300 font-mono shrink-0">
                     {roleInfo.time}
                   </span>
                 </div>
@@ -140,7 +141,7 @@ export const PlayerRoleCard: React.FC<PlayerRoleCardProps> = ({
 
                 {/* Extra badge if Werewolf Pack or Lovers */}
                 {roleInfo.category === 'werewolf' && wolfTeammates.length > 0 && (
-                  <div className="mt-1.5 px-2 py-1 bg-red-950/80 border border-red-500/40 rounded flex items-center gap-1.5 text-[10px] text-red-300">
+                  <div className="mt-1 px-2 py-0.5 bg-red-950/80 border border-red-500/40 rounded flex items-center gap-1.5 text-[10px] text-red-300">
                     <span>🐺</span>
                     <span className="font-bold">Đồng đội:</span>
                     <span className="truncate">
@@ -150,7 +151,7 @@ export const PlayerRoleCard: React.FC<PlayerRoleCardProps> = ({
                 )}
 
                 {lover && (
-                  <div className="mt-1.5 px-2 py-1 bg-rose-950/80 border border-rose-500/40 rounded flex items-center gap-1.5 text-[10px] text-rose-300">
+                  <div className="mt-1 px-2 py-0.5 bg-rose-950/80 border border-rose-500/40 rounded flex items-center gap-1.5 text-[10px] text-rose-300">
                     <span>💘</span>
                     <span className="font-bold">Người yêu:</span>
                     <span className="truncate">{lover.partnerNickname}</span>
@@ -159,7 +160,23 @@ export const PlayerRoleCard: React.FC<PlayerRoleCardProps> = ({
               </div>
 
               {/* Bottom Quick Controls & Actions */}
-              <div className="p-2.5 bg-black/80 border-t border-white/10 flex items-center justify-between gap-1.5">
+              <div className="p-2 bg-black/80 border-t border-white/10 flex items-center justify-between gap-1">
+                {onOpenCenterReveal && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      werewolfAudio.playVoteStamp();
+                      onOpenCenterReveal();
+                    }}
+                    className="py-1 px-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-amber-500/40 text-amber-300 hover:text-white text-[10px] font-bold font-display uppercase tracking-wider flex items-center gap-1 transition"
+                    title="Phóng to lá bài lên trung tâm màn hình"
+                  >
+                    <span className="material-symbols-outlined text-[13px]">fullscreen</span>
+                    <span>Xem Bài</span>
+                  </button>
+                )}
+
                 <button
                   type="button"
                   onClick={(e) => {
@@ -167,10 +184,10 @@ export const PlayerRoleCard: React.FC<PlayerRoleCardProps> = ({
                     werewolfAudio.playBell();
                     setIsDetailModalOpen(true);
                   }}
-                  className="flex-1 py-1.5 px-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-stone-300 hover:text-white text-[10px] font-bold font-display uppercase tracking-wider flex items-center justify-center gap-1 transition"
+                  className="flex-1 py-1 px-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-stone-300 hover:text-white text-[10px] font-bold font-display uppercase tracking-wider flex items-center justify-center gap-1 transition"
                 >
                   <span className="material-symbols-outlined text-[13px] text-amber-400">menu_book</span>
-                  <span>Sổ Tay Vai</span>
+                  <span>Sổ Tay</span>
                 </button>
 
                 {onSelectRoleTest && (
@@ -181,7 +198,7 @@ export const PlayerRoleCard: React.FC<PlayerRoleCardProps> = ({
                       werewolfAudio.playVoteStamp();
                       setIsRolePickerOpen(true);
                     }}
-                    className="py-1.5 px-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-amber-400 hover:text-amber-300 text-[10px] font-bold font-mono flex items-center gap-0.5 transition"
+                    className="py-1 px-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-amber-400 hover:text-amber-300 text-[10px] font-bold font-mono flex items-center gap-0.5 transition"
                     title="Đổi thử vai khác (Dành cho kiểm thử)"
                   >
                     <span>🎴 Đổi</span>
@@ -189,10 +206,10 @@ export const PlayerRoleCard: React.FC<PlayerRoleCardProps> = ({
                 )}
 
                 <div
-                  className="px-2 py-1.5 rounded-lg bg-zinc-900/90 border border-white/10 text-[9px] font-mono text-stone-400 flex items-center gap-1"
+                  className="px-1.5 py-1 rounded-lg bg-zinc-900/90 border border-white/10 text-[9px] font-mono text-stone-400 flex items-center gap-0.5"
                   title="Nhấn C hoặc click bài để úp bài"
                 >
-                  <span className="material-symbols-outlined text-[12px] text-emerald-400">visibility</span>
+                  <span className="material-symbols-outlined text-[11px] text-emerald-400">visibility</span>
                   <span className="font-bold text-emerald-400">[C]</span>
                 </div>
               </div>

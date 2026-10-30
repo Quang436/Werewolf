@@ -268,6 +268,99 @@ function attachWolfHeadFeatures(model: THREE.Object3D) {
   headBone.add(wolfGroup);
 }
 
+// Procedural Canvas Texture for Glowing Neon Sign on Back Wall
+function createNeonSignCanvasTexture(): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = 1024;
+  canvas.height = 256;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return new THREE.CanvasTexture(canvas);
+
+  // Deep Noir Wood/Brick Wall Backdrop
+  ctx.fillStyle = '#080507';
+  ctx.fillRect(0, 0, 1024, 256);
+
+  // Outer Neon Crimson Frame
+  ctx.strokeStyle = '#ef4444';
+  ctx.lineWidth = 12;
+  ctx.shadowColor = '#ff2244';
+  ctx.shadowBlur = 28;
+  ctx.strokeRect(18, 18, 988, 220);
+
+  // Inner Amber Neon Tube
+  ctx.strokeStyle = '#fbbf24';
+  ctx.lineWidth = 4;
+  ctx.shadowColor = '#f59e0b';
+  ctx.shadowBlur = 14;
+  ctx.strokeRect(30, 30, 964, 196);
+
+  // Main Header Text: 🐺 LIAR'S BAR • MA SÓI
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = '900 60px "Arial Black", "Cinzel", sans-serif';
+  ctx.shadowColor = '#ff1133';
+  ctx.shadowBlur = 35;
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText("🐺 LIAR'S BAR • MA SÓI", 512, 106);
+
+  // Subheader: HỘI ĐỒNG PHÁN QUYẾT BÓNG ĐÊM
+  ctx.font = '700 26px "Arial", sans-serif';
+  ctx.shadowColor = '#f59e0b';
+  ctx.shadowBlur = 18;
+  ctx.fillStyle = '#fde68a';
+  ctx.fillText('HỘI ĐỒNG PHÁN QUYẾT BÓNG ĐÊM', 512, 172);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.needsUpdate = true;
+  return texture;
+}
+
+// Procedural Canvas Texture for 3D Werewolf Playing Card Backs
+function createCardBackCanvasTexture(): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = 256;
+  canvas.height = 384;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return new THREE.CanvasTexture(canvas);
+
+  // Deep Obsidian background
+  ctx.fillStyle = '#090d14';
+  ctx.fillRect(0, 0, 256, 384);
+
+  // Gold borders
+  ctx.strokeStyle = '#d97706';
+  ctx.lineWidth = 10;
+  ctx.strokeRect(10, 10, 236, 364);
+
+  ctx.strokeStyle = '#f59e0b';
+  ctx.lineWidth = 3;
+  ctx.strokeRect(18, 18, 220, 348);
+
+  // Inner filigree pattern
+  ctx.strokeStyle = '#78350f';
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(26, 26, 204, 332);
+
+  // Central Werewolf Crescent Emblem
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = '64px sans-serif';
+  ctx.fillStyle = '#f59e0b';
+  ctx.fillText('🐺', 128, 165);
+
+  ctx.font = '900 20px "Arial Black", sans-serif';
+  ctx.fillStyle = '#fbbf24';
+  ctx.fillText('WEREWOLF', 128, 235);
+
+  ctx.font = '700 13px monospace';
+  ctx.fillStyle = '#94a3b8';
+  ctx.fillText('COUNCIL DECK', 128, 260);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.needsUpdate = true;
+  return texture;
+}
+
 // Seat configuration type
 export interface TableSeat {
   id: string;
@@ -292,6 +385,7 @@ export interface LiarsBar3DProps {
   isPov2?: boolean;
   setIsPov2?: (v: boolean | ((p: boolean) => boolean)) => void;
   selectedTargetId?: string | null;
+  isDealing?: boolean;
   onAimAtPlayer?: (targetId: string, nickname: string) => void;
   onSelectTarget?: (targetId: string, nickname: string) => void;
   onShootPlayer?: (targetId: string, nickname: string) => void; // Keep for backward compatibility
@@ -313,6 +407,7 @@ export function LiarsBar3DExperience({
   isPov2 = false,
   setIsPov2,
   selectedTargetId,
+  isDealing = false,
   onAimAtPlayer,
   onSelectTarget,
   onShootPlayer,
@@ -447,6 +542,11 @@ export function LiarsBar3DExperience({
   useEffect(() => {
     isNightRef.current = Boolean(room?.phase && room.phase.includes('NIGHT'));
   }, [room?.phase]);
+
+  const isDealingRef = useRef(isDealing);
+  useEffect(() => {
+    isDealingRef.current = isDealing;
+  }, [isDealing]);
 
   const threeRef = useRef<{
     renderer: THREE.WebGLRenderer;
@@ -623,19 +723,20 @@ export function LiarsBar3DExperience({
       }
     });
 
-    // Glowing Neon "HỘI ĐỒNG MA SÓI" Sign
+    // Glowing Neon "HỘI ĐỒNG MA SÓI" Sign with Custom Canvas Texture
     const neonFrame = new THREE.Mesh(
-      new THREE.BoxGeometry(3.6, 0.65, 0.08),
-      new THREE.MeshStandardMaterial({ color: 0x0f0f12, roughness: 0.8 })
+      new THREE.BoxGeometry(3.8, 1.0, 0.08),
+      new THREE.MeshStandardMaterial({ color: 0x0a0a0e, roughness: 0.9 })
     );
     neonFrame.position.set(0, 3.5, -backWallDist + 0.08);
     scene.add(neonFrame);
 
+    const neonTex = createNeonSignCanvasTexture();
     const neonSign = new THREE.Mesh(
-      new THREE.BoxGeometry(3.3, 0.45, 0.04),
-      new THREE.MeshBasicMaterial({ color: 0xef4444 })
+      new THREE.PlaneGeometry(3.6, 0.9),
+      new THREE.MeshBasicMaterial({ map: neonTex, transparent: true })
     );
-    neonSign.position.set(0, 3.5, -backWallDist + 0.12);
+    neonSign.position.set(0, 3.5, -backWallDist + 0.13);
     scene.add(neonSign);
 
     // F. DYNAMICALLY SIZED COUNCIL TABLE (SCALES PROPORTIONALLY WITH PLAYER COUNT)
@@ -688,6 +789,75 @@ export function LiarsBar3DExperience({
       );
       chipStack.position.set(Math.cos(ang) * (dynamicTableRadius * 0.82), 1.06, Math.sin(ang) * (dynamicTableRadius * 0.82));
       tableGroup.add(chipStack);
+    }
+
+    // Central Card Deck on the table felt
+    const cardBackTex = createCardBackCanvasTexture();
+    const cardBackMat = new THREE.MeshStandardMaterial({
+      map: cardBackTex,
+      roughness: 0.35,
+      metalness: 0.1,
+    });
+    const cardGeo = new THREE.BoxGeometry(0.14, 0.004, 0.22);
+
+    const deckGroup = new THREE.Group();
+    deckGroup.position.set(0, 1.045, 0);
+
+    const deckMesh = new THREE.Mesh(
+      new THREE.BoxGeometry(0.18, 0.05, 0.26),
+      new THREE.MeshStandardMaterial({ color: 0x0f131c, roughness: 0.5, metalness: 0.2 })
+    );
+    deckMesh.position.y = 0.025;
+    deckMesh.castShadow = true;
+    deckMesh.receiveShadow = true;
+    deckGroup.add(deckMesh);
+
+    // Top card of deck
+    const topDeckCard = new THREE.Mesh(
+      new THREE.BoxGeometry(0.176, 0.004, 0.256),
+      cardBackMat
+    );
+    topDeckCard.position.y = 0.052;
+    deckGroup.add(topDeckCard);
+
+    // Crimson Wax Seal on deck
+    const sealMesh = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.04, 0.04, 0.015, 16),
+      new THREE.MeshStandardMaterial({ color: 0x991b1b, roughness: 0.3, metalness: 0.2 })
+    );
+    sealMesh.position.y = 0.06;
+    deckGroup.add(sealMesh);
+
+    tableGroup.add(deckGroup);
+
+    // 3D Cards for all seats on table
+    const seatCards: Array<{
+      mesh: THREE.Mesh;
+      targetPos: THREE.Vector3;
+      targetRotY: number;
+      seatIdx: number;
+    }> = [];
+
+    for (let i = 0; i < totalSeats; i++) {
+      const ang = (i / totalSeats) * Math.PI * 2;
+      const cardDist = dynamicTableRadius * 0.65;
+      const targetX = Math.cos(ang) * cardDist;
+      const targetZ = Math.sin(ang) * cardDist;
+      const targetRotY = -ang + Math.PI / 2;
+
+      const card = new THREE.Mesh(cardGeo, cardBackMat);
+      card.position.set(targetX, 1.043, targetZ);
+      card.rotation.y = targetRotY;
+      card.castShadow = true;
+      card.receiveShadow = true;
+      tableGroup.add(card);
+
+      seatCards.push({
+        mesh: card,
+        targetPos: new THREE.Vector3(targetX, 1.043, targetZ),
+        targetRotY,
+        seatIdx: i,
+      });
     }
 
     scene.add(tableGroup);
@@ -820,6 +990,7 @@ export function LiarsBar3DExperience({
 
     // I. ANIMATION LOOP
     let animationFrameId: number;
+    let dealStartTime: number | null = null;
     const clock = new THREE.Clock();
 
     const animate = () => {
@@ -883,6 +1054,41 @@ export function LiarsBar3DExperience({
         const targetScale = isSelected ? 1.02 : isHovered ? 0.98 : 0.94;
         char.root.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), 0.12);
       });
+
+      // 4.5. Card Dealing Flight Animation across Council Table
+      if (isDealingRef.current) {
+        if (dealStartTime === null) {
+          dealStartTime = t;
+        }
+        const dealElapsed = t - dealStartTime;
+        seatCards.forEach(({ mesh, targetPos, targetRotY, seatIdx }) => {
+          const cardDelay = (seatIdx / totalSeats) * 0.7;
+          const progress = Math.min(1, Math.max(0, (dealElapsed - cardDelay) / 0.45));
+          if (progress <= 0) {
+            mesh.position.set(0, 1.08, 0);
+            mesh.scale.set(0.01, 0.01, 0.01);
+          } else if (progress < 1) {
+            const ease = 1 - Math.pow(1 - progress, 3);
+            mesh.scale.set(1, 1, 1);
+            mesh.position.x = THREE.MathUtils.lerp(0, targetPos.x, ease);
+            mesh.position.z = THREE.MathUtils.lerp(0, targetPos.z, ease);
+            mesh.position.y = THREE.MathUtils.lerp(1.10, targetPos.y, ease) + Math.sin(progress * Math.PI) * 0.28;
+            mesh.rotation.y = targetRotY + (1 - progress) * Math.PI * 2;
+            mesh.rotation.z = Math.sin(progress * Math.PI) * 0.2;
+          } else {
+            mesh.scale.set(1, 1, 1);
+            mesh.position.copy(targetPos);
+            mesh.rotation.set(0, targetRotY, 0);
+          }
+        });
+      } else {
+        dealStartTime = null;
+        seatCards.forEach(({ mesh, targetPos, targetRotY }) => {
+          mesh.scale.set(1, 1, 1);
+          mesh.position.copy(targetPos);
+          mesh.rotation.set(0, targetRotY, 0);
+        });
+      }
 
       // 5. Update Screen Positions for 3D Nametags
       const projectToScreen = (root?: THREE.Object3D, isAlive = true) => {

@@ -120,7 +120,7 @@ class TavernAudioEngine {
 const tavernAudio = new TavernAudioEngine();
 
 // ============================================================================
-// 2. TYPES
+// 2. TYPES & 3D CHARACTER HELPERS (NO T-POSE, ANTHROPOMORPHIC WEREWOLF)
 // ============================================================================
 export interface TableOpponent {
   id: string;
@@ -146,6 +146,99 @@ export interface LiarsBar3DProps {
   onPullRouletteTrigger?: () => boolean;
 }
 
+// Natural seated poker table poses for humanoid characters (removes awkward T-pose)
+function applyPokerSittingPose(model: THREE.Object3D, isGirl = false) {
+  const upperL = model.getObjectByName('UpperArmL');
+  const lowerL = model.getObjectByName('LowerArmL');
+  const upperR = model.getObjectByName('UpperArmR');
+  const lowerR = model.getObjectByName('LowerArmR');
+  const chest = model.getObjectByName('Chest');
+  const head = model.getObjectByName('Head');
+
+  if (upperL && lowerL && upperR && lowerR) {
+    if (isGirl) {
+      // Demure folded hands pose resting on the table
+      upperL.rotation.set(0.40, 0.25, 1.25);
+      lowerL.rotation.set(0.20, 0.90, -0.75);
+      upperR.rotation.set(0.40, -0.25, -1.25);
+      lowerR.rotation.set(0.20, -0.90, 0.75);
+    } else {
+      // Confident gambler pose: arms rested down and forward onto table felt
+      upperL.rotation.set(0.35, 0.15, 1.20);
+      lowerL.rotation.set(0.15, 0.75, -0.65);
+      upperR.rotation.set(0.35, -0.15, -1.20);
+      lowerR.rotation.set(0.15, -0.75, 0.65);
+    }
+  }
+
+  if (chest) chest.rotation.x = 0.08;
+  if (head) head.rotation.x = -0.04;
+}
+
+// Attach 3D Lupine Werewolf features to create authentic Liar's Bar style Ma Sói
+function attachWolfHeadFeatures(model: THREE.Object3D) {
+  const headBone = model.getObjectByName('Head');
+  if (!headBone) return;
+
+  const wolfGroup = new THREE.Group();
+  wolfGroup.name = 'WolfFaceFeatures';
+
+  const furMat = new THREE.MeshStandardMaterial({ color: 0x2b2e36, roughness: 0.85, metalness: 0.05 });
+
+  // 1. Lupine Wolf Snout
+  const snoutGeo = new THREE.ConeGeometry(0.10, 0.22, 6);
+  snoutGeo.rotateX(Math.PI / 2);
+  const snout = new THREE.Mesh(snoutGeo, furMat);
+  snout.position.set(0, 0.0, 0.17);
+  wolfGroup.add(snout);
+
+  // Black wolf nose
+  const nose = new THREE.Mesh(
+    new THREE.SphereGeometry(0.035, 8, 8),
+    new THREE.MeshStandardMaterial({ color: 0x0f0f12, roughness: 0.3 })
+  );
+  nose.position.set(0, 0.02, 0.28);
+  wolfGroup.add(nose);
+
+  // Sharp canine fangs
+  const fangMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.2 });
+  const fangL = new THREE.Mesh(new THREE.ConeGeometry(0.016, 0.065, 4), fangMat);
+  fangL.rotation.x = Math.PI;
+  fangL.position.set(-0.05, -0.045, 0.16);
+  wolfGroup.add(fangL);
+
+  const fangR = new THREE.Mesh(new THREE.ConeGeometry(0.016, 0.065, 4), fangMat);
+  fangR.rotation.x = Math.PI;
+  fangR.position.set(0.05, -0.045, 0.16);
+  wolfGroup.add(fangR);
+
+  // 2. Pointed Lupine Ears
+  const earGeo = new THREE.ConeGeometry(0.065, 0.16, 4);
+  const earL = new THREE.Mesh(earGeo, furMat);
+  earL.position.set(-0.11, 0.20, -0.02);
+  earL.rotation.z = -0.32;
+  earL.rotation.x = -0.15;
+  wolfGroup.add(earL);
+
+  const earR = new THREE.Mesh(earGeo, furMat);
+  earR.position.set(0.11, 0.20, -0.02);
+  earR.rotation.z = 0.32;
+  earR.rotation.x = -0.15;
+  wolfGroup.add(earR);
+
+  // 3. Piercing Predatory Werewolf Eyes
+  const eyeMat = new THREE.MeshBasicMaterial({ color: 0xff2200 });
+  const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.024, 8, 8), eyeMat);
+  eyeL.position.set(-0.065, 0.07, 0.135);
+  wolfGroup.add(eyeL);
+
+  const eyeR = new THREE.Mesh(new THREE.SphereGeometry(0.024, 8, 8), eyeMat);
+  eyeR.position.set(0.065, 0.07, 0.135);
+  wolfGroup.add(eyeR);
+
+  headBone.add(wolfGroup);
+}
+
 export function LiarsBar3DExperience({
   room,
   currentPlayerId,
@@ -169,7 +262,7 @@ export function LiarsBar3DExperience({
   // Screen-projected positions for 3D nametags / dialogue
   const [screenPos, setScreenPos] = useState<{ [id: string]: { x: number; y: number; visible: boolean } }>({});
 
-  const accusedId = room?.day?.accusedId || 'punk';
+  const accusedId = room?.day?.accusedId || 'wolf';
 
   // Refs for reactive values inside Three.js animation loop without rebuilding scene
   const isAimingGunRef = useRef(isAimingGun);
@@ -187,17 +280,17 @@ export function LiarsBar3DExperience({
     accusedIdRef.current = accusedId;
   }, [accusedId]);
 
-  // 4 3D Opponents sitting at the poker table
+  // 4 3D Opponents sitting at the poker table: Ma Sói, Bố Già, Cô Gái, Thợ Săn
   const [opponents, setOpponents] = useState<TableOpponent[]>([
     {
-      id: 'cowboy',
+      id: 'wolf',
       seatNumber: 1,
-      nickname: '#01 CAO BỒI (GUNSLINGER)',
-      roleHint: 'Xạ Thủ Viễn Tây',
+      nickname: '#01 MA SÓI (WEREWOLF)',
+      roleHint: 'Bóng Ma Khát Máu',
       isDead: false,
       votes: 1,
-      dialogue: 'Đừng có giở trò với tao. Tao đã thấy ngươi rút bài gian lận!',
-      modelFile: '/models/cowboy_mobster.glb',
+      dialogue: 'Mùi máu tươi của lũ cừu non... Đêm nay ai sẽ là bữa tối của ta?!',
+      modelFile: '/models/punk_mobster.glb',
       scale: 0.94,
     },
     {
@@ -223,14 +316,14 @@ export function LiarsBar3DExperience({
       scale: 0.94,
     },
     {
-      id: 'punk',
+      id: 'hunter',
       seatNumber: 4,
-      nickname: '#04 TAY ANH CHỊ (PUNK)',
-      roleHint: 'Sát Thủ Liều Mạng',
+      nickname: '#04 THỢ SĂN (HUNTER)',
+      roleHint: 'Xạ Thủ Bạc Đạn',
       isDead: false,
       votes: 2,
-      dialogue: 'Cứ thử bóp cò đi! Xem đứa nào nằm xuống trước!',
-      modelFile: '/models/punk_mobster.glb',
+      dialogue: 'Khẩu súng này không bao giờ bắn trượt một con sói nào!',
+      modelFile: '/models/cowboy_mobster.glb',
       scale: 0.94,
     },
   ]);
@@ -276,33 +369,33 @@ export function LiarsBar3DExperience({
     const width = container.clientWidth || window.innerWidth;
     const height = container.clientHeight || window.innerHeight;
 
-    // A. RENDERER (Warm, high-exposure cinematic tone mapping)
+    // A. RENDERER (Cinematic Dark Mode Noir Speakeasy)
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' });
     renderer.setSize(width, height);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 2.1;
+    renderer.toneMappingExposure = 1.0;
     container.replaceChildren(renderer.domElement);
 
-    // B. SCENE & ATMOSPHERE (Warm Speakeasy Tavern)
+    // B. SCENE & ATMOSPHERE (Deep Noir Dark Speakeasy Tavern)
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x24140b);
-    scene.fog = new THREE.Fog(0x24140b, 10, 32);
+    scene.background = new THREE.Color(0x0a0706);
+    scene.fog = new THREE.Fog(0x0a0706, 6, 22);
 
     // C. CAMERA (FPS Perspective)
     const camera = new THREE.PerspectiveCamera(58, width / height, 0.1, 40);
     camera.position.set(0, 1.52, 2.05);
     camera.lookAt(0, 1.15, -0.4);
 
-    // D. MULTI-SOURCE CINEMATIC LIGHTING
-    // 1. Global Warm Ambient Light (No pitch-black shadows)
-    const ambientLight = new THREE.AmbientLight(0xffecd2, 3.2);
+    // D. MULTI-SOURCE CINEMATIC LIGHTING (DARK MODE BALANCED)
+    // 1. Subtle Warm Ambient Fill (leaves deep cinematic shadows)
+    const ambientLight = new THREE.AmbientLight(0xffecd2, 0.75);
     scene.add(ambientLight);
 
-    // 2. Warm Hemisphere Bounce
-    const hemiLight = new THREE.HemisphereLight(0xfff5e6, 0x6e4222, 2.4);
+    // 2. Deep Floor Bounce
+    const hemiLight = new THREE.HemisphereLight(0x3d2417, 0x0a0705, 0.55);
     scene.add(hemiLight);
 
     // 3. Overhead Swinging Brass Lantern
@@ -310,13 +403,13 @@ export function LiarsBar3DExperience({
     lampGroup.position.set(0, 3.4, 0);
 
     const chainGeo = new THREE.CylinderGeometry(0.015, 0.015, 1.2, 8);
-    const metalMat = new THREE.MeshStandardMaterial({ color: 0x241a12, roughness: 0.7, metalness: 0.8 });
+    const metalMat = new THREE.MeshStandardMaterial({ color: 0x1f1915, roughness: 0.7, metalness: 0.8 });
     const chainMesh = new THREE.Mesh(chainGeo, metalMat);
     chainMesh.position.y = -0.6;
     lampGroup.add(chainMesh);
 
     const shadeGeo = new THREE.ConeGeometry(0.44, 0.30, 24, 1, true);
-    const brassMat = new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.3, metalness: 0.85 });
+    const brassMat = new THREE.MeshStandardMaterial({ color: 0x92400e, roughness: 0.4, metalness: 0.8 });
     const shadeMesh = new THREE.Mesh(shadeGeo, brassMat);
     shadeMesh.position.y = -1.2;
     shadeMesh.rotation.x = Math.PI;
@@ -324,19 +417,19 @@ export function LiarsBar3DExperience({
 
     const bulbMesh = new THREE.Mesh(
       new THREE.SphereGeometry(0.1, 16, 16),
-      new THREE.MeshBasicMaterial({ color: 0xfff0aa })
+      new THREE.MeshBasicMaterial({ color: 0xffd27d })
     );
     bulbMesh.position.y = -1.25;
     lampGroup.add(bulbMesh);
 
-    const lanternLight = new THREE.PointLight(0xffaa33, 14.0, 12, 1.0);
+    const lanternLight = new THREE.PointLight(0xff9922, 5.0, 9, 1.2);
     lanternLight.position.set(0, -1.3, 0);
     lanternLight.castShadow = true;
     lampGroup.add(lanternLight);
     scene.add(lampGroup);
 
-    // 4. Focused Table Spotlight
-    const tableSpot = new THREE.SpotLight(0xfff1db, 20.0, 12, Math.PI / 2.8, 0.45, 1.0);
+    // 4. Focused Table Spotlight (Pool of warm light on felt)
+    const tableSpot = new THREE.SpotLight(0xffe0b2, 9.0, 9, Math.PI / 3.4, 0.5, 1.2);
     tableSpot.position.set(0, 3.2, 0);
     tableSpot.target.position.set(0, 1.0, 0);
     tableSpot.castShadow = true;
@@ -344,23 +437,23 @@ export function LiarsBar3DExperience({
     scene.add(tableSpot.target);
 
     // 5. Dynamic Flickering Table Candlelights
-    const candleLight1 = new THREE.PointLight(0xffb84d, 3.5, 4.5, 1.0);
+    const candleLight1 = new THREE.PointLight(0xff9922, 2.2, 3.5, 1.2);
     candleLight1.position.set(-0.65, 1.15, -0.2);
     scene.add(candleLight1);
 
-    const candleLight2 = new THREE.PointLight(0xffb84d, 3.5, 4.5, 1.0);
+    const candleLight2 = new THREE.PointLight(0xff9922, 2.2, 3.5, 1.2);
     candleLight2.position.set(0.65, 1.15, -0.2);
     scene.add(candleLight2);
 
     // 6. Character Face & Body Key Lights (Dedicated dramatic lighting for each seat)
     const charLights = [
-      { pos: [-1.45, 1.70, -0.45], color: 0xffd59e, intensity: 6.0 }, // Cowboy
-      { pos: [-0.65, 1.75, -1.30], color: 0xffe2b8, intensity: 6.5 }, // Mobster
-      { pos: [0.65, 1.75, -1.30], color: 0xffe2b8, intensity: 6.5 },  // Girl
-      { pos: [1.45, 1.70, -0.45], color: 0xffd59e, intensity: 6.0 },  // Punk
+      { pos: [-1.45, 1.70, -0.45], color: 0xffd59e, intensity: 2.8 }, // Seat 1
+      { pos: [-0.65, 1.75, -1.30], color: 0xffe2b8, intensity: 2.8 }, // Seat 2
+      { pos: [0.65, 1.75, -1.30], color: 0xffe2b8, intensity: 2.8 },  // Seat 3
+      { pos: [1.45, 1.70, -0.45], color: 0xffd59e, intensity: 2.8 },  // Seat 4
     ];
     charLights.forEach((cl) => {
-      const pl = new THREE.PointLight(cl.color, cl.intensity, 5.0, 1.2);
+      const pl = new THREE.PointLight(cl.color, cl.intensity, 4.0, 1.2);
       pl.position.set(...(cl.pos as [number, number, number]));
       scene.add(pl);
     });
@@ -370,18 +463,18 @@ export function LiarsBar3DExperience({
     muzzleLight.position.set(0, -0.1, -0.3);
     camera.add(muzzleLight);
 
-    // E. 100% REAL 3D TAVERN ROOM (WALLS, FLOOR, CEILING, SHELVES, NEON)
-    // 1. Hardwood Parquet Floor
+    // E. 100% REAL 3D TAVERN ROOM (DARK NOIR SPEAKEASY)
+    // 1. Dark Smoked Parquet Floor
     const floorGeo = new THREE.PlaneGeometry(16, 16);
-    const floorMat = new THREE.MeshStandardMaterial({ color: 0x4d2e1a, roughness: 0.45, metalness: 0.1 });
+    const floorMat = new THREE.MeshStandardMaterial({ color: 0x150e09, roughness: 0.6, metalness: 0.1 });
     const floorMesh = new THREE.Mesh(floorGeo, floorMat);
     floorMesh.rotation.x = -Math.PI / 2;
     floorMesh.receiveShadow = true;
     scene.add(floorMesh);
 
-    // 2. Rustic Timber Ceiling
+    // 2. Dark Rustic Timber Ceiling
     const ceilingGeo = new THREE.PlaneGeometry(16, 16);
-    const ceilingMat = new THREE.MeshStandardMaterial({ color: 0x301a0e, roughness: 0.8 });
+    const ceilingMat = new THREE.MeshStandardMaterial({ color: 0x0d0805, roughness: 0.85 });
     const ceilingMesh = new THREE.Mesh(ceilingGeo, ceilingMat);
     ceilingMesh.position.y = 4.2;
     ceilingMesh.rotation.x = Math.PI / 2;
@@ -389,15 +482,15 @@ export function LiarsBar3DExperience({
 
     for (let beam = -3; beam <= 3; beam += 2) {
       const beamGeo = new THREE.BoxGeometry(16, 0.35, 0.25);
-      const beamMat = new THREE.MeshStandardMaterial({ color: 0x221208, roughness: 0.65 });
+      const beamMat = new THREE.MeshStandardMaterial({ color: 0x100804, roughness: 0.75 });
       const beamMesh = new THREE.Mesh(beamGeo, beamMat);
       beamMesh.position.set(0, 4.05, beam);
       scene.add(beamMesh);
     }
 
-    // 3. Back Wall with Speakeasy Bar & Shelves
+    // 3. Dark Mahogany Back Wall with Bar & Shelves
     const backWallGeo = new THREE.PlaneGeometry(16, 5);
-    const backWallMat = new THREE.MeshStandardMaterial({ color: 0x442614, roughness: 0.65 });
+    const backWallMat = new THREE.MeshStandardMaterial({ color: 0x1a1008, roughness: 0.7 });
     const backWall = new THREE.Mesh(backWallGeo, backWallMat);
     backWall.position.set(0, 2.5, -3.8);
     backWall.receiveShadow = true;
@@ -405,7 +498,7 @@ export function LiarsBar3DExperience({
 
     // Bar Mirror
     const mirrorGeo = new THREE.PlaneGeometry(6.2, 1.8);
-    const mirrorMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.15, metalness: 0.9 });
+    const mirrorMat = new THREE.MeshStandardMaterial({ color: 0x1e2530, roughness: 0.2, metalness: 0.8 });
     const mirror = new THREE.Mesh(mirrorGeo, mirrorMat);
     mirror.position.set(0, 2.4, -3.75);
     scene.add(mirror);
@@ -414,13 +507,13 @@ export function LiarsBar3DExperience({
     const shelfHeights = [1.6, 2.2, 2.8];
     shelfHeights.forEach((shY) => {
       const shGeo = new THREE.BoxGeometry(6.6, 0.08, 0.38);
-      const shMat = new THREE.MeshStandardMaterial({ color: 0x2c160a, roughness: 0.45, metalness: 0.1 });
+      const shMat = new THREE.MeshStandardMaterial({ color: 0x150b05, roughness: 0.5, metalness: 0.1 });
       const shMesh = new THREE.Mesh(shGeo, shMat);
       shMesh.position.set(0, shY, -3.6);
       scene.add(shMesh);
 
       // Under-shelf warm strip light
-      const stripLight = new THREE.PointLight(0xffc266, 2.5, 4, 1.5);
+      const stripLight = new THREE.PointLight(0xff9922, 0.8, 3, 1.5);
       stripLight.position.set(0, shY - 0.05, -3.5);
       scene.add(stripLight);
     });
@@ -446,20 +539,20 @@ export function LiarsBar3DExperience({
 
     // Glowing Neon "LIAR'S BAR" Sign
     const neonFrameGeo = new THREE.BoxGeometry(2.4, 0.65, 0.08);
-    const neonFrameMat = new THREE.MeshStandardMaterial({ color: 0x18181b, roughness: 0.8 });
+    const neonFrameMat = new THREE.MeshStandardMaterial({ color: 0x0f0f12, roughness: 0.8 });
     const neonFrame = new THREE.Mesh(neonFrameGeo, neonFrameMat);
     neonFrame.position.set(0, 3.4, -3.72);
     scene.add(neonFrame);
 
     const neonSignGeo = new THREE.BoxGeometry(2.1, 0.45, 0.04);
-    const neonSignMat = new THREE.MeshBasicMaterial({ color: 0xff3300 });
+    const neonSignMat = new THREE.MeshBasicMaterial({ color: 0xef4444 });
     const neonSign = new THREE.Mesh(neonSignGeo, neonSignMat);
     neonSign.position.set(0, 3.4, -3.68);
     scene.add(neonSign);
 
     // Left and Right Walls
     const sideWallGeo = new THREE.PlaneGeometry(16, 5);
-    const sideWallMat = new THREE.MeshStandardMaterial({ color: 0x3e2111, roughness: 0.65 });
+    const sideWallMat = new THREE.MeshStandardMaterial({ color: 0x180f08, roughness: 0.7 });
 
     const leftWall = new THREE.Mesh(sideWallGeo, sideWallMat);
     leftWall.position.set(-4.2, 2.5, 0);
@@ -471,13 +564,13 @@ export function LiarsBar3DExperience({
     rightWall.rotation.y = -Math.PI / 2;
     scene.add(rightWall);
 
-    // F. 100% REAL 3D CASINO POKER TABLE
+    // F. 100% REAL 3D CASINO POKER TABLE (DEEP EMERALD NOIR)
     const tableGroup = new THREE.Group();
     tableGroup.position.set(0, 0, 0);
 
-    // Lush Emerald Green Poker Felt
+    // Deep Velvet Emerald Green Poker Felt
     const feltGeo = new THREE.CylinderGeometry(1.68, 1.68, 0.08, 48);
-    const feltMat = new THREE.MeshStandardMaterial({ color: 0x15803d, roughness: 0.65, metalness: 0.05 });
+    const feltMat = new THREE.MeshStandardMaterial({ color: 0x0e4726, roughness: 0.72, metalness: 0.05 });
     const feltMesh = new THREE.Mesh(feltGeo, feltMat);
     feltMesh.position.y = 1.0;
     feltMesh.receiveShadow = true;
@@ -485,15 +578,15 @@ export function LiarsBar3DExperience({
 
     // Inner Polished Golden Betting Ring
     const betRingGeo = new THREE.TorusGeometry(1.22, 0.016, 8, 48);
-    const goldMat = new THREE.MeshStandardMaterial({ color: 0xfbbf24, roughness: 0.25, metalness: 0.85 });
+    const goldMat = new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.3, metalness: 0.85 });
     const betRing = new THREE.Mesh(betRingGeo, goldMat);
     betRing.rotation.x = Math.PI / 2;
     betRing.position.y = 1.045;
     tableGroup.add(betRing);
 
-    // Outer Cherry Mahogany Beveled Armrest
+    // Outer Dark Mahogany Beveled Armrest
     const rimGeo = new THREE.TorusGeometry(1.75, 0.15, 16, 48);
-    const woodMat = new THREE.MeshStandardMaterial({ color: 0x582414, roughness: 0.25, metalness: 0.2 });
+    const woodMat = new THREE.MeshStandardMaterial({ color: 0x2e1408, roughness: 0.35, metalness: 0.15 });
     const rimMesh = new THREE.Mesh(rimGeo, woodMat);
     rimMesh.rotation.x = Math.PI / 2;
     rimMesh.position.y = 1.04;
@@ -610,11 +703,11 @@ export function LiarsBar3DExperience({
       (err) => console.error('Failed to load chair.glb:', err)
     );
 
-    // 2. Load 4 Real 3D Characters at true 1.75m human scale (0.94x scale)
+    // 2. Load 4 Real 3D Characters: Ma Sói, Bố Già, Cô Gái, Thợ Săn (0.94x human scale)
     const charSeatData = [
       {
-        id: 'cowboy',
-        file: '/models/cowboy_mobster.glb',
+        id: 'wolf',
+        file: '/models/punk_mobster.glb',
         pos: [-1.62, 0.04, -0.72] as [number, number, number],
         rotY: 1.15,
         scale: 0.94,
@@ -634,8 +727,8 @@ export function LiarsBar3DExperience({
         scale: 0.94,
       },
       {
-        id: 'punk',
-        file: '/models/punk_mobster.glb',
+        id: 'hunter',
+        file: '/models/cowboy_mobster.glb',
         pos: [1.62, 0.04, -0.72] as [number, number, number],
         rotY: -1.15,
         scale: 0.94,
@@ -652,18 +745,32 @@ export function LiarsBar3DExperience({
           model.rotation.y = seat.rotY;
           model.name = seat.id;
 
-          // Preserve rich hand-crafted low-poly materials and colors
+          // 1. Natural Poker Table Sitting Pose (NO T-POSE! Arms rested naturally on table)
+          applyPokerSittingPose(model, seat.id === 'girl');
+
+          // 2. If Ma Sói (Werewolf): Attach 3D wolf ears, snout, fangs, and glowing red eyes
+          if (seat.id === 'wolf') {
+            attachWolfHeadFeatures(model);
+          }
+
+          // 3. Materials & Shading tuned for rich Dark Mode Noir atmosphere
           model.traverse((node: any) => {
             if (node.isMesh) {
               node.castShadow = true;
               node.receiveShadow = true;
               if (node.material) {
                 node.material = node.material.clone();
-                node.material.roughness = 0.50;
-                node.material.metalness = 0.10;
-                if (node.material.color) {
-                  // Boost brightness slightly so they pop under tavern spotlight
-                  node.material.color.multiplyScalar(1.20);
+                node.material.roughness = 0.55;
+                node.material.metalness = 0.08;
+
+                // For Werewolf: turn skin & hair to dark charcoal wolf fur
+                if (seat.id === 'wolf') {
+                  const mName = (node.material.name || '').toLowerCase();
+                  if (mName.includes('skin')) {
+                    node.material.color.setHex(0x32353e); // Wolf grey fur
+                  } else if (mName.includes('red') || mName.includes('hair')) {
+                    node.material.color.setHex(0x181a1f); // Dark charcoal wolf mane
+                  }
                 }
               }
             }
@@ -671,7 +778,7 @@ export function LiarsBar3DExperience({
 
           scene.add(model);
           charObjects[seat.id] = { root: model, baseY: seat.pos[1] };
-          console.log(`[LiarsBar3D] Character ${seat.id} loaded successfully.`);
+          console.log(`[LiarsBar3D] Character ${seat.id} loaded and posed successfully.`);
         },
         undefined,
         (err) => console.error(`[LiarsBar3D] Failed to load ${seat.file}:`, err)
@@ -808,10 +915,10 @@ export function LiarsBar3DExperience({
       };
 
       setScreenPos({
-        cowboy: projectToScreen(state.charObjects['cowboy']?.root),
+        wolf: projectToScreen(state.charObjects['wolf']?.root),
         mobster: projectToScreen(state.charObjects['mobster']?.root),
         girl: projectToScreen(state.charObjects['girl']?.root),
-        punk: projectToScreen(state.charObjects['punk']?.root),
+        hunter: projectToScreen(state.charObjects['hunter']?.root),
       });
 
       // Render 3D Scene

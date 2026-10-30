@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { ClientRoomView } from '@werewolf/shared';
 
 // ============================================================================
@@ -169,18 +170,27 @@ export function LiarsBar3DExperience({
   // Local opponents state
   const [opponents, setOpponents] = useState<TableOpponent[]>([
     {
-      id: 'rhino',
+      id: 'bull',
       seatNumber: 1,
-      nickname: '#01 TRÙM TÊ GIÁC',
-      roleHint: 'Tê Giác Mafia Hawaii',
+      nickname: '#01 TRÙM TÊ GIÁC (BULL)',
+      roleHint: 'Đại Ca Giáp Gai',
       isDead: false,
       votes: 1,
       dialogue: 'Hai đứa mày đừng hòng qua mặt tao. Tao có 3 lá Át!',
     },
     {
-      id: 'wolf',
+      id: 'robot',
       seatNumber: 2,
-      nickname: '#02 SÁT THỦ SÓI',
+      nickname: '#02 ROBOT TRỌNG TÀI',
+      roleHint: 'Chủ Sòng Dealer',
+      isDead: false,
+      votes: 0,
+      dialogue: 'Hãy đặt cược số phận của các ngươi lên bàn poker!',
+    },
+    {
+      id: 'wolf',
+      seatNumber: 3,
+      nickname: '#03 SÁT THỦ SÓI',
       roleHint: 'Sát Thủ Sói Mobster',
       isDead: false,
       votes: 2,
@@ -191,7 +201,7 @@ export function LiarsBar3DExperience({
   // Cards on hand
   const [handCards] = useState([
     { id: 1, name: 'TIÊN TRI', sub: 'SOI ĐÊM', type: 'seer', icon: '🔮', desc: 'Tìm diệt Ma Sói trong làng' },
-    { id: 2, name: 'TREO CỔ', sub: '#02 SÁT THỦ SÓI', type: 'verdict', icon: '⚖️', desc: '3/5 Phiếu phán quyết' },
+    { id: 2, name: 'TREO CỔ', sub: '#03 SÁT THỦ SÓI', type: 'verdict', icon: '⚖️', desc: '3/5 Phiếu phán quyết' },
     { id: 3, name: 'DÂN LÀNG', sub: 'LƯƠNG THIỆN', type: 'village', icon: '🧑🌾', desc: 'Bầu chọn treo cổ kẻ ác' },
     { id: 4, name: 'PHIẾU TRẮNG', sub: 'TRUNG LẬP', type: 'skip', icon: '🕊️', desc: 'Từ chối phán quyết' },
   ]);
@@ -200,7 +210,7 @@ export function LiarsBar3DExperience({
   const accusedId = room?.day?.accusedId || 'wolf';
 
   // Refs for animation loop
-  const mouseRef = useRef({ x: 0, y: 0, targetYaw: 0, targetPitch: 0 });
+  const mouseRef = useRef({ targetYaw: 0, targetPitch: 0 });
   const threeRef = useRef<{
     renderer: THREE.WebGLRenderer;
     scene: THREE.Scene;
@@ -208,17 +218,15 @@ export function LiarsBar3DExperience({
     revolverGroup: THREE.Group;
     muzzleLight: THREE.PointLight;
     lampGroup: THREE.Group;
-    rhinoGroup: THREE.Group;
-    wolfGroup: THREE.Group;
-    rhinoMat: THREE.MeshStandardMaterial;
-    wolfMat: THREE.MeshStandardMaterial;
     playedCardsGroup: THREE.Group;
     raycaster: THREE.Raycaster;
     shootRecoil: number;
+    mixers: THREE.AnimationMixer[];
+    charObjects: { [id: string]: { root: THREE.Object3D; mixer?: THREE.AnimationMixer; actions: { [name: string]: THREE.AnimationAction } } };
   } | null>(null);
 
   // ============================================================================
-  // 3. INITIALIZE REAL THREE.JS 3D WEBGL SCENE
+  // 3. INITIALIZE REAL THREE.JS 3D WEBGL SCENE WITH FULL 3D MODELS
   // ============================================================================
   useEffect(() => {
     if (!mountRef.current) return;
@@ -233,32 +241,24 @@ export function LiarsBar3DExperience({
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.15;
+    renderer.toneMappingExposure = 1.25;
     container.replaceChildren(renderer.domElement);
 
     // B. SCENE & ATMOSPHERE
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x0a0604);
-    scene.fog = new THREE.FogExp2(0x0e0805, 0.052);
+    scene.background = new THREE.Color(0x0c0805);
+    scene.fog = new THREE.FogExp2(0x0e0906, 0.05);
 
     // C. CAMERA (FPS Perspective)
     const camera = new THREE.PerspectiveCamera(60, width / height, 0.1, 50);
     camera.position.set(0, 1.48, 1.95);
     camera.lookAt(0, 1.15, -0.4);
 
-    // D. TEXTURES
-    const texLoader = new THREE.TextureLoader();
-    const rhinoIdleTex = texLoader.load('/assets/characters_ue5/rhino_idle.png');
-    const rhinoActionTex = texLoader.load('/assets/characters_ue5/rhino_action.png');
-    const wolfIdleTex = texLoader.load('/assets/characters_ue5/wolf_idle.png');
-    const wolfAimingTex = texLoader.load('/assets/characters_ue5/wolf_aiming.png');
-
-    // E. LIGHTING
-    // Ambient tavern low light
-    const ambientLight = new THREE.AmbientLight(0x382216, 0.9);
+    // D. LIGHTING
+    const ambientLight = new THREE.AmbientLight(0x452818, 1.2);
     scene.add(ambientLight);
 
-    // Hanging overhead lamp with swinging chain
+    // Swinging Brass Overhead Lantern
     const lampGroup = new THREE.Group();
     lampGroup.position.set(0, 3.4, 0);
 
@@ -268,20 +268,20 @@ export function LiarsBar3DExperience({
     chainMesh.position.y = -0.6;
     lampGroup.add(chainMesh);
 
-    const shadeGeo = new THREE.ConeGeometry(0.38, 0.25, 24, 1, true);
-    const brassMat = new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.4, metalness: 0.85 });
+    const shadeGeo = new THREE.ConeGeometry(0.42, 0.28, 24, 1, true);
+    const brassMat = new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.35, metalness: 0.85 });
     const shadeMesh = new THREE.Mesh(shadeGeo, brassMat);
     shadeMesh.position.y = -1.2;
     shadeMesh.rotation.x = Math.PI;
     lampGroup.add(shadeMesh);
 
-    const bulbGeo = new THREE.SphereGeometry(0.08, 16, 16);
+    const bulbGeo = new THREE.SphereGeometry(0.09, 16, 16);
     const bulbMat = new THREE.MeshBasicMaterial({ color: 0xfef08a });
     const bulbMesh = new THREE.Mesh(bulbGeo, bulbMat);
     bulbMesh.position.y = -1.25;
     lampGroup.add(bulbMesh);
 
-    const lanternLight = new THREE.PointLight(0xffaa44, 3.4, 9, 1.25);
+    const lanternLight = new THREE.PointLight(0xffaa44, 3.8, 11, 1.2);
     lanternLight.position.set(0, -1.3, 0);
     lanternLight.castShadow = true;
     lanternLight.shadow.mapSize.width = 1024;
@@ -291,17 +291,17 @@ export function LiarsBar3DExperience({
     scene.add(lampGroup);
 
     // Back wall Red Neon "BAR" light
-    const neonLight = new THREE.PointLight(0xff3311, 2.0, 7, 1.5);
+    const neonLight = new THREE.PointLight(0xff3311, 2.2, 8, 1.5);
     neonLight.position.set(0, 2.6, -4.2);
     scene.add(neonLight);
 
     // Muzzle flash light attached to camera
-    const muzzleLight = new THREE.PointLight(0xfff5e6, 0, 6, 1.8);
+    const muzzleLight = new THREE.PointLight(0xfff5e6, 0, 7, 1.8);
     muzzleLight.position.set(0, -0.1, -0.3);
     camera.add(muzzleLight);
 
-    // F. 3D TAVERN ROOM
-    // Wood plank floor
+    // E. 3D TAVERN ROOM
+    // Floor
     const floorGeo = new THREE.PlaneGeometry(16, 16);
     const floorMat = new THREE.MeshStandardMaterial({ color: 0x1f140c, roughness: 0.75, metalness: 0.1 });
     const floorMesh = new THREE.Mesh(floorGeo, floorMat);
@@ -309,7 +309,7 @@ export function LiarsBar3DExperience({
     floorMesh.receiveShadow = true;
     scene.add(floorMesh);
 
-    // Brick back wall
+    // Back wall
     const wallGeo = new THREE.PlaneGeometry(16, 8);
     const wallMat = new THREE.MeshStandardMaterial({ color: 0x18100b, roughness: 0.9 });
     const backWall = new THREE.Mesh(wallGeo, wallMat);
@@ -324,13 +324,13 @@ export function LiarsBar3DExperience({
     neonSign.position.set(0, 2.6, -4.55);
     scene.add(neonSign);
 
-    // G. 3D POKER TABLE IN CENTER
+    // F. 3D POKER TABLE IN CENTER
     const tableGroup = new THREE.Group();
     tableGroup.position.set(0, 0, 0);
 
     // Emerald Green Poker Felt
     const feltGeo = new THREE.CylinderGeometry(1.65, 1.65, 0.08, 48);
-    const feltMat = new THREE.MeshStandardMaterial({ color: 0x14532d, roughness: 0.88, metalness: 0.04 });
+    const feltMat = new THREE.MeshStandardMaterial({ color: 0x14532d, roughness: 0.85, metalness: 0.04 });
     const feltMesh = new THREE.Mesh(feltGeo, feltMat);
     feltMesh.position.y = 1.0;
     feltMesh.receiveShadow = true;
@@ -369,114 +369,149 @@ export function LiarsBar3DExperience({
     const playedCardsGroup = new THREE.Group();
     playedCardsGroup.position.set(0, 1.045, 0);
     tableGroup.add(playedCardsGroup);
-
     scene.add(tableGroup);
 
-    // H. 3D CHAIRS & MOBSTER OPPONENTS
-    const createChair = (x: number, z: number, lookX: number, lookZ: number) => {
-      const chair = new THREE.Group();
-      chair.position.set(x, 0, z);
-      chair.lookAt(lookX, 0.8, lookZ);
+    // G. LOAD 3D CHAIRS & REAL 3D ANIMATED CHARACTERS VIA GLTFLOADER
+    const gltfLoader = new GLTFLoader();
+    const mixers: THREE.AnimationMixer[] = [];
+    const charObjects: { [id: string]: { root: THREE.Object3D; mixer?: THREE.AnimationMixer; actions: { [name: string]: THREE.AnimationAction } } } = {};
 
-      // Seat
-      const seat = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.08, 0.65), woodMat);
-      seat.position.y = 0.72;
-      seat.castShadow = true;
-      chair.add(seat);
+    // 1. Load 3D Chairs
+    gltfLoader.load('/models/chair.glb', (gltf) => {
+      const chairModel = gltf.scene;
+      chairModel.traverse((node: any) => {
+        if (node.isMesh) {
+          node.castShadow = true;
+          node.receiveShadow = true;
+        }
+      });
 
-      // Backrest
-      const back = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.85, 0.08), woodMat);
-      back.position.set(0, 1.15, -0.3);
-      back.castShadow = true;
-      chair.add(back);
+      // Seat 1: Bull
+      const chair1 = chairModel.clone();
+      chair1.scale.set(0.65, 0.65, 0.65);
+      chair1.position.set(-1.45, 0, -0.75);
+      chair1.rotation.y = Math.PI / 4 + 0.2;
+      scene.add(chair1);
 
-      return chair;
-    };
+      // Seat 2: Robot
+      const chair2 = chairModel.clone();
+      chair2.scale.set(0.65, 0.65, 0.65);
+      chair2.position.set(0, 0, -1.65);
+      chair2.rotation.y = 0;
+      scene.add(chair2);
 
-    // Chair 1: Rhino
-    const rhinoChair = createChair(-1.35, -0.85, 0, 0);
-    scene.add(rhinoChair);
-
-    // Chair 2: Wolf
-    const wolfChair = createChair(1.35, -0.85, 0, 0);
-    scene.add(wolfChair);
-
-    // 3D Rhino Character Entity
-    const rhinoGroup = new THREE.Group();
-    rhinoGroup.position.set(-1.35, 1.25, -0.85);
-    rhinoGroup.lookAt(camera.position.x, 1.3, camera.position.z);
-
-    const charPlaneGeo = new THREE.PlaneGeometry(1.35, 1.6);
-    const rhinoMat = new THREE.MeshStandardMaterial({
-      map: rhinoIdleTex,
-      transparent: true,
-      alphaTest: 0.15,
-      roughness: 0.7,
-      metalness: 0.1,
+      // Seat 3: Wolf
+      const chair3 = chairModel.clone();
+      chair3.scale.set(0.65, 0.65, 0.65);
+      chair3.position.set(1.45, 0, -0.75);
+      chair3.rotation.y = -Math.PI / 4 - 0.2;
+      scene.add(chair3);
     });
-    const rhinoMesh = new THREE.Mesh(charPlaneGeo, rhinoMat);
-    rhinoMesh.castShadow = true;
-    rhinoMesh.receiveShadow = true;
-    rhinoGroup.add(rhinoMesh);
-    scene.add(rhinoGroup);
 
-    // 3D Wolf Character Entity
-    const wolfGroup = new THREE.Group();
-    wolfGroup.position.set(1.35, 1.25, -0.85);
-    wolfGroup.lookAt(camera.position.x, 1.3, camera.position.z);
+    // 2. Load 3D Bull Character (Trùm Tê Giác)
+    gltfLoader.load('/models/bull.glb', (gltf) => {
+      const model = gltf.scene;
+      model.scale.set(0.24, 0.24, 0.24);
+      model.position.set(-1.45, 0.62, -0.75);
+      model.rotation.y = Math.PI / 3;
 
-    const wolfMat = new THREE.MeshStandardMaterial({
-      map: wolfIdleTex,
-      transparent: true,
-      alphaTest: 0.15,
-      roughness: 0.7,
-      metalness: 0.1,
+      model.traverse((node: any) => {
+        if (node.isMesh) {
+          node.castShadow = true;
+          node.receiveShadow = true;
+        }
+      });
+      scene.add(model);
+
+      const mixer = new THREE.AnimationMixer(model);
+      mixers.push(mixer);
+      const actions: { [name: string]: THREE.AnimationAction } = {};
+      gltf.animations.forEach((clip) => {
+        actions[clip.name] = mixer.clipAction(clip);
+      });
+
+      if (actions['AnimalArmature|Idle']) {
+        actions['AnimalArmature|Idle'].play();
+      }
+
+      charObjects['bull'] = { root: model, mixer, actions };
     });
-    const wolfMesh = new THREE.Mesh(charPlaneGeo, wolfMat);
-    wolfMesh.castShadow = true;
-    wolfMesh.receiveShadow = true;
-    wolfGroup.add(wolfMesh);
-    scene.add(wolfGroup);
 
-    // I. PLAYER'S FIRST-PERSON REVOLVER (ATTACHED TO CAMERA)
+    // 3. Load 3D Robot Dealer / Moderator
+    gltfLoader.load('/models/robot.glb', (gltf) => {
+      const model = gltf.scene;
+      model.scale.set(0.26, 0.26, 0.26);
+      model.position.set(0, 0.65, -1.65);
+      model.rotation.y = 0;
+
+      model.traverse((node: any) => {
+        if (node.isMesh) {
+          node.castShadow = true;
+          node.receiveShadow = true;
+        }
+      });
+      scene.add(model);
+
+      const mixer = new THREE.AnimationMixer(model);
+      mixers.push(mixer);
+      const actions: { [name: string]: THREE.AnimationAction } = {};
+      gltf.animations.forEach((clip) => {
+        actions[clip.name] = mixer.clipAction(clip);
+      });
+
+      if (actions['Sitting']) {
+        actions['Sitting'].play();
+      } else if (actions['Idle']) {
+        actions['Idle'].play();
+      }
+
+      charObjects['robot'] = { root: model, mixer, actions };
+    });
+
+    // 4. Load 3D Wolf Character (Sát Thủ Sói)
+    gltfLoader.load('/models/wolf.glb', (gltf) => {
+      const model = gltf.scene;
+      model.scale.set(0.38, 0.38, 0.38);
+      model.position.set(1.45, 0.62, -0.75);
+      model.rotation.y = -Math.PI / 3;
+
+      model.traverse((node: any) => {
+        if (node.isMesh) {
+          node.castShadow = true;
+          node.receiveShadow = true;
+        }
+      });
+      scene.add(model);
+
+      const mixer = new THREE.AnimationMixer(model);
+      mixers.push(mixer);
+      const actions: { [name: string]: THREE.AnimationAction } = {};
+      gltf.animations.forEach((clip) => {
+        actions[clip.name] = mixer.clipAction(clip);
+      });
+
+      if (actions['AnimalArmature|Idle']) {
+        actions['AnimalArmature|Idle'].play();
+      }
+
+      charObjects['wolf'] = { root: model, mixer, actions };
+    });
+
+    // H. LOAD PLAYER'S 3D REVOLVER (FPS WEAPON ATTACHED TO CAMERA)
     const revolverGroup = new THREE.Group();
-    revolverGroup.position.set(0.24, -0.25, -0.48);
+    revolverGroup.position.set(0.22, -0.22, -0.42);
 
-    // Barrel
-    const barrelGeo = new THREE.CylinderGeometry(0.018, 0.018, 0.28, 8);
-    const gunSteelMat = new THREE.MeshStandardMaterial({ color: 0x262626, roughness: 0.35, metalness: 0.85 });
-    const barrel = new THREE.Mesh(barrelGeo, gunSteelMat);
-    barrel.rotation.x = Math.PI / 2;
-    barrel.position.set(0, 0.04, -0.14);
-    revolverGroup.add(barrel);
-
-    // Cylinder with 6 chambers
-    const cylGeo = new THREE.CylinderGeometry(0.04, 0.04, 0.1, 6);
-    const cylinderMesh = new THREE.Mesh(cylGeo, gunSteelMat);
-    cylinderMesh.rotation.x = Math.PI / 2;
-    cylinderMesh.position.set(0, 0.04, 0.02);
-    revolverGroup.add(cylinderMesh);
-
-    // Frame body
-    const frameGeo = new THREE.BoxGeometry(0.042, 0.09, 0.18);
-    const frameMesh = new THREE.Mesh(frameGeo, gunSteelMat);
-    frameMesh.position.set(0, 0.02, 0.04);
-    revolverGroup.add(frameMesh);
-
-    // Grip
-    const gripGeo = new THREE.BoxGeometry(0.045, 0.14, 0.07);
-    const gripMat = new THREE.MeshStandardMaterial({ color: 0x3d1c06, roughness: 0.6, metalness: 0.1 });
-    const grip = new THREE.Mesh(gripGeo, gripMat);
-    grip.rotation.x = -0.3;
-    grip.position.set(0, -0.07, 0.1);
-    revolverGroup.add(grip);
-
-    // Muzzle tip flash spark mesh
-    const flashGeo = new THREE.SphereGeometry(0.05, 8, 8);
-    const flashMat = new THREE.MeshBasicMaterial({ color: 0xfffaed, visible: false });
-    const flashMesh = new THREE.Mesh(flashGeo, flashMat);
-    flashMesh.position.set(0, 0.04, -0.3);
-    revolverGroup.add(flashMesh);
+    gltfLoader.load('/models/revolver.glb', (gltf) => {
+      const gunModel = gltf.scene;
+      gunModel.scale.set(0.12, 0.12, 0.12);
+      gunModel.rotation.y = -Math.PI / 2;
+      gunModel.traverse((node: any) => {
+        if (node.isMesh) {
+          node.castShadow = true;
+        }
+      });
+      revolverGroup.add(gunModel);
+    });
 
     camera.add(revolverGroup);
     scene.add(camera);
@@ -489,16 +524,14 @@ export function LiarsBar3DExperience({
       revolverGroup,
       muzzleLight,
       lampGroup,
-      rhinoGroup,
-      wolfGroup,
-      rhinoMat,
-      wolfMat,
       playedCardsGroup,
       raycaster: new THREE.Raycaster(),
       shootRecoil: 0,
+      mixers,
+      charObjects,
     };
 
-    // J. RESIZE HANDLER
+    // I. RESIZE HANDLER
     const handleResize = () => {
       if (!mountRef.current) return;
       const w = mountRef.current.clientWidth;
@@ -509,37 +542,37 @@ export function LiarsBar3DExperience({
     };
     window.addEventListener('resize', handleResize);
 
-    // K. ANIMATION LOOP
+    // J. ANIMATION LOOP
     let animationFrameId: number;
     let clock = new THREE.Clock();
 
     const animate = () => {
       animationFrameId = requestAnimationFrame(animate);
+      const delta = clock.getDelta();
       const t = clock.getElapsedTime();
       const state = threeRef.current;
       if (!state) return;
 
-      // 1. Smooth Camera FPS Look
+      // 1. Update 3D Character Skeletal Animation Mixers
+      state.mixers.forEach((m) => m.update(delta));
+
+      // 2. Smooth Camera FPS Look
       const targetYaw = mouseRef.current.targetYaw;
       const targetPitch = mouseRef.current.targetPitch;
       camera.rotation.y += (targetYaw - camera.rotation.y) * 0.08;
       camera.rotation.x += (targetPitch - camera.rotation.x) * 0.08;
 
       // Subtle breathing camera sway
-      camera.position.y = 1.48 + Math.sin(t * 1.6) * 0.006;
+      camera.position.y = 1.48 + Math.sin(t * 1.6) * 0.005;
 
-      // 2. Hanging Lamp Swing
+      // 3. Hanging Lamp Swing
       state.lampGroup.rotation.z = Math.sin(t * 1.5) * 0.032;
       state.lampGroup.rotation.x = Math.cos(t * 1.2) * 0.022;
 
-      // 3. Characters Idle Breathing Animation
-      state.rhinoGroup.position.y = 1.25 + Math.sin(t * 2.2) * 0.014;
-      state.wolfGroup.position.y = 1.25 + Math.cos(t * 2.0) * 0.014;
-
       // 4. Player's Revolver Stance (Hip vs ADS Aiming)
       const targetGunPos = isAimingGun
-        ? new THREE.Vector3(0, -0.13, -0.38) // Center ADS
-        : new THREE.Vector3(0.24, -0.25, -0.48); // Hip
+        ? new THREE.Vector3(0, -0.13, -0.32) // Center ADS
+        : new THREE.Vector3(0.22, -0.22, -0.42); // Hip
 
       // Apply recoil recovery
       state.shootRecoil = THREE.MathUtils.lerp(state.shootRecoil, 0, 0.14);
@@ -548,13 +581,14 @@ export function LiarsBar3DExperience({
       state.revolverGroup.position.lerp(targetGunPos.clone().add(recoilOffset), 0.15);
       state.revolverGroup.rotation.x = isAimingGun
         ? state.shootRecoil * 0.4
-        : THREE.MathUtils.lerp(state.revolverGroup.rotation.x, 0.08, 0.1);
+        : THREE.MathUtils.lerp(state.revolverGroup.rotation.x, 0.05, 0.1);
 
       // 5. Update Screen Positions for 3D Nametags
-      const projectToScreen = (obj: THREE.Object3D) => {
+      const projectToScreen = (root?: THREE.Object3D) => {
+        if (!root) return { x: 0, y: 0, visible: false };
         const v = new THREE.Vector3();
-        obj.getWorldPosition(v);
-        v.y += 0.95; // above character head
+        root.getWorldPosition(v);
+        v.y += 1.1; // above 3D character head
         v.project(camera);
         const sx = ((v.x + 1) * width) / 2;
         const sy = ((-v.y + 1) * height) / 2;
@@ -562,11 +596,12 @@ export function LiarsBar3DExperience({
       };
 
       setScreenPos({
-        rhino: projectToScreen(state.rhinoGroup),
-        wolf: projectToScreen(state.wolfGroup),
+        bull: projectToScreen(state.charObjects['bull']?.root),
+        robot: projectToScreen(state.charObjects['robot']?.root),
+        wolf: projectToScreen(state.charObjects['wolf']?.root),
       });
 
-      // Render
+      // Render 3D Scene
       renderer.render(scene, camera);
     };
 
@@ -579,50 +614,40 @@ export function LiarsBar3DExperience({
     };
   }, [isAimingGun]);
 
-  // Update Character Textures when targeted / accused
-  useEffect(() => {
-    const state = threeRef.current;
-    if (!state) return;
-    const texLoader = new THREE.TextureLoader();
-
-    // Rhino texture
-    const isRhinoActive = hoveredTargetId === 'rhino' || accusedId === 'rhino';
-    state.rhinoMat.map = texLoader.load(
-      isRhinoActive ? '/assets/characters_ue5/rhino_action.png' : '/assets/characters_ue5/rhino_idle.png'
-    );
-    state.rhinoMat.needsUpdate = true;
-
-    // Wolf texture
-    const isWolfActive = hoveredTargetId === 'wolf' || accusedId === 'wolf';
-    state.wolfMat.map = texLoader.load(
-      isWolfActive ? '/assets/characters_ue5/wolf_aiming.png' : '/assets/characters_ue5/wolf_idle.png'
-    );
-    state.wolfMat.needsUpdate = true;
-  }, [hoveredTargetId, accusedId]);
-
-  // Mouse move handler for 3D FPS rotation
+  // Mouse move handler for 3D FPS rotation & Raycasting
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!mountRef.current) return;
     const rect = mountRef.current.getBoundingClientRect();
-    const normX = (e.clientX - rect.left) / rect.width - 0.5; // -0.5 -> 0.5
-    const normY = (e.clientY - rect.top) / rect.height - 0.5; // -0.5 -> 0.5
+    const normX = (e.clientX - rect.left) / rect.width - 0.5;
+    const normY = (e.clientY - rect.top) / rect.height - 0.5;
 
-    mouseRef.current.targetYaw = -normX * 0.75; // 3D Yaw ~43 degrees left/right
-    mouseRef.current.targetPitch = -normY * 0.42; // 3D Pitch ~24 degrees up/down
+    mouseRef.current.targetYaw = -normX * 0.75;
+    mouseRef.current.targetPitch = -normY * 0.42;
 
-    // Raycast to detect if cursor is over Rhino or Wolf
+    // Raycast to detect hover on 3D character meshes
     if (threeRef.current) {
       const mouse = new THREE.Vector2(normX * 2, -normY * 2);
       threeRef.current.raycaster.setFromCamera(mouse, threeRef.current.camera);
-      const intersects = threeRef.current.raycaster.intersectObjects([
-        threeRef.current.rhinoGroup,
-        threeRef.current.wolfGroup,
-      ], true);
 
+      const targets: THREE.Object3D[] = [];
+      const charIds: string[] = [];
+      for (const [id, char] of Object.entries(threeRef.current.charObjects)) {
+        targets.push(char.root);
+        charIds.push(id);
+      }
+
+      const intersects = threeRef.current.raycaster.intersectObjects(targets, true);
       if (intersects.length > 0) {
-        let parent = intersects[0].object.parent;
-        if (parent === threeRef.current.rhinoGroup) setHoveredTargetId('rhino');
-        else if (parent === threeRef.current.wolfGroup) setHoveredTargetId('wolf');
+        let hit = intersects[0].object;
+        while (hit.parent && !charIds.includes(hit.name)) {
+          for (const id of charIds) {
+            if (threeRef.current.charObjects[id]?.root === hit) {
+              setHoveredTargetId(id);
+              return;
+            }
+          }
+          hit = hit.parent;
+        }
       } else {
         setHoveredTargetId(null);
       }
@@ -664,10 +689,25 @@ export function LiarsBar3DExperience({
           setRevolverFired(false);
         }, 60);
 
-        // Character death animation in 3D: flinch and fall
-        const targetGroup = targetId === 'rhino' ? threeRef.current.rhinoGroup : threeRef.current.wolfGroup;
-        targetGroup.rotation.x -= 0.45;
-        targetGroup.position.y -= 0.65;
+        // Play Death skeletal animation or hit reaction
+        const char = threeRef.current.charObjects[targetId];
+        if (char && char.actions) {
+          const deathAction = char.actions['AnimalArmature|Death'] || char.actions['Death'];
+          const hitAction = char.actions['AnimalArmature|Idle_HitReact_Left'];
+
+          if (deathAction) {
+            char.mixer?.stopAllAction();
+            deathAction.clampWhenFinished = true;
+            deathAction.setLoop(THREE.LoopOnce, 1);
+            deathAction.play();
+          } else if (hitAction) {
+            hitAction.setLoop(THREE.LoopOnce, 1);
+            hitAction.play();
+          } else {
+            char.root.rotation.x -= 0.5;
+            char.root.position.y -= 0.6;
+          }
+        }
       }
 
       setOpponents((prev) => prev.map((o) => (o.id === targetId ? { ...o, isDead: true } : o)));
@@ -681,7 +721,6 @@ export function LiarsBar3DExperience({
     tavernAudio.playCardFlip();
 
     if (threeRef.current) {
-      // Create 3D card on the table felt
       const cardGeo = new THREE.BoxGeometry(0.18, 0.004, 0.26);
       const cardMat = new THREE.MeshStandardMaterial({ color: 0xfef08a, roughness: 0.5 });
       const cardMesh = new THREE.Mesh(cardGeo, cardMat);
@@ -734,7 +773,7 @@ export function LiarsBar3DExperience({
       }}
       className="relative w-full h-full overflow-hidden bg-black select-none cursor-crosshair"
     >
-      {/* 1. REAL THREE.JS 3D WEBGL VIEWPORT */}
+      {/* 1. REAL THREE.JS 3D WEBGL VIEWPORT WITH SKELETAL 3D MODELS */}
       <div ref={mountRef} className="absolute inset-0 w-full h-full" />
 
       {/* 2. REALTIME 3D PROJECTED NAMETAGS & DIALOGUE IN 3D SPACE */}

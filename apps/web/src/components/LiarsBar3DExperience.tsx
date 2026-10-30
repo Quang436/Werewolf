@@ -10,6 +10,7 @@ import { ClientRoomView, PublicPlayerView } from '@werewolf/shared';
 // ============================================================================
 export class WerewolfAudioEngine {
   private ctx: AudioContext | null = null;
+  private isMuted: boolean = false;
 
   private init() {
     if (!this.ctx && typeof window !== 'undefined') {
@@ -18,8 +19,17 @@ export class WerewolfAudioEngine {
     }
   }
 
+  public setMuted(muted: boolean) {
+    this.isMuted = muted;
+  }
+
+  public getMuted(): boolean {
+    return this.isMuted;
+  }
+
   // Wooden Gavel Strike for Voting / Verdicts
   public playGavel() {
+    if (this.isMuted) return;
     this.init();
     if (!this.ctx) return;
     const now = this.ctx.currentTime;
@@ -41,6 +51,7 @@ export class WerewolfAudioEngine {
 
   // Eerie Wolf Howl in the Night
   public playWolfHowl() {
+    if (this.isMuted) return;
     this.init();
     if (!this.ctx) return;
     const now = this.ctx.currentTime;
@@ -64,6 +75,7 @@ export class WerewolfAudioEngine {
 
   // Daybreak Bell Toll
   public playBell() {
+    if (this.isMuted) return;
     this.init();
     if (!this.ctx) return;
     const now = this.ctx.currentTime;
@@ -85,6 +97,7 @@ export class WerewolfAudioEngine {
 
   // Night Mystical Whisper
   public playWhisper() {
+    if (this.isMuted) return;
     this.init();
     if (!this.ctx) return;
     const now = this.ctx.currentTime;
@@ -106,6 +119,7 @@ export class WerewolfAudioEngine {
 
   // Crisp Vote Token Selection Sound
   public playVoteStamp() {
+    if (this.isMuted) return;
     this.init();
     if (!this.ctx) return;
     const now = this.ctx.currentTime;
@@ -127,6 +141,7 @@ export class WerewolfAudioEngine {
 
   // Crisp Card Deal / Card Flip Swoosh Sound
   public playCardDeal() {
+    if (this.isMuted) return;
     this.init();
     if (!this.ctx) return;
     const now = this.ctx.currentTime;
@@ -894,8 +909,129 @@ export function LiarsBar3DExperience({
 
     scene.add(tableGroup);
 
-    // G. CLEAN SPEAKEASY NOIR TABLE (Identical to Image 2 - Zero T-poses, Zero washed-out point lights)
+    // G. SEATED 3D NOIR POKER CHARACTERS (Zero T-poses, Sleek Tavern Figures)
     const charObjects: { [id: string]: { root: THREE.Object3D; baseY: number; isAlive: boolean } } = {};
+
+    opponentSeats.forEach((seat, idx) => {
+      const charGroup = new THREE.Group();
+      charGroup.name = seat.id;
+      charGroup.position.set(seat.pos[0], seat.pos[1], seat.pos[2]);
+      charGroup.rotation.y = seat.angle + Math.PI; // Face table center
+
+      // 1. Sleek Leather Poker Chair
+      const chairGroup = new THREE.Group();
+      chairGroup.position.set(0, 0, 0.18);
+
+      const seatMesh = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.32, 0.30, 0.08, 16),
+        new THREE.MeshStandardMaterial({ color: 0x181411, roughness: 0.5, metalness: 0.2 })
+      );
+      seatMesh.position.y = 0.54;
+      seatMesh.castShadow = true;
+      chairGroup.add(seatMesh);
+
+      const chairBack = new THREE.Mesh(
+        new THREE.BoxGeometry(0.48, 0.55, 0.08),
+        new THREE.MeshStandardMaterial({ color: 0x221711, roughness: 0.5, metalness: 0.2 })
+      );
+      chairBack.position.set(0, 0.88, 0.18);
+      chairBack.rotation.x = -0.08;
+      chairBack.castShadow = true;
+      chairGroup.add(chairBack);
+
+      const chairLeg = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.04, 0.18, 0.52, 12),
+        new THREE.MeshStandardMaterial({ color: 0x0f0b08, roughness: 0.3, metalness: 0.8 })
+      );
+      chairLeg.position.y = 0.26;
+      chairGroup.add(chairLeg);
+      charGroup.add(chairGroup);
+
+      // 2. Humanoid Body (Sitting at table)
+      const bodyGroup = new THREE.Group();
+      bodyGroup.name = 'Body';
+      bodyGroup.position.set(0, 0.56, 0.04);
+
+      // Jacket / Coat Colors in Noir Palette
+      const coatColors = [0x1c1917, 0x1e293b, 0x3b1212, 0x143525, 0x242038, 0x3d2612];
+      const coatColor = coatColors[idx % coatColors.length];
+
+      // Torso
+      const torso = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.24, 0.21, 0.65, 12),
+        new THREE.MeshStandardMaterial({ color: coatColor, roughness: 0.7, metalness: 0.1 })
+      );
+      torso.position.y = 0.38;
+      torso.castShadow = true;
+      torso.receiveShadow = true;
+      bodyGroup.add(torso);
+
+      // Arms resting on table felt
+      const armMat = new THREE.MeshStandardMaterial({ color: coatColor, roughness: 0.7 });
+      const armL = new THREE.Mesh(new THREE.CapsuleGeometry(0.065, 0.38, 4, 8), armMat);
+      armL.position.set(-0.28, 0.42, -0.15);
+      armL.rotation.set(0.65, 0.15, 0.35);
+      bodyGroup.add(armL);
+
+      const armR = new THREE.Mesh(new THREE.CapsuleGeometry(0.065, 0.38, 4, 8), armMat);
+      armR.position.set(0.28, 0.42, -0.15);
+      armR.rotation.set(0.65, -0.15, -0.35);
+      bodyGroup.add(armR);
+
+      // Hands
+      const skinTones = [0xdfba9e, 0xcc9966, 0xb37440, 0x7c4923];
+      const skinTone = skinTones[idx % skinTones.length];
+      const handMat = new THREE.MeshStandardMaterial({ color: skinTone, roughness: 0.6 });
+
+      const handL = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 8), handMat);
+      handL.position.set(-0.24, 0.46, -0.32);
+      bodyGroup.add(handL);
+
+      const handR = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 8), handMat);
+      handR.position.set(0.24, 0.46, -0.32);
+      bodyGroup.add(handR);
+
+      // Head & Features
+      const headGroup = new THREE.Group();
+      headGroup.name = 'Head';
+      headGroup.position.set(0, 0.82, 0);
+
+      const headMesh = new THREE.Mesh(
+        new THREE.SphereGeometry(0.16, 16, 16),
+        new THREE.MeshStandardMaterial({ color: skinTone, roughness: 0.5 })
+      );
+      headMesh.castShadow = true;
+      headGroup.add(headMesh);
+
+      // Fedora or Cowboy Hat for atmospheric noir tavern
+      if (idx % 2 === 0) {
+        const hatMat = new THREE.MeshStandardMaterial({ color: 0x111116, roughness: 0.6 });
+        const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.30, 0.30, 0.02, 16), hatMat);
+        brim.position.y = 0.12;
+        headGroup.add(brim);
+
+        const crown = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.20, 0.16, 16), hatMat);
+        crown.position.y = 0.20;
+        headGroup.add(crown);
+      }
+
+      bodyGroup.add(headGroup);
+      charGroup.add(bodyGroup);
+
+      // Pose: If dead, slump immediately; if alive, set up
+      if (!seat.isAlive) {
+        bodyGroup.position.y = 0.28;
+        bodyGroup.rotation.x = -0.45;
+        headGroup.rotation.set(-0.70, 0, 0.25);
+      }
+
+      scene.add(charGroup);
+      charObjects[seat.id] = {
+        root: charGroup,
+        baseY: seat.pos[1],
+        isAlive: seat.isAlive,
+      };
+    });
 
     threeRef.current = {
       renderer,
@@ -951,13 +1087,15 @@ export function LiarsBar3DExperience({
       // 2. Day / Night Atmosphere Transition
       const isNight = isNightRef.current;
       if (isNight) {
-        state.ambientLight.color.lerp(new THREE.Color(0x1a2639), 0.05);
-        state.lanternLight.color.lerp(new THREE.Color(0x60a5fa), 0.05);
+        state.ambientLight.color.lerp(new THREE.Color(0x0f172a), 0.05);
+        state.lanternLight.color.lerp(new THREE.Color(0x38bdf8), 0.05);
+        state.lanternLight.intensity = THREE.MathUtils.lerp(state.lanternLight.intensity, 1.6, 0.05);
         scene.background = new THREE.Color(0x05070c);
         if (scene.fog) scene.fog.color.lerp(new THREE.Color(0x05070c), 0.05);
       } else {
         state.ambientLight.color.lerp(new THREE.Color(0xffecd2), 0.05);
         state.lanternLight.color.lerp(new THREE.Color(0xff9922), 0.05);
+        state.lanternLight.intensity = THREE.MathUtils.lerp(state.lanternLight.intensity, 4.0, 0.05);
         scene.background = new THREE.Color(0x0a0706);
         if (scene.fog) scene.fog.color.lerp(new THREE.Color(0x0a0706), 0.05);
       }
@@ -967,7 +1105,7 @@ export function LiarsBar3DExperience({
       state.candleLight1.intensity = 2.2 + Math.sin(t * 12) * 0.25;
       state.candleLight2.intensity = 2.2 + Math.cos(t * 14) * 0.25;
 
-      // 4. Alive Character Breathing & Hover / Selection Reaction
+      // 4. Character Animation: Sleep / Awake & Reactions
       const curHovered = hoveredSeatIdRef.current;
       const curSelected = selectedTargetIdRef.current;
 
@@ -976,13 +1114,26 @@ export function LiarsBar3DExperience({
 
         const isHovered = curHovered === id;
         const isSelected = curSelected === id;
-        const breath = Math.sin(t * 2.0 + idx * 1.1) * 0.005;
+        const breathSpeed = isNight ? 1.0 : 2.0;
+        const breathAmount = isNight ? 0.003 : 0.005;
+        const breath = Math.sin(t * breathSpeed + idx * 1.1) * breathAmount;
         char.root.position.y = char.baseY + breath;
 
-        // Subtle head turn
+        // Head and Body pose transitions: SLEEP vs AWAKE
         const head = char.root.getObjectByName('Head');
+        const body = char.root.getObjectByName('Body');
         if (head) {
-          head.rotation.y = Math.sin(t * 1.2 + idx) * 0.06;
+          if (isNight) {
+            // SLEEP POSE: Head tilted down forward resting on table felt
+            head.rotation.x = THREE.MathUtils.lerp(head.rotation.x, -0.65, 0.06);
+            head.rotation.y = THREE.MathUtils.lerp(head.rotation.y, 0, 0.06);
+            if (body) body.rotation.x = THREE.MathUtils.lerp(body.rotation.x, -0.22, 0.06);
+          } else {
+            // AWAKE POSE: Head upright, looking around tavern naturally
+            head.rotation.x = THREE.MathUtils.lerp(head.rotation.x, -0.05, 0.06);
+            head.rotation.y = THREE.MathUtils.lerp(head.rotation.y, Math.sin(t * 1.2 + idx) * 0.08, 0.06);
+            if (body) body.rotation.x = THREE.MathUtils.lerp(body.rotation.x, 0, 0.06);
+          }
         }
 
         const targetScale = isSelected ? 1.02 : isHovered ? 0.98 : 0.94;

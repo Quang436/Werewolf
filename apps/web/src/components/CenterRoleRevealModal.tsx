@@ -280,8 +280,8 @@ export const CenterRoleRevealModal: React.FC<CenterRoleRevealModalProps> = ({
                   }}
                   className="flex-1 py-2.5 px-4 rounded-xl bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-black font-display font-black text-xs uppercase tracking-wider shadow-[0_0_20px_rgba(245,158,11,0.6)] border border-amber-300 transition-all flex items-center justify-center gap-2 transform active:scale-95"
                 >
-                  <span className="material-symbols-outlined text-[16px]">check_circle</span>
-                  <span>ĐÃ HIỂU VAI TRÒ ({countdown}s)</span>
+                  <span className="material-symbols-outlined text-[16px]">bedtime</span>
+                  <span>ĐÃ HIỂU VAI TRÒ &bull; ĐI NGỦ ({countdown}s)</span>
                 </button>
 
                 {onOpenTacticalBook && (

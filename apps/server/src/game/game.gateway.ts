@@ -54,7 +54,9 @@ export class GameGateway {
     private readonly timerWorker: TimerWorker,
     private readonly redis: RedisStoreAdapter,
     private readonly io: ServerSocketBroadcaster
-  ) {}
+  ) {
+    this.gameLoop.setTimerScheduler(this.timerWorker);
+  }
 
   /**
    * Xác thực kết nối và gán thông tin định danh
@@ -406,6 +408,19 @@ export class GameGateway {
 
     room.day.judgment[voter.id] = parsed.data.verdict;
     await this.redis.setRoom(room);
+
+    // Fast-forward nếu tất cả người chơi đủ tư cách (trừ bị cáo) đã bỏ phiếu phán quyết
+    const eligibleJudges = room.players.filter((p) => p.isAlive && p.id !== room.day.accusedId);
+    if (Object.keys(room.day.judgment).length >= eligibleJudges.length) {
+      let guilty = 0;
+      let innocent = 0;
+      for (const v of Object.values(room.day.judgment)) {
+        if (v === 'GUILTY') guilty++;
+        if (v === 'INNOCENT') innocent++;
+      }
+      const targetPhase = (guilty > innocent && room.day.accusedId) ? 'DAY_EXECUTION' : 'CHECK_WIN';
+      await this.gameLoop.transition(room.id, targetPhase);
+    }
 
     return { ok: true };
   }

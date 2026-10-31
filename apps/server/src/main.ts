@@ -184,6 +184,7 @@ async function bootstrap() {
 
   const gameLoop = new GameLoopService(redisStore, broadcaster);
   const timerWorker = new TimerWorker(redisStore, gameLoop);
+  gameLoop.setTimerScheduler(timerWorker);
 
   // Khởi động Background Timer Worker
   timerWorker.start(500);

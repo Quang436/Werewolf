@@ -34,11 +34,21 @@ export interface Broadcaster {
   emitToLovers(roomId: string, event: string, payload: unknown): void;
 }
 
+export interface TimerScheduler {
+  scheduleTimer(roomId: string, stateVersion: number, phase: Phase, phaseEndsAt: number): Promise<void>;
+}
+
 export class GameLoopService {
+  private timerScheduler: TimerScheduler | null = null;
+
   constructor(
     private readonly redis: RedisStoreAdapter,
     private readonly broadcaster: Broadcaster
   ) {}
+
+  public setTimerScheduler(scheduler: TimerScheduler): void {
+    this.timerScheduler = scheduler;
+  }
 
   /**
    * Bắt đầu ván đấu (Start Game)
@@ -121,6 +131,10 @@ export class GameLoopService {
       this.dispatchRoleAssignedEvents(room);
       this.broadcastRoomSnapshot(room);
 
+      if (room.phaseEndsAt && this.timerScheduler) {
+        await this.timerScheduler.scheduleTimer(room.id, room.stateVersion, room.phase, room.phaseEndsAt);
+      }
+
       return room;
     } finally {
       await this.redis.releaseLock(roomId, lockToken);
@@ -148,6 +162,10 @@ export class GameLoopService {
 
       await this.redis.setRoom(room);
       this.broadcastRoomSnapshot(room);
+
+      if (room.phaseEndsAt && this.timerScheduler) {
+        await this.timerScheduler.scheduleTimer(room.id, room.stateVersion, room.phase, room.phaseEndsAt);
+      }
 
       return room;
     } finally {
@@ -284,6 +302,14 @@ export class GameLoopService {
             room.round++;
             room.phase = 'NIGHT_START';
             room.phaseEndsAt = Date.now() + d.nightStart * 1000;
+            room.night = {
+              bodyguardTarget: null,
+              wolfVotes: {},
+              wolfTarget: null,
+              witchSave: false,
+              witchPoisonTarget: null,
+              seerTarget: null,
+            };
           }
         }
         break;
@@ -301,6 +327,59 @@ export class GameLoopService {
         room.phaseEndsAt = Date.now() + d.revote * 1000;
         break;
 
+      case 'VOTE_RESOLVE': {
+        room.phaseEndsAt = null;
+        const tally: Record<string, number> = {};
+        let skipCount = 0;
+        for (const targetId of Object.values(room.day.votes)) {
+          if (!targetId || targetId === 'SKIP') {
+            skipCount++;
+          } else {
+            tally[targetId] = (tally[targetId] || 0) + 1;
+          }
+        }
+
+        let maxVotes = 0;
+        let candidatesWithMaxVotes: string[] = [];
+        for (const [targetId, count] of Object.entries(tally)) {
+          if (count > maxVotes) {
+            maxVotes = count;
+            candidatesWithMaxVotes = [targetId];
+          } else if (count === maxVotes) {
+            candidatesWithMaxVotes.push(targetId);
+          }
+        }
+
+        if (maxVotes > 0 && maxVotes > skipCount) {
+          if (candidatesWithMaxVotes.length === 1) {
+            // Duy nhất 1 người có phiếu cao nhất -> Đưa lên bục biện hộ
+            room.day.accusedId = candidatesWithMaxVotes[0];
+            room.phase = 'DAY_DEFENSE';
+            room.phaseEndsAt = Date.now() + d.defense * 1000;
+          } else if (room.day.revoteCount === 0) {
+            // Hòa lần 1 -> Bỏ phiếu lại (Revote) giữa các ứng viên hòa
+            room.day.revoteCandidates = candidatesWithMaxVotes;
+            room.day.revoteCount = 1;
+            room.day.votes = {};
+            room.phase = 'DAY_REVOTE';
+            room.phaseEndsAt = Date.now() + d.revote * 1000;
+          } else {
+            // Hòa lần 2 -> Không ai bị treo cổ, chuyển sang đêm tiếp theo
+            room.day.accusedId = null;
+            room.afterCheckWin = 'NIGHT';
+            room.phase = 'CHECK_WIN';
+            await this.handlePhaseEntry(room, 'VOTE_RESOLVE', 'CHECK_WIN');
+          }
+        } else {
+          // Bỏ qua nhiều hơn hoặc không ai bị vote -> Không ai bị treo cổ
+          room.day.accusedId = null;
+          room.afterCheckWin = 'NIGHT';
+          room.phase = 'CHECK_WIN';
+          await this.handlePhaseEntry(room, 'VOTE_RESOLVE', 'CHECK_WIN');
+        }
+        break;
+      }
+
       case 'DAY_DEFENSE':
         room.phaseEndsAt = Date.now() + d.defense * 1000;
         break;
@@ -309,10 +388,42 @@ export class GameLoopService {
         room.phaseEndsAt = Date.now() + d.judgment * 1000;
         break;
 
-      case 'DAY_EXECUTION':
+      case 'DAY_EXECUTION': {
         room.phaseEndsAt = Date.now() + d.execution * 1000;
         room.afterCheckWin = 'NIGHT';
+        if (room.day.accusedId) {
+          const accused = room.players.find((p) => p.id === room.day.accusedId);
+          if (accused && accused.isAlive) {
+            accused.isAlive = false;
+            accused.deathInfo = {
+              round: room.round,
+              cause: 'EXECUTION',
+            };
+
+            // Chuỗi chết cặp đôi tình nhân Cupid
+            if (room.lovers && (room.lovers.playerAId === accused.id || room.lovers.playerBId === accused.id)) {
+              const otherId = room.lovers.playerAId === accused.id ? room.lovers.playerBId : room.lovers.playerAId;
+              const lover = room.players.find((p) => p.id === otherId);
+              if (lover && lover.isAlive) {
+                lover.isAlive = false;
+                lover.deathInfo = {
+                  round: room.round,
+                  cause: 'HEARTBREAK',
+                };
+              }
+            }
+
+            // Kích hoạt Thợ Săn bắn báo thù khi bị treo cổ
+            if (accused.role === 'HUNTER' && !accused.roleState.hasShot) {
+              room.pendingTriggers.push({
+                kind: 'HUNTER_SHOT',
+                playerId: accused.id,
+              });
+            }
+          }
+        }
         break;
+      }
 
       case 'GAME_OVER':
         room.phaseEndsAt = null;

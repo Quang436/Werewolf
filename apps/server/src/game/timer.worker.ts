@@ -271,6 +271,9 @@ export class TimerWorker {
         return 'CHECK_WIN';
 
       case 'DAY_EXECUTION':
+        if (room.pendingTriggers.length > 0) {
+          return 'DEATH_TRIGGERS';
+        }
         return 'CHECK_WIN';
 
       default:

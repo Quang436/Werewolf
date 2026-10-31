@@ -233,4 +233,70 @@ describe('TimerWorker Distributed Scheduler Tests', () => {
     const processedLate = await timerWorker.tick(1200);
     assert.equal(processedLate, 0); // Không chạy vì version không khớp!
   });
+
+  it('State Machine: Luồng biểu quyết ban ngày VOTE_RESOLVE, Biện hộ, Phán quyết và Treo cổ', async () => {
+    const redis = new InMemoryZSetRedisAdapter();
+    const broadcaster = new MockServerBroadcaster();
+    const gameLoop = new GameLoopService(redis, broadcaster);
+    const timerWorker = new TimerWorker(redis, gameLoop);
+    gameLoop.setTimerScheduler(timerWorker);
+
+    // Tạo phòng mẫu ở pha DAY_VOTING với 4 người chơi
+    const roomManager = new GameRoomManager(redis);
+    const room = await roomManager.createRoom({ id: 'u1', nickname: 'Dân 1' });
+    await roomManager.joinRoom(room.code, { id: 'u2', nickname: 'Bị Cáo Sói' });
+    await roomManager.joinRoom(room.code, { id: 'u3', nickname: 'Dân 2' });
+    await roomManager.joinRoom(room.code, { id: 'u4', nickname: 'Dân 3' });
+
+    const activeRoom = (await redis.getRoom(room.id))!;
+    activeRoom.phase = 'DAY_VOTING';
+    activeRoom.players[0].role = 'VILLAGER';
+    activeRoom.players[1].role = 'WEREWOLF';
+    activeRoom.players[1].team = 'WEREWOLF';
+    activeRoom.players[2].role = 'VILLAGER';
+    activeRoom.players[3].role = 'VILLAGER';
+
+    // 3 người bầu u2, 1 người SKIP
+    activeRoom.day.votes = {
+      u1: 'u2',
+      u3: 'u2',
+      u4: 'u2',
+      u2: 'SKIP',
+    };
+    await redis.setRoom(activeRoom);
+
+    // Chuyển sang VOTE_RESOLVE -> u2 phải thành accusedId và chuyển sang DAY_DEFENSE
+    await gameLoop.transition(activeRoom.id, 'VOTE_RESOLVE');
+    const roomAfterVote = (await redis.getRoom(activeRoom.id))!;
+    assert.equal(roomAfterVote.phase, 'DAY_DEFENSE');
+    assert.equal(roomAfterVote.day.accusedId, 'u2');
+    assert.ok(roomAfterVote.phaseEndsAt! > Date.now());
+
+    // Sau khi biện hộ xong -> Chuyển sang DAY_JUDGMENT
+    await gameLoop.transition(activeRoom.id, 'DAY_JUDGMENT');
+    const roomInJudgment = (await redis.getRoom(activeRoom.id))!;
+    assert.equal(roomInJudgment.phase, 'DAY_JUDGMENT');
+
+    // 3 người dân vote GUILTY cho bị cáo u2
+    roomInJudgment.day.judgment = {
+      u1: 'GUILTY',
+      u3: 'GUILTY',
+      u4: 'GUILTY',
+    };
+    await redis.setRoom(roomInJudgment);
+
+    // Hết giờ phán quyết hoặc đủ phiếu -> Chuyển sang DAY_EXECUTION
+    await gameLoop.transition(roomInJudgment.id, 'DAY_EXECUTION');
+    const roomAfterExecution = (await redis.getRoom(roomInJudgment.id))!;
+    assert.equal(roomAfterExecution.phase, 'DAY_EXECUTION');
+    const executedPlayer = roomAfterExecution.players.find((p) => p.id === 'u2')!;
+    assert.equal(executedPlayer.isAlive, false);
+    assert.equal(executedPlayer.deathInfo?.cause, 'EXECUTION');
+
+    // Tiếp theo từ DAY_EXECUTION chuyển sang CHECK_WIN -> Vì con sói duy nhất đã chết, Dân Làng Thắng!
+    await gameLoop.transition(roomAfterExecution.id, 'CHECK_WIN');
+    const finalRoom = (await redis.getRoom(roomAfterExecution.id))!;
+    assert.equal(finalRoom.phase, 'GAME_OVER');
+    assert.equal(finalRoom.winner, 'VILLAGE');
+  });
 });

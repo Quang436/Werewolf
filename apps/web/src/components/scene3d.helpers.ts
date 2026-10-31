@@ -9,7 +9,7 @@ import { getRoleDetailExtra, getRoleInfo } from '../constants/roles-data';
 export type CameraPerspective = '1ST' | '2ND';
 
 export const SEAT_CIRCLE_RADIUS = 2.45; // 2.4m - 2.5m circular seating radius
-export const TABLE_SURFACE_Y = 0.805; // Top surface height of matte poker felt
+export const TABLE_SURFACE_Y = 0.765; // Top surface height of matte poker felt (aligns with [0, 0.77, 1.6] tray)
 export const TABLE_FELT_RADIUS = 1.9;
 export const TABLE_ARMREST_RADIUS = 2.06;
 
@@ -25,10 +25,10 @@ export const CAMERA_PRESETS: Record<CameraPerspective, CameraRigPreset> = {
   // Góc nhìn 1 (1ST - FPS POV): Ngang tầm mắt người ngồi ghế [0, 1.35, 2.3], chúc nhẹ xuống giữa bàn [0, 0.85, 0]
   '1ST': {
     position: [0, 1.35, 2.3],
-    lookAt: [0, 0.85, 0],
-    parallaxPos: { x: 0.14, y: 0.06 },
-    parallaxLook: { x: 0.62, y: 0.28 },
-    fov: 62,
+    lookAt: [0, 0.84, 0],
+    parallaxPos: { x: 0.14, y: 0.05 },
+    parallaxLook: { x: 0.58, y: 0.22 },
+    fov: 66,
   },
   // Góc nhìn 2 (2ND - Tactical Observer / Over-the-shoulder): [0, 2.3, 3.7], nhìn bao quát [0, 0.6, 0]
   '2ND': {
@@ -1246,39 +1246,168 @@ export function getVoteTokenTexture(
 }
 
 /**
- * Huy hiệu tổng số phiếu nổi trên mặt bàn trước mặt người bị nghi ngờ (ví dụ: "3 Phiếu").
+ * Huy hiệu tổng số phiếu nổi phía trước ghế đối thủ bị vote (ví dụ: "[ 3 Phiếu ]").
  */
 export function getFloatingVoteCountTexture(
   voteCount: number,
   isLeading = false
 ): THREE.CanvasTexture | null {
   if (typeof document === 'undefined') return null;
-  const key = `vote-float:${voteCount}:${isLeading ? 1 : 0}`;
+  const key = `vote-float-bracket:${voteCount}:${isLeading ? 1 : 0}`;
   if (textureCache.has(key)) return textureCache.get(key)!;
 
-  const w = 320;
-  const h = 104;
+  const w = 384;
+  const h = 108;
   const canvas = document.createElement('canvas');
   canvas.width = w;
   canvas.height = h;
   const ctx = canvas.getContext('2d')!;
 
-  ctx.fillStyle = isLeading ? 'rgba(115, 16, 24, 0.94)' : 'rgba(24, 18, 14, 0.92)';
-  drawRoundedRect(ctx, 10, 12, w - 20, h - 24, 38);
+  ctx.fillStyle = isLeading ? 'rgba(98, 14, 22, 0.94)' : 'rgba(18, 14, 11, 0.92)';
+  drawRoundedRect(ctx, 10, 12, w - 20, h - 24, 18);
   ctx.fill();
 
-  ctx.strokeStyle = isLeading ? '#ff4d6d' : '#e0b25b';
+  ctx.strokeStyle = isLeading ? '#ff4d6d' : '#d4af5f';
   ctx.lineWidth = 4;
   ctx.stroke();
 
   ctx.fillStyle = isLeading ? '#ffe4e6' : '#fde68a';
-  ctx.font = '900 40px Georgia, "Times New Roman", serif';
+  ctx.font = '900 36px Georgia, "Times New Roman", serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(`${voteCount} Phiếu`, w / 2, h / 2 + 2);
+  ctx.fillText(`[ ${voteCount} Phiếu ]`, w / 2, h / 2 + 2);
 
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
+  return rememberTexture(key, tex);
+}
+
+/**
+ * Vân gỗ sồi tối màu (Dark Oak) cho Khay đựng bài cá nhân (PersonalCardTray).
+ */
+export function getDarkOakTrayTexture(): THREE.CanvasTexture | null {
+  if (typeof document === 'undefined') return null;
+  const key = 'static:dark-oak-tray';
+  if (textureCache.has(key)) return textureCache.get(key)!;
+
+  const size = 512;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d')!;
+
+  const grad = ctx.createLinearGradient(0, 0, size, size);
+  grad.addColorStop(0, '#2b1b11');
+  grad.addColorStop(0.5, '#21140c');
+  grad.addColorStop(1, '#170d08');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, size, size);
+
+  for (let i = 0; i < 140; i++) {
+    const y = (i / 140) * size;
+    ctx.strokeStyle = i % 3 === 0 ? 'rgba(10, 5, 2, 0.42)' : 'rgba(72, 46, 28, 0.22)';
+    ctx.lineWidth = 1 + (i % 3) * 0.6;
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.bezierCurveTo(
+      size * 0.3,
+      y + Math.sin(i * 0.5) * 6,
+      size * 0.7,
+      y - Math.cos(i * 0.4) * 6,
+      size,
+      y + Math.sin(i * 0.3) * 4
+    );
+    ctx.stroke();
+  }
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  return rememberTexture(key, tex);
+}
+
+/**
+ * Bảng kim loại đồng khắc chữ nổi ở gờ trước Khay đựng bài cá nhân: "${seatNumber} - ${playerName}".
+ */
+export function getBrassIdentityPlaqueTexture(
+  seatNumber: number | string,
+  playerName: string,
+  isAlive: boolean
+): THREE.CanvasTexture | null {
+  if (typeof document === 'undefined') return null;
+  const formattedSeat =
+    typeof seatNumber === 'number' ? `#${String(seatNumber).padStart(2, '0')}` : String(seatNumber);
+  const key = `brass-identity:${formattedSeat}:${playerName}:${isAlive ? 1 : 0}`;
+  if (textureCache.has(key)) return textureCache.get(key)!;
+
+  const w = 512;
+  const h = 112;
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d')!;
+
+  // Brushed antique bronze / brass metallic gradient
+  const metal = ctx.createLinearGradient(0, 0, w, h);
+  if (isAlive) {
+    metal.addColorStop(0, '#785726');
+    metal.addColorStop(0.25, '#b88c42');
+    metal.addColorStop(0.5, '#dfba6e');
+    metal.addColorStop(0.75, '#a67b34');
+    metal.addColorStop(1, '#5e4219');
+  } else {
+    metal.addColorStop(0, '#3a393c');
+    metal.addColorStop(0.5, '#59585e');
+    metal.addColorStop(1, '#2b2a2e');
+  }
+  ctx.fillStyle = metal;
+  drawRoundedRect(ctx, 6, 6, w - 12, h - 12, 14);
+  ctx.fill();
+
+  // Inner engraved dark bezel line
+  ctx.strokeStyle = isAlive ? '#3b250a' : '#1d1c1f';
+  ctx.lineWidth = 4;
+  drawRoundedRect(ctx, 14, 14, w - 28, h - 28, 10);
+  ctx.stroke();
+
+  // Subtle horizontal brushed-metal hairlines
+  for (let i = 0; i < 40; i++) {
+    const y = 12 + Math.random() * (h - 24);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.04)';
+    ctx.fillRect(16, y, w - 32, 1);
+  }
+
+  // Left & Right decorative brass rivets
+  for (const rx of [34, w - 34]) {
+    ctx.fillStyle = isAlive ? '#452c0c' : '#1e1e21';
+    ctx.beginPath();
+    ctx.arc(rx, h / 2, 7, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = isAlive ? '#f7d98c' : '#7a7a80';
+    ctx.beginPath();
+    ctx.arc(rx - 1.5, h / 2 - 1.5, 4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Embossed / Engraved Identity Text: "${seatNumber} - ${playerName}"
+  const cleanName = playerName.length > 16 ? `${playerName.slice(0, 15)}…` : playerName;
+  const label = `${formattedSeat} - ${cleanName}`;
+
+  ctx.font = '900 34px Georgia, "Times New Roman", serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  // Light embossed highlight below-right
+  ctx.fillStyle = isAlive ? 'rgba(255, 240, 195, 0.55)' : 'rgba(200, 200, 210, 0.2)';
+  ctx.fillText(label, w / 2 + 1, h / 2 + 2.5);
+
+  // Deep engraved dark bronze fill
+  ctx.fillStyle = isAlive ? '#1e1104' : '#161618';
+  ctx.fillText(label, w / 2, h / 2 + 1);
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
   return rememberTexture(key, tex);
 }
 

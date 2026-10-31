@@ -134,24 +134,24 @@ export const HangingNooseEffect: React.FC<HangingNooseEffectProps> = ({
         }
 
         const cardProgress = easeInOutCubic((t - 2.15) / 1.25);
-        const startX = condemnedSeat.cardRestPosition[0];
-        const startY = condemnedSeat.cardRestPosition[1];
-        const startZ = condemnedSeat.cardRestPosition[2];
+        // Fly directly from the condemned player's seat out to the poker table center [0, 0.85, 0]
+        const startX = condemnedSeat.position[0] * 0.82;
+        const startY = 0.92;
+        const startZ = condemnedSeat.position[2] * 0.82;
 
-        // Center reveal spot on the poker table, angled slightly up toward players so everyone reads it clearly
         const endX = 0;
-        const endY = TABLE_SURFACE_Y + 0.055;
-        const endZ = 0.12;
+        const endY = 0.85;
+        const endZ = 0;
 
         revealCardGroupRef.current.position.set(
           THREE.MathUtils.lerp(startX, endX, cardProgress),
-          THREE.MathUtils.lerp(startY, endY, cardProgress) + Math.sin(cardProgress * Math.PI) * 0.18,
+          THREE.MathUtils.lerp(startY, endY, cardProgress) + Math.sin(cardProgress * Math.PI) * 0.22,
           THREE.MathUtils.lerp(startZ, endZ, cardProgress)
         );
 
-        // Tilted face-up at table center (-1.22 rad ~ 20 deg propped face-up on center felt)
+        // Tilted face-up at table center [0, 0.85, 0] so the entire table reads the identity
         revealCardGroupRef.current.rotation.set(
-          THREE.MathUtils.lerp(-Math.PI / 2, -1.18, cardProgress),
+          THREE.MathUtils.lerp(-Math.PI / 2, -1.05, cardProgress),
           0,
           0
         );
@@ -160,7 +160,7 @@ export const HangingNooseEffect: React.FC<HangingNooseEffectProps> = ({
         revealFlipRef.current.rotation.y = THREE.MathUtils.lerp(Math.PI, 0, cardProgress);
 
         if (centerPinLightRef.current) {
-          centerPinLightRef.current.intensity = cardProgress * 1.8;
+          centerPinLightRef.current.intensity = cardProgress * 2.4;
         }
       }
     }
@@ -262,18 +262,18 @@ export const HangingNooseEffect: React.FC<HangingNooseEffectProps> = ({
       </group>
 
       {/* ================================================================
-          3. EXECUTED PLAYER'S ROLE CARD FLIPPING FACE-UP AT TABLE CENTER
+          3. EXECUTED PLAYER'S ROLE CARD FLIPPING FACE-UP AT TABLE CENTER [0, 0.85, 0]
          ================================================================ */}
       <pointLight
         ref={centerPinLightRef}
-        position={[0, 1.35, 0.12]}
-        color="#ffcf70"
+        position={[0, 1.28, 0.28]}
+        color="#fff0c8"
         intensity={0}
-        distance={2.2}
-        decay={2}
+        distance={2.4}
+        decay={1.4}
       />
 
-      <group ref={revealCardGroupRef} position={[0, TABLE_SURFACE_Y + 0.05, 0]} visible={false}>
+      <group ref={revealCardGroupRef} position={[0, 0.85, 0]} visible={false}>
         {glowTex && (
           <mesh position={[0, 0, -0.015]}>
             <planeGeometry args={[0.48, 0.66]} />

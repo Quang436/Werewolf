@@ -91,9 +91,14 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
     const realPlayers = state.room?.players || [];
     const targetCapacity = Math.max(state.room?.settings?.maxPlayers || 8, realPlayers.length, 8);
 
+    const savedNick =
+      typeof window !== 'undefined' ? sessionStorage.getItem('werewolf_nickname') : null;
+
     let baseList: PublicPlayerView[];
     if (!state.room || realPlayers.length === 0) {
-      baseList = SAMPLE_NOIR_PLAYERS.slice(0, targetCapacity);
+      baseList = SAMPLE_NOIR_PLAYERS.slice(0, targetCapacity).map((p) =>
+        p.id === 'p8' && savedNick ? { ...p, nickname: savedNick } : p
+      );
     } else {
       const result: PublicPlayerView[] = [...realPlayers];
       const usedSeats = new Set(realPlayers.map((p) => p.seat));
@@ -264,29 +269,28 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
         return;
       }
 
-      setSelectedTargetId(targetId === 'SKIP' ? null : targetId);
+      // Clicking the same opponent again retracts vote to SKIP; clicking another opponent casts/switches vote
+      const effectiveTarget = myVotedTargetId === targetId ? 'SKIP' : targetId;
+
+      setSelectedTargetId(effectiveTarget === 'SKIP' ? null : effectiveTarget);
       setIsPeacefulTie(false);
       setVerdictBanner(null);
 
       setLocalVoteTally((prev) => {
         const next = { ...prev };
-        // Remove previous vote from local player if changing target
         if (myVotedTargetId && myVotedTargetId !== 'SKIP' && next[myVotedTargetId]) {
           next[myVotedTargetId] = Math.max(0, next[myVotedTargetId] - 1);
           if (next[myVotedTargetId] === 0) delete next[myVotedTargetId];
         }
-        if (targetId !== 'SKIP') {
-          next[targetId] = (next[targetId] || 0) + 1;
+        if (effectiveTarget !== 'SKIP') {
+          next[effectiveTarget] = (next[effectiveTarget] || 0) + 1;
         }
         return next;
       });
 
-      setMyVotedTargetId(targetId);
-
-      if (targetId === 'SKIP') {
-        werewolfAudio.playVoteStamp();
-      }
-      onEmitAction('day:vote', { targetId });
+      setMyVotedTargetId(effectiveTarget);
+      werewolfAudio.playVoteStamp();
+      onEmitAction('day:vote', { targetId: effectiveTarget });
     },
     [isExecutionPhase, isNight, myVotedTargetId, onEmitAction]
   );
@@ -396,15 +400,15 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
 
   const diegeticSubtitle = useMemo(() => {
     if (verdictBanner) return verdictBanner;
-    if (effectivePhase === 'DEALING_CARDS') return 'Xem vai trò Tarot • Sau 4s bài hạ xuống góc bàn';
+    if (effectivePhase === 'DEALING_CARDS') return 'Lật xem vai trò • Sau đó bài nằm gọn vào rãnh khay gỗ';
     if (isNight) return 'Cả làng gục đầu say ngủ • Sói thức giấc';
     if (myVotedTargetId && myVotedTargetId !== 'SKIP') {
       const target = activePlayers.find((p) => p.id === myVotedTargetId);
       if (target) {
-        return `Đã đẩy thẻ phiếu tới #${String(target.seat).padStart(2, '0')} ${target.nickname}`;
+        return `Đã chỉ định phiếu cho #${String(target.seat).padStart(2, '0')} ${target.nickname}`;
       }
     }
-    return 'Chọn ghế đối thủ hoặc thẻ gỗ trước mặt để bỏ phiếu';
+    return 'Click ghế / tên đối thủ để vote • Click khay gỗ để xem bài';
   }, [activePlayers, effectivePhase, isNight, myVotedTargetId, verdictBanner]);
 
   const condemnedRole: Role = useMemo(() => {

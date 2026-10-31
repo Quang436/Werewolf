@@ -8,6 +8,7 @@ import {
   CameraPerspective,
   ComputedSeat,
   getDarkLeatherTexture,
+  getFloatingVoteCountTexture,
   getGothicTarotBackTexture,
   getRetroNameplateTexture,
 } from './scene3d.helpers';
@@ -19,6 +20,7 @@ export interface TableSeatProps {
   canVote: boolean;
   isSelected: boolean;
   isCondemned: boolean;
+  isLeadingVote?: boolean;
   hasDealtCards: boolean;
   onSelectSeat: (playerId: string) => void;
 }
@@ -39,6 +41,7 @@ export const TableSeat: React.FC<TableSeatProps> = ({
   canVote,
   isSelected,
   isCondemned,
+  isLeadingVote = false,
   hasDealtCards,
   onSelectSeat,
 }) => {
@@ -64,6 +67,11 @@ export const TableSeat: React.FC<TableSeatProps> = ({
     [seat.player.seat, seat.player.nickname, seat.isLocal, isAlive, hovered, interactive, isSelected, isCondemned]
   );
 
+  const voteCounterTex = useMemo(
+    () => (seat.voteCount > 0 ? getFloatingVoteCountTexture(seat.voteCount, isLeadingVote) : null),
+    [seat.voteCount, isLeadingVote]
+  );
+
   // Articulated rig refs for smooth procedural seated posture, sleep, and hanging slump
   const torsoRef = useRef<THREE.Group>(null);
   const headRef = useRef<THREE.Group>(null);
@@ -71,6 +79,7 @@ export const TableSeat: React.FC<TableSeatProps> = ({
   const rightUpperArmRef = useRef<THREE.Group>(null);
   const leftForearmRef = useRef<THREE.Group>(null);
   const rightForearmRef = useRef<THREE.Group>(null);
+  const voteFloatRef = useRef<THREE.Group>(null);
 
   const coatColor = NOIR_COAT_PALETTE[seat.archetypeIndex % NOIR_COAT_PALETTE.length];
   const phaseSeed = seat.player.seat * 1.37;
@@ -79,6 +88,11 @@ export const TableSeat: React.FC<TableSeatProps> = ({
     const dt = Math.min(delta, 0.1);
     const alpha = 1 - Math.exp(-5.5 * dt);
     const t = state.clock.elapsedTime;
+
+    if (voteFloatRef.current) {
+      voteFloatRef.current.position.y =
+        seat.voteSpotPosition[1] + 0.125 + Math.sin(t * 2.5 + phaseSeed) * 0.008;
+    }
 
     if (!torsoRef.current || !headRef.current) return;
 
@@ -562,11 +576,18 @@ export const TableSeat: React.FC<TableSeatProps> = ({
         )}
 
         {/* ================================================================
-            3. RETRO FLOATING NAMEPLATE & SEAT NUMBER ABOVE HEAD
+            3. RETRO FLOATING NAMEPLATE & SEAT NUMBER ABOVE HEAD (CLICK TO VOTE)
            ================================================================ */}
         {(!seat.isLocal || cameraPerspective === '2ND') && nameplateTex && (
           <Billboard position={[0, 1.66, 0.04]} follow lockX={false} lockY={false} lockZ={false}>
-            <mesh onClick={handleSeatClick}>
+            <mesh
+              onPointerOver={(e) => {
+                e.stopPropagation();
+                if (!seat.isLocal) setHovered(true);
+              }}
+              onPointerOut={() => setHovered(false)}
+              onClick={handleSeatClick}
+            >
               <planeGeometry args={[0.68, 0.18]} />
               <meshBasicMaterial map={nameplateTex} transparent depthWrite={false} />
             </mesh>
@@ -575,7 +596,7 @@ export const TableSeat: React.FC<TableSeatProps> = ({
       </group>
 
       {/* ================================================================
-          4. OPPONENT'S FACE-DOWN TAROT CARD & SUBTLE HOVER RING ON TABLE
+          4. OPPONENT'S FACE-DOWN TAROT CARD, HOVER RING & "[ 3 Phiếu ]" BADGE
          ================================================================ */}
       {!seat.isLocal && hasDealtCards && isAlive && tarotBackTex && (
         <mesh
@@ -598,13 +619,42 @@ export const TableSeat: React.FC<TableSeatProps> = ({
           position={[seat.voteSpotPosition[0], seat.voteSpotPosition[1] - 0.004, seat.voteSpotPosition[2]]}
           rotation={[-Math.PI / 2, 0, 0]}
         >
-          <ringGeometry args={[0.11, 0.135, 28]} />
+          <ringGeometry args={[0.1, 0.128, 28]} />
           <meshBasicMaterial
             color={hovered ? '#fbbf24' : '#ef4444'}
             transparent
-            opacity={hovered ? 0.85 : 0.55}
+            opacity={hovered ? 0.88 : 0.6}
           />
         </mesh>
+      )}
+
+      {/* Floating Vote Counter in front of voted opponent's seat (e.g., "[ 3 Phiếu ]") */}
+      {isAlive && seat.voteCount > 0 && voteCounterTex && (
+        <group
+          ref={voteFloatRef}
+          position={[
+            seat.voteSpotPosition[0],
+            seat.voteSpotPosition[1] + 0.125,
+            seat.voteSpotPosition[2],
+          ]}
+        >
+          {/* Subtle Crimson/Gold Vote Marker Disc on Felt */}
+          <mesh position={[0, -0.121, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+            <ringGeometry args={[0.055, 0.075, 24]} />
+            <meshBasicMaterial
+              color={isLeadingVote ? '#ff1744' : '#d4af5f'}
+              transparent
+              opacity={0.75}
+            />
+          </mesh>
+
+          <Billboard follow>
+            <mesh onClick={handleSeatClick}>
+              <planeGeometry args={[0.42, 0.12]} />
+              <meshBasicMaterial map={voteCounterTex} transparent depthWrite={false} />
+            </mesh>
+          </Billboard>
+        </group>
       )}
     </group>
   );

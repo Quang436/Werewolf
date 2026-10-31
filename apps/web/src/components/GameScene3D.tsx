@@ -19,10 +19,10 @@ import {
   getMatteFeltTexture,
   getSmokePuffTexture,
   interpolateCameraRig,
+  werewolfAudio,
 } from './scene3d.helpers';
 import { TableSeat } from './TableSeat';
-import { AnimatedRoleCard } from './AnimatedRoleCard';
-import { VotingTokenTray } from './VotingTokenTray';
+import { PersonalCardTray } from './PersonalCardTray';
 import { HangingNooseEffect } from './HangingNooseEffect';
 
 export interface GameScene3DProps {
@@ -453,7 +453,14 @@ const PubNoirEnvironmentAndTable: React.FC<{
   diegeticTimerText: string;
   diegeticSubtitle: string;
   plaqueMode: 'day' | 'night' | 'execution' | 'peace';
-}> = ({ diegeticPhaseTitle, diegeticTimerText, diegeticSubtitle, plaqueMode }) => {
+  onClickTableSurface?: () => void;
+}> = ({
+  diegeticPhaseTitle,
+  diegeticTimerText,
+  diegeticSubtitle,
+  plaqueMode,
+  onClickTableSurface,
+}) => {
   const feltTex = useMemo(() => getMatteFeltTexture('moss'), []);
   const feltBumpTex = useMemo(() => getFeltBumpTexture(), []);
   const leatherTex = useMemo(() => getDarkLeatherTexture(), []);
@@ -465,7 +472,14 @@ const PubNoirEnvironmentAndTable: React.FC<{
   );
 
   return (
-    <group>
+    <group
+      onClick={(e) => {
+        if (onClickTableSurface) {
+          e.stopPropagation();
+          onClickTableSurface();
+        }
+      }}
+    >
       {/* HIGH-ROUGHNESS DARK HARDWOOD PUB FLOOR */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
         <circleGeometry args={[12, 48]} />
@@ -484,13 +498,13 @@ const PubNoirEnvironmentAndTable: React.FC<{
           <cylinderGeometry args={[0.88, 0.96, 0.09, 28]} />
           <meshStandardMaterial color="#180e09" roughness={0.8} metalness={0.08} />
         </mesh>
-        <mesh position={[0, 0.39, 0]} castShadow receiveShadow>
-          <cylinderGeometry args={[0.38, 0.5, 0.64, 24]} />
+        <mesh position={[0, 0.37, 0]} castShadow receiveShadow>
+          <cylinderGeometry args={[0.38, 0.5, 0.62, 24]} />
           <meshStandardMaterial color="#1c100a" roughness={0.78} metalness={0.09} />
         </mesh>
 
         {/* Sub-table Hardwood Apron */}
-        <mesh position={[0, 0.74, 0]} castShadow receiveShadow>
+        <mesh position={[0, TABLE_SURFACE_Y - 0.065, 0]} castShadow receiveShadow>
           <cylinderGeometry args={[1.98, 1.92, 0.11, 48]} />
           <meshStandardMaterial color="#1a0f0a" roughness={0.76} metalness={0.1} />
         </mesh>
@@ -628,10 +642,23 @@ export const GameScene3D: React.FC<GameScene3DProps> = ({
     [players, localPlayerId, voteTally]
   );
 
+  const localSeat = useMemo(
+    () => seats.find((s) => s.isLocal) || seats[seats.length - 1] || null,
+    [seats]
+  );
+
   const condemnedSeat = useMemo(
     () => (condemnedPlayerId ? seats.find((s) => s.player.id === condemnedPlayerId) || null : null),
     [condemnedPlayerId, seats]
   );
+
+  const maxVotes = useMemo(() => {
+    let max = 0;
+    for (const s of seats) {
+      if (s.player.isAlive && s.voteCount > max) max = s.voteCount;
+    }
+    return max;
+  }, [seats]);
 
   const opponentCardPositions = useMemo(
     () => seats.filter((s) => !s.isLocal && s.player.isAlive).map((s) => s.cardRestPosition),
@@ -646,13 +673,21 @@ export const GameScene3D: React.FC<GameScene3DProps> = ({
     ? 'night'
     : 'day';
 
+  const handleDismissCardInspect = () => {
+    if (isCardInspecting) {
+      werewolfAudio.playCardDeal();
+      onToggleCardInspect(false);
+    }
+  };
+
   return (
     <div className="absolute inset-0 w-full h-full bg-[#040407]">
       <Canvas
         shadows
         dpr={[1, 2]}
-        camera={{ position: [0, 1.35, 2.3], fov: 62, near: 0.08, far: 35 }}
+        camera={{ position: [0, 1.35, 2.3], fov: 66, near: 0.08, far: 35 }}
         gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.08 }}
+        onPointerMissed={handleDismissCardInspect}
       >
         <color attach="background" args={['#040407']} />
         <fog attach="fog" args={['#040407', 4.8, 13.8]} />
@@ -683,13 +718,14 @@ export const GameScene3D: React.FC<GameScene3DProps> = ({
           diegeticTimerText={diegeticTimerText}
           diegeticSubtitle={diegeticSubtitle}
           plaqueMode={plaqueMode}
+          onClickTableSurface={isCardInspecting ? handleDismissCardInspect : undefined}
         />
 
         {/* 4. Detailed Noir Table Props: Smoked-Glass Ashtray + Smoldering Cigar & Whiskey Glass */}
         <SmokedGlassAshtrayProp />
         <WhiskeyRocksGlassProp />
 
-        {/* 5. Circular Table Seats (r = 2.45m) with Vintage Leather Armchairs & Seated Noir Silhouettes */}
+        {/* 5. Circular Table Seats (r = 2.45m): Click Opponent Seat / Name directly to Vote */}
         {seats.map((seat) => (
           <TableSeat
             key={seat.player.id}
@@ -699,14 +735,24 @@ export const GameScene3D: React.FC<GameScene3DProps> = ({
             canVote={canVote && !isExecutionPhase}
             isSelected={selectedTargetId === seat.player.id || myVotedTargetId === seat.player.id}
             isCondemned={isExecutionPhase && condemnedPlayerId === seat.player.id}
+            isLeadingVote={maxVotes > 0 && seat.voteCount === maxVotes}
             hasDealtCards={hasDealtCards && !(isExecutionPhase && condemnedPlayerId === seat.player.id)}
-            onSelectSeat={onCastVote}
+            onSelectSeat={(targetId) => {
+              if (isCardInspecting) {
+                onToggleCardInspect(false);
+              }
+              onCastVote(targetId);
+            }}
           />
         ))}
 
-        {/* 6. Cinematic Role Card Dealing, 180° Float & Flip with Golden Glow, and Peeked Corner Rest */}
-        <AnimatedRoleCard
+        {/* 6. Wooden Personal Card Tray & Identity Plaque (~ [0, 0.77, 1.6]) + Tarot Rest & Inspect */}
+        <PersonalCardTray
+          seatNumber={localSeat?.player.seat ?? 8}
+          playerName={localSeat?.player.nickname ?? 'Bạn'}
+          isAlive={localSeat?.player.isAlive ?? true}
           role={localRole}
+          perspective={perspective}
           dealTrigger={dealTrigger}
           isInspecting={isCardInspecting}
           onToggleInspect={onToggleCardInspect}
@@ -714,16 +760,7 @@ export const GameScene3D: React.FC<GameScene3DProps> = ({
           opponentCardPositions={opponentCardPositions}
         />
 
-        {/* 7. Traditional Werewolf Wooden Voting Token Tray, Sliding Vote Tokens & Floating Counters */}
-        <VotingTokenTray
-          seats={seats}
-          voteTally={voteTally}
-          myVotedTargetId={myVotedTargetId}
-          canVote={canVote && !isExecutionPhase}
-          onCastVote={onCastVote}
-        />
-
-        {/* 8. Cinematic Hanging Execution: Blackout, Red Spotlight, Rope Noose, Slump & Center Card Reveal */}
+        {/* 7. Cinematic Hanging Execution: Blackout, Red Spotlight, Rope Noose, Slump & Center Card Reveal [0, 0.85, 0] */}
         <HangingNooseEffect
           active={isExecutionPhase}
           condemnedSeat={condemnedSeat}

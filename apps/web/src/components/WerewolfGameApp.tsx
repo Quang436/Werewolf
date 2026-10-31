@@ -8,7 +8,7 @@ import {
   Role,
 } from '@werewolf/shared';
 import { GameStateManager } from '../stores/game.store';
-import { LiarsBar3DExperience, werewolfAudio } from './LiarsBar3DExperience';
+import { LiarsBar3DExperience, werewolfAudio, isNightPhase } from './LiarsBar3DExperience';
 import { PlayerRoleCard } from './PlayerRoleCard';
 import { CenterRoleRevealModal } from './CenterRoleRevealModal';
 import {
@@ -349,7 +349,29 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
     runDealingSequence();
   }, [activePlayers, isDealingSequence, myPlayerInfo?.id, onEmitAction, runDealingSequence, state.room, store]);
 
-  const isNight = effectiveRoom.phase.includes('NIGHT');
+  const isNight = isNightPhase(effectiveRoom.phase);
+
+  // Tự động kích hoạt âm thanh & thông báo khi chuyển đổi giữa Ngày và Đêm
+  const previousPhaseRef = useRef<string | null>(null);
+  useEffect(() => {
+    const curPhase = effectiveRoom.phase;
+    const prev = previousPhaseRef.current;
+    if (prev && prev !== curPhase) {
+      const wasNight = isNightPhase(prev);
+      const isNowNight = isNightPhase(curPhase);
+      if (!wasNight && isNowNight) {
+        werewolfAudio.playWolfHowl();
+        werewolfAudio.playWhisper();
+        setNightNotification('🌙 MÀN ĐÊM BUÔNG XUỐNG: Toàn bộ ngôi làng chìm vào giấc ngủ...');
+        setTimeout(() => setNightNotification(null), 5000);
+      } else if (wasNight && !isNowNight && curPhase !== 'LOBBY' && curPhase !== 'ASSIGN_ROLES') {
+        werewolfAudio.playBell();
+        setNightNotification('☀️ TRỜI ĐÃ SÁNG: Dân làng tỉnh giấc và kiểm tra người sống sót!');
+        setTimeout(() => setNightNotification(null), 5000);
+      }
+    }
+    previousPhaseRef.current = curPhase;
+  }, [effectiveRoom.phase]);
   const remainingSeconds = Math.max(0, Math.ceil(state.remainingMs ? state.remainingMs / 1000 : 45));
   const formatTimer = (s: number) => {
     const m = Math.floor(s / 60);

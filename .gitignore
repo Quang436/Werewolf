@@ -7,4 +7,5 @@ dist/
 coverage/
 .turbo/
 .next/
+*.tsbuildinfo
 design/*.zip

@@ -164,6 +164,25 @@ export class WerewolfAudioEngine {
 
 export const werewolfAudio = new WerewolfAudioEngine();
 
+// ============================================================================
+// 1.1 NIGHT PHASES HELPER FOR 3D VISUAL SYNCHRONIZATION
+// ============================================================================
+export const NIGHT_PHASES_SET = new Set([
+  'NIGHT_START',
+  'CUPID_TURN',
+  'LOVERS_TURN',
+  'BODYGUARD_TURN',
+  'WEREWOLF_TURN',
+  'WITCH_TURN',
+  'SEER_TURN',
+  'NIGHT_RESOLVE',
+]);
+
+export function isNightPhase(phase?: string | null): boolean {
+  if (!phase) return false;
+  return NIGHT_PHASES_SET.has(phase) || phase.toUpperCase().includes('NIGHT');
+}
+
 
 // ============================================================================
 // 2. 3D POSE & CHARACTER PROCEDURAL HELPERS
@@ -600,9 +619,9 @@ export function LiarsBar3DExperience({
     isPov2Ref.current = isPov2;
   }, [isPov2]);
 
-  const isNightRef = useRef(Boolean(room?.phase && room.phase.includes('NIGHT')));
+  const isNightRef = useRef(isNightPhase(room?.phase));
   useEffect(() => {
-    isNightRef.current = Boolean(room?.phase && room.phase.includes('NIGHT'));
+    isNightRef.current = isNightPhase(room?.phase);
   }, [room?.phase]);
 
   const isDealingRef = useRef(isDealing);
@@ -667,7 +686,7 @@ export function LiarsBar3DExperience({
 
     // D. MULTI-SOURCE NOIR LIGHTING
     // 1. Ambient Fill
-    const ambientLight = new THREE.AmbientLight(isNightRef.current ? 0x1a2639 : 0xffecd2, 0.65);
+    const ambientLight = new THREE.AmbientLight(isNightRef.current ? 0x0f172a : 0xffecd2, 0.65);
     scene.add(ambientLight);
 
     // 2. Floor Bounce
@@ -678,7 +697,12 @@ export function LiarsBar3DExperience({
     const lampGroup = new THREE.Group();
     lampGroup.position.set(0, 4.2, 0);
 
-    const lanternLight = new THREE.PointLight(isNightRef.current ? 0x60a5fa : 0xff9922, 4.0, 12, 1.2);
+    const lanternLight = new THREE.PointLight(
+      isNightRef.current ? 0x38bdf8 : 0xff9922,
+      isNightRef.current ? 1.6 : 4.0,
+      12,
+      1.2
+    );
     lanternLight.position.set(0, -0.2, 0);
     lanternLight.castShadow = true;
     lampGroup.add(lanternLight);

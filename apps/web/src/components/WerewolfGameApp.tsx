@@ -1,16 +1,15 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  ALL_ROLES_FROM_PDF,
-  ChatChannel,
-  PublicPlayerView,
-  Role,
-} from '@werewolf/shared';
+import { ChatChannel, PublicPlayerView, Role, Team } from '@werewolf/shared';
 import { GameStateManager } from '../stores/game.store';
-import { LiarsBar3DExperience, werewolfAudio, isNightPhase } from './LiarsBar3DExperience';
-import { PlayerRoleCard } from './PlayerRoleCard';
-import { CenterRoleRevealModal } from './CenterRoleRevealModal';
+import { GameScene3D } from './GameScene3D';
+import {
+  CameraPerspective,
+  isNightPhase,
+  resolveVoteTally,
+  werewolfAudio,
+} from './scene3d.helpers';
 import {
   generateBalancedDeck,
   getRoleInfo,
@@ -23,25 +22,18 @@ export interface WerewolfGameAppProps {
   onSendChat: (channel: ChatChannel, text: string) => void;
 }
 
-// 16 Standard Council Members for dynamic scaling testing
-const ALL_SAMPLE_PLAYERS: PublicPlayerView[] = [
+const SAMPLE_NOIR_PLAYERS: PublicPlayerView[] = [
   { id: 'p1', seat: 1, nickname: 'Bác Sĩ', avatarUrl: null, isHost: false, isAlive: true, ready: true, connection: 'ONLINE' },
   { id: 'p2', seat: 2, nickname: 'LordVader', avatarUrl: null, isHost: false, isAlive: true, ready: true, connection: 'ONLINE' },
   { id: 'p3', seat: 3, nickname: 'Xemesis', avatarUrl: null, isHost: false, isAlive: true, ready: true, connection: 'ONLINE' },
   { id: 'p4', seat: 4, nickname: 'Quản Trò', avatarUrl: null, isHost: true, isAlive: true, ready: true, connection: 'ONLINE' },
-  { id: 'p5', seat: 5, nickname: 'PewPew', avatarUrl: null, isHost: false, isAlive: false, ready: true, connection: 'ONLINE' },
+  { id: 'p5', seat: 5, nickname: 'PewPew', avatarUrl: null, isHost: false, isAlive: true, ready: true, connection: 'ONLINE' },
   { id: 'p6', seat: 6, nickname: 'Độ Mixi', avatarUrl: null, isHost: false, isAlive: true, ready: true, connection: 'ONLINE' },
   { id: 'p7', seat: 7, nickname: 'Mặt Nạ', avatarUrl: null, isHost: false, isAlive: true, ready: true, connection: 'ONLINE' },
   { id: 'p8', seat: 8, nickname: 'Bạn', avatarUrl: null, isHost: false, isAlive: true, ready: true, connection: 'ONLINE' },
-  { id: 'p9', seat: 9, nickname: 'Thầy Bói', avatarUrl: null, isHost: false, isAlive: true, ready: true, connection: 'ONLINE' },
-  { id: 'p10', seat: 10, nickname: 'Thợ Săn Huyết', avatarUrl: null, isHost: false, isAlive: true, ready: true, connection: 'ONLINE' },
-  { id: 'p11', seat: 11, nickname: 'Bảo Vệ Đêm', avatarUrl: null, isHost: false, isAlive: true, ready: true, connection: 'ONLINE' },
-  { id: 'p12', seat: 12, nickname: 'Phù Thủy Tối', avatarUrl: null, isHost: false, isAlive: true, ready: true, connection: 'ONLINE' },
-  { id: 'p13', seat: 13, nickname: 'Dân Làng Cổ', avatarUrl: null, isHost: false, isAlive: true, ready: true, connection: 'ONLINE' },
-  { id: 'p14', seat: 14, nickname: 'Sói Đầu Đàn', avatarUrl: null, isHost: false, isAlive: true, ready: true, connection: 'ONLINE' },
-  { id: 'p15', seat: 15, nickname: 'Cô Gái Rừng', avatarUrl: null, isHost: false, isAlive: true, ready: true, connection: 'ONLINE' },
-  { id: 'p16', seat: 16, nickname: 'Thị Trưởng', avatarUrl: null, isHost: false, isAlive: true, ready: true, connection: 'ONLINE' },
 ];
+
+type LocalScenePhase = 'DEALING_CARDS' | 'DAY_VOTING' | 'EXECUTION_PHASE' | 'NIGHT_WEREWOLVES';
 
 export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
   store,
@@ -49,47 +41,36 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
   onSendChat,
 }) => {
   const [state, setState] = useState(store.getState());
-  const [chatInput, setChatInput] = useState('');
-  const [isPov2, setIsPov2] = useState(false);
-  const [selectedTargetId, setSelectedTargetId] = useState<string | null>('p2');
-  const [demoCouncilSize, setDemoCouncilSize] = useState<number>(8);
-  const [demoPhase, setDemoPhase] = useState<'DAY_VOTING' | 'NIGHT_WEREWOLVES' | 'DAY_DEFENSE'>('DAY_VOTING');
-  const [isDealingSequence, setIsDealingSequence] = useState(false);
-  const [isCenterRevealOpen, setIsCenterRevealOpen] = useState(false);
-  const [hasDealt, setHasDealt] = useState(false);
-  const [isCouncilCollapsed, setIsCouncilCollapsed] = useState(false);
-  const [isBattleLogCollapsed, setIsBattleLogCollapsed] = useState(false);
-  const [isChatCollapsed, setIsChatCollapsed] = useState(false);
+  const [perspective, setPerspective] = useState<CameraPerspective>('1ST');
+  const [localPhase, setLocalPhase] = useState<LocalScenePhase>('DEALING_CARDS');
 
-  // Mic & Speaker controls
+  // Local player mortality & role assignment map (synced with server when in live room)
+  const [executedIds, setExecutedIds] = useState<Set<string>>(() => new Set());
+  const [seatRoles, setSeatRoles] = useState<Record<string, Role>>({});
+
+  // Cinematic card dealing & manual inspect state
+  const [dealTrigger, setDealTrigger] = useState<number>(0);
+  const [hasDealtCards, setHasDealtCards] = useState<boolean>(false);
+  const [isCardInspecting, setIsCardInspecting] = useState<boolean>(false);
+
+  // Voting tokens & verdict state
+  const [localVoteTally, setLocalVoteTally] = useState<Record<string, number>>({
+    p2: 2,
+    p6: 1,
+  });
+  const [myVotedTargetId, setMyVotedTargetId] = useState<string | null>(null);
+  const [selectedTargetId, setSelectedTargetId] = useState<string | null>(null);
+  const [verdictBanner, setVerdictBanner] = useState<string | null>(null);
+  const [isPeacefulTie, setIsPeacefulTie] = useState<boolean>(false);
+
+  // Hanging execution state
+  const [condemnedPlayerId, setCondemnedPlayerId] = useState<string | null>(null);
+
+  // Subtle peripheral audio & optional hidden-by-default whisper drawer
   const [isMicOn, setIsMicOn] = useState(true);
   const [isSpeakerOn, setIsSpeakerOn] = useState(true);
-  const [nightNotification, setNightNotification] = useState<string | null>(null);
-
-  const handleSwitchToNight = useCallback(() => {
-    setDemoPhase('NIGHT_WEREWOLVES');
-    werewolfAudio.playWolfHowl();
-    werewolfAudio.playWhisper();
-    setNightNotification('🌙 ĐÊM XUỐNG: Toàn bộ ngôi làng chìm vào giấc ngủ... [Tất cả người chơi gục đầu xuống bàn]');
-    setTimeout(() => setNightNotification(null), 6000);
-  }, []);
-
-  const handleSwitchToDay = useCallback(() => {
-    setDemoPhase('DAY_VOTING');
-    werewolfAudio.playBell();
-    setNightNotification('☀️ TRỜI SÁNG: Mọi người thức dậy và kiểm tra người sống sót!');
-    setTimeout(() => setNightNotification(null), 6000);
-  }, []);
-
-  const handleCloseCenterReveal = useCallback(() => {
-    setIsCenterRevealOpen(false);
-    // Tự động kích hoạt chế độ Đi Ngủ sau khi xem xong bài!
-    handleSwitchToNight();
-  }, [handleSwitchToNight]);
-
-  const handleOpenCenterReveal = useCallback(() => {
-    setIsCenterRevealOpen(true);
-  }, []);
+  const [isChatDrawerOpen, setIsChatDrawerOpen] = useState(false);
+  const [chatInput, setChatInput] = useState('');
 
   useEffect(() => {
     return store.subscribe((newState) => {
@@ -101,35 +82,287 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
     const timer = setInterval(() => {
       store.updateRemainingTime();
       setState({ ...store.getState() });
-    }, 250);
+    }, 500);
     return () => clearInterval(timer);
   }, [store]);
 
-  // Keybind listeners: KeyV (POV toggle), KeyE (Debate), Digit1 (Vote selected target), Space (Skip vote)
+  // Merge live room players (if connected) with full noir council seats, applying executed status
+  const activePlayers: PublicPlayerView[] = useMemo(() => {
+    const realPlayers = state.room?.players || [];
+    const targetCapacity = Math.max(state.room?.settings?.maxPlayers || 8, realPlayers.length, 8);
+
+    let baseList: PublicPlayerView[];
+    if (!state.room || realPlayers.length === 0) {
+      baseList = SAMPLE_NOIR_PLAYERS.slice(0, targetCapacity);
+    } else {
+      const result: PublicPlayerView[] = [...realPlayers];
+      const usedSeats = new Set(realPlayers.map((p) => p.seat));
+      let sampleIdx = 0;
+
+      for (let seatNum = 1; seatNum <= targetCapacity; seatNum++) {
+        if (result.length >= targetCapacity) break;
+        if (usedSeats.has(seatNum)) continue;
+        const sample = SAMPLE_NOIR_PLAYERS[sampleIdx % SAMPLE_NOIR_PLAYERS.length];
+        sampleIdx++;
+        result.push({
+          ...sample,
+          id: `bot_${seatNum}_${sample.id}`,
+          seat: seatNum,
+          connection: 'ONLINE',
+        });
+        usedSeats.add(seatNum);
+      }
+      baseList = result.sort((a, b) => a.seat - b.seat);
+    }
+
+    return baseList.map((p) => ({
+      ...p,
+      isAlive: p.isAlive && !executedIds.has(p.id),
+    }));
+  }, [state.room, executedIds]);
+
+  const localPlayer = useMemo(() => {
+    const meId = state.room?.me?.id;
+    return (
+      (meId ? activePlayers.find((p) => p.id === meId) : undefined) ||
+      activePlayers.find((p) => !p.id.startsWith('bot_') && p.id === 'p8') ||
+      activePlayers[activePlayers.length - 1] ||
+      activePlayers[0]
+    );
+  }, [activePlayers, state.room?.me?.id]);
+
+  const myCurrentRole: Role = useMemo(() => {
+    return (
+      state.assignedRole ||
+      (state.room?.me?.role as Role | undefined) ||
+      (localPlayer ? seatRoles[localPlayer.id] : undefined) ||
+      'SEER'
+    );
+  }, [state.assignedRole, state.room?.me?.role, localPlayer, seatRoles]);
+
+  // Trigger DEALING_CARDS sequence & assign balanced deck across all seats
+  const triggerDealCards = useCallback(
+    (emitToRoom: boolean) => {
+      if (emitToRoom && state.room) {
+        onEmitAction('room:deal', {});
+      }
+
+      const count = activePlayers.length;
+      const deck = shuffleArray(generateBalancedDeck(count));
+      const nextSeatRoles: Record<string, Role> = {};
+      activePlayers.forEach((p, idx) => {
+        nextSeatRoles[p.id] = deck[idx % deck.length];
+      });
+      setSeatRoles(nextSeatRoles);
+
+      if (localPlayer && !state.room?.me?.role) {
+        const myNewRole = nextSeatRoles[localPlayer.id] || 'SEER';
+        const info = getRoleInfo(myNewRole);
+        const thirdTeams: Team[] = ['LONE_WOLF', 'CULT_LEADER', 'HOODLUM', 'TANNER', 'VAMPIRE', 'LOVERS'];
+        const myTeam: Team =
+          info.category === 'werewolf'
+            ? myNewRole === 'LONE_WOLF'
+              ? 'LONE_WOLF'
+              : 'WEREWOLF'
+            : info.category === 'third'
+            ? thirdTeams.includes(myNewRole as Team)
+              ? (myNewRole as Team)
+              : 'TANNER'
+            : 'VILLAGE';
+        store.setAssignedRole({
+          role: myNewRole,
+          team: myTeam,
+        });
+      }
+
+      setExecutedIds(new Set());
+      setCondemnedPlayerId(null);
+      setIsPeacefulTie(false);
+      setVerdictBanner(null);
+      setMyVotedTargetId(null);
+      setSelectedTargetId(null);
+      setLocalVoteTally({ p2: 2, p6: 1 });
+      setIsCardInspecting(false);
+      setLocalPhase('DEALING_CARDS');
+      setHasDealtCards(true);
+      setDealTrigger((n) => n + 1);
+    },
+    [activePlayers, localPlayer, onEmitAction, state.room, store]
+  );
+
+  // Automatic initial card deal on table entry so DEALING_CARDS plays right away
+  const didAutoDealRef = useRef(false);
+  useEffect(() => {
+    if (didAutoDealRef.current || activePlayers.length === 0) return;
+    didAutoDealRef.current = true;
+    const t = setTimeout(() => {
+      triggerDealCards(false);
+    }, 450);
+    return () => clearTimeout(t);
+  }, [activePlayers.length, triggerDealCards]);
+
+  // Listen to server dealNonce or ASSIGN_ROLES phase
+  const lastDealNonceRef = useRef(0);
+  useEffect(() => {
+    if (state.dealNonce && state.dealNonce > lastDealNonceRef.current) {
+      lastDealNonceRef.current = state.dealNonce;
+      triggerDealCards(false);
+    }
+  }, [state.dealNonce, triggerDealCards]);
+
+  const lastServerPhaseRef = useRef<string | null>(null);
+  useEffect(() => {
+    const serverPhase = state.room?.phase;
+    if (!serverPhase || serverPhase === lastServerPhaseRef.current) return;
+    lastServerPhaseRef.current = serverPhase;
+
+    if (serverPhase === 'ASSIGN_ROLES') {
+      triggerDealCards(false);
+    } else if (serverPhase === 'DAY_EXECUTION') {
+      const accused = state.room?.day?.accusedId;
+      if (accused) {
+        setCondemnedPlayerId(accused);
+        setLocalPhase('EXECUTION_PHASE');
+      }
+    }
+  }, [state.room?.phase, state.room?.day?.accusedId, triggerDealCards]);
+
+  // Effective phase & vote tally combining live server snapshot + local interactive state
+  const effectivePhase: string = useMemo(() => {
+    if (localPhase === 'EXECUTION_PHASE' || localPhase === 'DEALING_CARDS') {
+      return localPhase;
+    }
+    if (state.room && state.room.phase !== 'LOBBY') {
+      return state.room.phase;
+    }
+    return localPhase;
+  }, [localPhase, state.room]);
+
+  const isNight = isNightPhase(effectivePhase);
+  const isExecutionPhase = effectivePhase === 'EXECUTION_PHASE' || effectivePhase === 'DAY_EXECUTION';
+  const canVote = !isNight && !isExecutionPhase;
+
+  const effectiveVoteTally: Record<string, number> = useMemo(() => {
+    const serverTally = state.room?.day?.tally as Record<string, number> | undefined;
+    if (serverTally && Object.keys(serverTally).length > 0) {
+      return serverTally;
+    }
+    return localVoteTally;
+  }, [state.room?.day?.tally, localVoteTally]);
+
+  // Player clicks an opponent seat or an engraved token in VotingTokenTray
+  const handleCastVote = useCallback(
+    (targetId: string) => {
+      if (isExecutionPhase) return;
+
+      if (isNight) {
+        setSelectedTargetId(targetId);
+        werewolfAudio.playVoteStamp();
+        if (targetId !== 'SKIP') {
+          onEmitAction('night:wolfVote', { targetId });
+        }
+        return;
+      }
+
+      setSelectedTargetId(targetId === 'SKIP' ? null : targetId);
+      setIsPeacefulTie(false);
+      setVerdictBanner(null);
+
+      setLocalVoteTally((prev) => {
+        const next = { ...prev };
+        // Remove previous vote from local player if changing target
+        if (myVotedTargetId && myVotedTargetId !== 'SKIP' && next[myVotedTargetId]) {
+          next[myVotedTargetId] = Math.max(0, next[myVotedTargetId] - 1);
+          if (next[myVotedTargetId] === 0) delete next[myVotedTargetId];
+        }
+        if (targetId !== 'SKIP') {
+          next[targetId] = (next[targetId] || 0) + 1;
+        }
+        return next;
+      });
+
+      setMyVotedTargetId(targetId);
+
+      if (targetId === 'SKIP') {
+        werewolfAudio.playVoteStamp();
+      }
+      onEmitAction('day:vote', { targetId });
+    },
+    [isExecutionPhase, isNight, myVotedTargetId, onEmitAction]
+  );
+
+  // Resolve votes: Tie -> "Hòa phiếu - Ngày bình yên" | Unique Max -> EXECUTION_PHASE (HangingNooseEffect)
+  const handleFinalizeVoteVerdict = useCallback(
+    (overrideTally?: Record<string, number>) => {
+      if (isExecutionPhase) return;
+      const tallyToResolve = overrideTally || effectiveVoteTally;
+      const resolution = resolveVoteTally(tallyToResolve, activePlayers);
+
+      if (resolution.outcome === 'TIE_OR_PEACE' || !resolution.condemnedId) {
+        werewolfAudio.playBell();
+        setIsPeacefulTie(true);
+        setVerdictBanner('Hòa phiếu - Ngày bình yên');
+        setCondemnedPlayerId(null);
+        setLocalPhase('DAY_VOTING');
+      } else {
+        setIsPeacefulTie(false);
+        setVerdictBanner(resolution.message);
+        setCondemnedPlayerId(resolution.condemnedId);
+        setLocalPhase('EXECUTION_PHASE');
+      }
+    },
+    [activePlayers, effectiveVoteTally, isExecutionPhase]
+  );
+
+  // Quick helper to test tie-vote rule ("Hòa phiếu - Ngày bình yên")
+  const handleSimulateTieVote = useCallback(() => {
+    const aliveOpponents = activePlayers.filter((p) => p.isAlive && p.id !== localPlayer?.id);
+    if (aliveOpponents.length >= 2) {
+      const tiedTally: Record<string, number> = {
+        [aliveOpponents[0].id]: 3,
+        [aliveOpponents[1].id]: 3,
+      };
+      setLocalVoteTally(tiedTally);
+      setMyVotedTargetId(aliveOpponents[0].id);
+      handleFinalizeVoteVerdict(tiedTally);
+    } else {
+      handleFinalizeVoteVerdict({});
+    }
+  }, [activePlayers, handleFinalizeVoteVerdict, localPlayer?.id]);
+
+  // Called by HangingNooseEffect right as the rope settles at the neck -> character slumps & isAlive = false
+  const handleExecuteSlump = useCallback((playerId: string) => {
+    setExecutedIds((prev) => {
+      const next = new Set(prev);
+      next.add(playerId);
+      return next;
+    });
+    setLocalVoteTally((prev) => {
+      const next = { ...prev };
+      delete next[playerId];
+      return next;
+    });
+  }, []);
+
+  const handleExecutionComplete = useCallback(() => {
+    setLocalPhase('DAY_VOTING');
+    setCondemnedPlayerId(null);
+  }, []);
+
+  // Keyboard shortcuts: [V] Dual Perspective, [C] Role Card Peek/Inspect, [Space] Skip Vote, [M]/[U] Audio
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
 
       if (e.code === 'KeyV') {
-        setIsPov2((prev) => !prev);
-      } else if (e.code === 'KeyE') {
-        onEmitAction('day:debate', { message: 'Tôi khẳng định mình là Dân làng lương thiện!' });
-      } else if (e.code === 'Digit1') {
-        if (selectedTargetId) {
-          werewolfAudio.playGavel();
-          onEmitAction('day:vote', { targetId: selectedTargetId });
-        }
+        setPerspective((prev) => (prev === '1ST' ? '2ND' : '1ST'));
+        werewolfAudio.playVoteStamp();
+      } else if (e.code === 'KeyC') {
+        setIsCardInspecting((prev) => !prev);
+        werewolfAudio.playCardDeal();
       } else if (e.code === 'Space') {
         e.preventDefault();
-        werewolfAudio.playVoteStamp();
-        onEmitAction('day:vote', { targetId: 'SKIP' });
-      } else if (e.code === 'KeyC') {
-        if (isCenterRevealOpen) {
-          handleCloseCenterReveal();
-        } else {
-          store.toggleCardReveal();
-        }
-        werewolfAudio.playCardDeal();
+        handleCastVote('SKIP');
       } else if (e.code === 'KeyM') {
         setIsMicOn((prev) => !prev);
         werewolfAudio.playVoteStamp();
@@ -145,239 +378,39 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onEmitAction, selectedTargetId, store]);
+  }, [handleCastVote]);
 
-  // Dynamic players list resolution (from live room or demo council size)
-  // Combines real joined human players with council member seats up to room capacity
-  // so the table is NEVER empty and always has full 3D characters sitting at all seats!
-  const activePlayers: PublicPlayerView[] = useMemo(() => {
-    const realPlayers = state.room?.players || [];
-    const targetCapacity = Math.max(
-      state.room?.settings?.maxPlayers || 8,
-      realPlayers.length,
-      demoCouncilSize || 8,
-      6
-    );
-
-    // If no real room or no real players, use sample players
-    if (!state.room || realPlayers.length === 0) {
-      return ALL_SAMPLE_PLAYERS.slice(0, targetCapacity);
-    }
-
-    // When real players exist in room:
-    // Take real players, and fill remaining seats with council members from ALL_SAMPLE_PLAYERS
-    const result: PublicPlayerView[] = [...realPlayers];
-    const usedSeats = new Set(realPlayers.map((p) => p.seat));
-    const usedIds = new Set(realPlayers.map((p) => p.id));
-
-    let sampleIdx = 0;
-    for (let seatNum = 1; seatNum <= targetCapacity; seatNum++) {
-      if (result.length >= targetCapacity) break;
-      if (usedSeats.has(seatNum)) continue;
-
-      // Find an unused sample player
-      while (
-        sampleIdx < ALL_SAMPLE_PLAYERS.length &&
-        usedIds.has(ALL_SAMPLE_PLAYERS[sampleIdx].id)
-      ) {
-        sampleIdx++;
-      }
-
-      const sample = ALL_SAMPLE_PLAYERS[sampleIdx % ALL_SAMPLE_PLAYERS.length];
-      sampleIdx++;
-
-      result.push({
-        ...sample,
-        id: `bot_${seatNum}_${sample.id}`,
-        seat: seatNum,
-        nickname: `${sample.nickname}`,
-        connection: 'ONLINE',
-      });
-      usedSeats.add(seatNum);
-    }
-
-    // Sort by seat number so seating arrangement is perfectly ordered around table
-    return result.sort((a, b) => a.seat - b.seat);
-  }, [state.room, demoCouncilSize]);
-
-  // Dynamic effective room object
-  const effectiveRoom = useMemo(() => {
-    if (state.room) {
-      return state.room;
-    }
-    return {
-      id: 'room_council_demo',
-      code: 'DEMO88',
-      hostId: 'p4',
-      phase: demoPhase,
-      round: 1,
-      stateVersion: 1,
-      phaseEndsAt: Date.now() + 60000,
-      serverNow: Date.now(),
-      settings: { maxPlayers: demoCouncilSize, isPrivate: false },
-      players: activePlayers,
-      me: {
-        id: activePlayers[activePlayers.length - 1]?.id || 'p8',
-        role: 'VILLAGER' as Role,
-        isAlive: true,
-      },
-      day: {
-        tally: { p2: 3, p6: 1 },
-        voted: ['p1', 'p3', 'p6'],
-        accusedId: 'p2',
-      },
-      winner: null as any,
-    };
-  }, [state.room, activePlayers, demoPhase, demoCouncilSize]);
-
-  const myPlayerInfo = useMemo(() => {
-    return (
-      activePlayers.find((p) => p.id === effectiveRoom.me?.id) ||
-      activePlayers.find((p) => !p.id.startsWith('bot_')) ||
-      activePlayers[0]
-    );
-  }, [activePlayers, effectiveRoom.me?.id]);
-
-  const myNickname =
-    myPlayerInfo?.nickname ||
-    (typeof window !== 'undefined' ? sessionStorage.getItem('werewolf_nickname') || 'Thợ Săn Bạn' : 'Thợ Săn Bạn');
-
-  const [dealNotification, setDealNotification] = useState<string | null>(null);
-
-  // Resolved current role: prioritizes state.assignedRole, then room.me.role, then fallback
-  const myCurrentRole: Role = useMemo(() => {
-    return state.assignedRole || (effectiveRoom.me?.role as Role) || 'SEER';
-  }, [state.assignedRole, effectiveRoom.me?.role]);
-
-  // If entering an ongoing active game where roles are already assigned and not in lobby:
-  useEffect(() => {
-    if (state.assignedRole || (effectiveRoom.phase !== 'LOBBY' && (effectiveRoom.me as any)?.role && effectiveRoom.phase !== 'ASSIGN_ROLES')) {
-      setHasDealt(true);
-    }
-  }, [state.assignedRole, effectiveRoom.phase, effectiveRoom.me]);
-
-  // Unified Majestic 5.0-Second Dealing Sequence Function
-  const runDealingSequence = useCallback(() => {
-    setIsDealingSequence(true);
-    setHasDealt(false);
-    setIsCenterRevealOpen(false);
-
-    const count = activePlayers.length;
-    setDealNotification(null);
-
-    // Sequential audio swooshes synchronized with 3D card flight (0 to 3.6s)
-    const launchDuration = 3600;
-    for (let i = 0; i < count; i++) {
-      const delay = (i / count) * launchDuration;
-      setTimeout(() => {
-        werewolfAudio.playCardDeal();
-      }, delay);
-    }
-
-    // At 5.0 seconds: all cards land smoothly, secret role modal opens in center of screen
-    const timer = setTimeout(() => {
-      setIsDealingSequence(false);
-      setHasDealt(true);
-      werewolfAudio.playCardDeal();
-      setIsCenterRevealOpen(true);
-      setDealNotification(`✨ Lá bài định mệnh đã được phát! Hãy đọc kỹ năng vai trò của bạn.`);
-      setTimeout(() => setDealNotification(null), 5000);
-    }, 5000);
-
-    return () => clearTimeout(timer);
-  }, [activePlayers.length]);
-
-  // 1. Listen for room broadcast dealing event via socket (state.dealNonce)
-  const lastDealNonceRef = useRef(0);
-  useEffect(() => {
-    if (state.dealNonce && state.dealNonce > lastDealNonceRef.current) {
-      lastDealNonceRef.current = state.dealNonce;
-      runDealingSequence();
-    }
-  }, [state.dealNonce, runDealingSequence]);
-
-  // 2. Trigger dealing animation automatically when game phase enters ASSIGN_ROLES (only once per phase entry)
-  const lastPhaseRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (effectiveRoom.phase === 'ASSIGN_ROLES' && lastPhaseRef.current !== 'ASSIGN_ROLES') {
-      lastPhaseRef.current = 'ASSIGN_ROLES';
-      runDealingSequence();
-    } else if (effectiveRoom.phase !== 'ASSIGN_ROLES') {
-      lastPhaseRef.current = effectiveRoom.phase;
-    }
-  }, [effectiveRoom.phase, runDealingSequence]);
-
-  // 3. User clicks "Phát Bài Ngẫu Nhiên" button (Host or local testing)
-  const handleRandomDeal = useCallback(() => {
-    if (isDealingSequence) return;
-
-    // A. If connected to a multiplayer room, broadcast to ALL other players via socket!
-    if (state.room) {
-      onEmitAction('room:deal', {});
-    }
-
-    // B. Generate balanced roles locally as fallback or for local simulation
-    const count = activePlayers.length;
-    const balancedDeck = generateBalancedDeck(count);
-    const shuffled = shuffleArray(balancedDeck);
-
-    const myIndex = activePlayers.findIndex((p) => p.id === myPlayerInfo?.id);
-    const myNewRole = shuffled[myIndex >= 0 ? myIndex : shuffled.length - 1];
-    const myRoleInfo = getRoleInfo(myNewRole);
-    const myTeam =
-      myRoleInfo.category === 'werewolf'
-        ? 'WEREWOLF'
-        : myRoleInfo.category === 'third'
-        ? 'NEUTRAL'
-        : 'VILLAGE';
-
-    const wolves = activePlayers
-      .filter((_, idx) => {
-        const r = shuffled[idx];
-        return r === 'WEREWOLF' || r === 'BIG_BAD_WOLF' || r === 'WOLF_CUB' || r === 'LONE_WOLF';
-      })
-      .map((p) => ({ id: p.id, nickname: p.nickname }));
-
-    store.setAssignedRole({
-      role: myNewRole,
-      team: myTeam as any,
-      teammates: wolves,
-    });
-    store.setCardRevealed(true);
-
-    // C. Run 5.0-second dealing sequence
-    runDealingSequence();
-  }, [activePlayers, isDealingSequence, myPlayerInfo?.id, onEmitAction, runDealingSequence, state.room, store]);
-
-  const isNight = isNightPhase(effectiveRoom.phase);
-
-  // Tự động kích hoạt âm thanh & thông báo khi chuyển đổi giữa Ngày và Đêm
-  const previousPhaseRef = useRef<string | null>(null);
-  useEffect(() => {
-    const curPhase = effectiveRoom.phase;
-    const prev = previousPhaseRef.current;
-    if (prev && prev !== curPhase) {
-      const wasNight = isNightPhase(prev);
-      const isNowNight = isNightPhase(curPhase);
-      if (!wasNight && isNowNight) {
-        werewolfAudio.playWolfHowl();
-        werewolfAudio.playWhisper();
-        setNightNotification('🌙 MÀN ĐÊM BUÔNG XUỐNG: Toàn bộ ngôi làng chìm vào giấc ngủ...');
-        setTimeout(() => setNightNotification(null), 5000);
-      } else if (wasNight && !isNowNight && curPhase !== 'LOBBY' && curPhase !== 'ASSIGN_ROLES') {
-        werewolfAudio.playBell();
-        setNightNotification('☀️ TRỜI ĐÃ SÁNG: Dân làng tỉnh giấc và kiểm tra người sống sót!');
-        setTimeout(() => setNightNotification(null), 5000);
-      }
-    }
-    previousPhaseRef.current = curPhase;
-  }, [effectiveRoom.phase]);
+  // Diegetic 3D Table Plaque texts
   const remainingSeconds = Math.max(0, Math.ceil(state.remainingMs ? state.remainingMs / 1000 : 45));
-  const formatTimer = (s: number) => {
-    const m = Math.floor(s / 60);
-    const sec = s % 60;
-    return `${m.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
-  };
+  const timerStr = `${String(Math.floor(remainingSeconds / 60)).padStart(2, '0')}:${String(
+    remainingSeconds % 60
+  ).padStart(2, '0')}`;
+
+  const diegeticPhaseTitle = useMemo(() => {
+    if (isExecutionPhase) return 'XỬ TỬ TREO CỔ';
+    if (isPeacefulTie) return 'NGÀY BÌNH YÊN';
+    if (effectivePhase === 'DEALING_CARDS') return 'PHÁT BÀI ĐỊNH MỆNH';
+    if (isNight) return 'ĐÊM BÓNG TỐI';
+    return 'HỘI ĐỒNG BỎ PHIẾU';
+  }, [effectivePhase, isExecutionPhase, isNight, isPeacefulTie]);
+
+  const diegeticSubtitle = useMemo(() => {
+    if (verdictBanner) return verdictBanner;
+    if (effectivePhase === 'DEALING_CARDS') return 'Xem vai trò Tarot • Sau 4s bài hạ xuống góc bàn';
+    if (isNight) return 'Cả làng gục đầu say ngủ • Sói thức giấc';
+    if (myVotedTargetId && myVotedTargetId !== 'SKIP') {
+      const target = activePlayers.find((p) => p.id === myVotedTargetId);
+      if (target) {
+        return `Đã đẩy thẻ phiếu tới #${String(target.seat).padStart(2, '0')} ${target.nickname}`;
+      }
+    }
+    return 'Chọn ghế đối thủ hoặc thẻ gỗ trước mặt để bỏ phiếu';
+  }, [activePlayers, effectivePhase, isNight, myVotedTargetId, verdictBanner]);
+
+  const condemnedRole: Role = useMemo(() => {
+    if (!condemnedPlayerId) return 'WEREWOLF';
+    return seatRoles[condemnedPlayerId] || 'WEREWOLF';
+  }, [condemnedPlayerId, seatRoles]);
 
   const handleSendChat = (e: React.FormEvent) => {
     e.preventDefault();
@@ -386,671 +419,279 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
     setChatInput('');
   };
 
-  // Selected player for voting or night action
-  const selectedPlayer = activePlayers.find((p) => p.id === selectedTargetId);
-  const accusedPlayerId = effectiveRoom.day?.accusedId || 'p2';
-  const effectiveTally: Record<string, number> = (effectiveRoom.day?.tally as any) || { p2: 3, p6: 1 };
-  const aliveCount = activePlayers.filter((p) => p.isAlive).length;
-
   return (
-    <div className="relative w-screen h-screen bg-black text-gray-100 overflow-hidden font-game select-none">
-      {/* 1. INTERACTIVE 3D WEREWOLF ROUND TABLE FIRST-PERSON ENGINE */}
-      <LiarsBar3DExperience
-        room={effectiveRoom}
-        currentPlayerId={myPlayerInfo?.id}
-        isPov2={isPov2}
-        setIsPov2={setIsPov2}
+    <div className="relative w-screen h-screen bg-[#040407] text-stone-200 overflow-hidden select-none">
+      {/* ====================================================================
+          FULL-VIEWPORT 3D DARK NOIR PUB SCENE (DIEGETIC UI, ZERO CLUTTER)
+         ==================================================================== */}
+      <GameScene3D
+        players={activePlayers}
+        localPlayerId={localPlayer?.id}
+        localRole={myCurrentRole}
+        perspective={perspective}
+        phase={effectivePhase}
+        isNight={isNight}
+        canVote={canVote}
+        voteTally={effectiveVoteTally}
+        myVotedTargetId={myVotedTargetId}
         selectedTargetId={selectedTargetId}
-        isDealing={isDealingSequence}
-        hasDealtCards={hasDealt}
-        onAimAtPlayer={(targetId: string) => {
-          // Raycast hover feedback
+        dealTrigger={dealTrigger}
+        hasDealtCards={hasDealtCards}
+        isCardInspecting={isCardInspecting}
+        onToggleCardInspect={(next) =>
+          setIsCardInspecting((prev) => (typeof next === 'boolean' ? next : !prev))
+        }
+        onDealComplete={() => {
+          setLocalPhase((prev) => (prev === 'DEALING_CARDS' ? 'DAY_VOTING' : prev));
         }}
-        onSelectTarget={(targetId: string) => {
-          setSelectedTargetId(targetId);
-        }}
-        onShootPlayer={(targetId: string) => {
-          setSelectedTargetId(targetId);
-          onEmitAction('day:vote', { targetId });
-        }}
+        isExecutionPhase={isExecutionPhase}
+        condemnedPlayerId={condemnedPlayerId}
+        condemnedRole={condemnedRole}
+        onExecuteSlump={handleExecuteSlump}
+        onExecutionComplete={handleExecutionComplete}
+        diegeticPhaseTitle={diegeticPhaseTitle}
+        diegeticTimerText={timerStr}
+        diegeticSubtitle={diegeticSubtitle}
+        isPeacefulTie={isPeacefulTie}
+        onCastVote={handleCastVote}
       />
 
-      {/* 2ND POV Camera Badge */}
-      {isPov2 && (
-        <div className="absolute top-20 left-1/2 -translate-x-1/2 z-20 pointer-events-none bg-red-950/90 border border-red-500/80 px-4 py-1.5 rounded-full shadow-[0_0_20px_rgba(220,38,38,0.6)] flex items-center gap-2 animate-fadeIn">
-          <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
-          <span className="text-xs font-black uppercase text-red-200 tracking-wider font-display">
-            GÓC NHÌN TOÀN CẢNH BÀN HỘI ĐỒNG (2ND POV)
-          </span>
+      {/* ====================================================================
+          WHISPER-THIN PERIPHERAL CORNER MICRO-CONTROLS (NON-INTRUSIVE)
+         ==================================================================== */}
+      <div className="absolute top-3 left-3 z-20 flex items-center gap-1.5 pointer-events-auto">
+        <button
+          type="button"
+          onClick={() => {
+            window.location.href = '/';
+          }}
+          className="h-8 px-2.5 rounded-full bg-black/50 hover:bg-black/80 backdrop-blur-sm border border-white/10 text-stone-400 hover:text-amber-200 text-[11px] font-mono transition cursor-pointer flex items-center gap-1"
+          title="Rời bàn chơi"
+        >
+          <span>←</span>
+          <span className="hidden sm:inline">Rời</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            setIsMicOn((prev) => !prev);
+            werewolfAudio.playVoteStamp();
+          }}
+          className={`h-8 w-8 rounded-full backdrop-blur-sm border text-xs transition cursor-pointer flex items-center justify-center ${
+            isMicOn
+              ? 'bg-black/50 border-emerald-500/40 text-emerald-300 hover:bg-emerald-950/60'
+              : 'bg-red-950/60 border-red-500/40 text-red-300'
+          }`}
+          title="Bật / Tắt Mic [M]"
+        >
+          {isMicOn ? '🎙' : '🔇'}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            const next = !isSpeakerOn;
+            setIsSpeakerOn(next);
+            werewolfAudio.setMuted(!next);
+            if (next) werewolfAudio.playVoteStamp();
+          }}
+          className={`h-8 w-8 rounded-full backdrop-blur-sm border text-xs transition cursor-pointer flex items-center justify-center ${
+            isSpeakerOn
+              ? 'bg-black/50 border-amber-500/35 text-amber-300 hover:bg-amber-950/50'
+              : 'bg-black/50 border-white/10 text-stone-500'
+          }`}
+          title="Bật / Tắt Âm thanh [U]"
+        >
+          {isSpeakerOn ? '🔊' : '🔈'}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setIsChatDrawerOpen((prev) => !prev)}
+          className={`h-8 px-2.5 rounded-full backdrop-blur-sm border text-[11px] font-mono transition cursor-pointer flex items-center gap-1 ${
+            isChatDrawerOpen
+              ? 'bg-amber-950/75 border-amber-400/60 text-amber-200'
+              : 'bg-black/50 border-white/10 text-stone-400 hover:text-stone-200'
+          }`}
+          title="Mở / Ẩn kênh thì thầm"
+        >
+          <span>💬</span>
+          <span className="hidden md:inline">Thì thầm</span>
+        </button>
+      </div>
+
+      {/* Top-Right: Dual Perspective (1ST / 2ND [V]) & Subtle Noir Table Triggers */}
+      <div className="absolute top-3 right-3 z-20 flex items-center gap-1.5 pointer-events-auto flex-wrap justify-end">
+        {/* Phase / Mechanic Micro-Actions */}
+        <div className="flex items-center gap-1 bg-black/50 backdrop-blur-sm px-1.5 py-1 rounded-full border border-white/10">
+          <button
+            type="button"
+            onClick={() => triggerDealCards(true)}
+            className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold text-amber-300 hover:bg-amber-500/20 transition cursor-pointer"
+            title="Phát & lật bài Tarot đầu ván (DEALING_CARDS)"
+          >
+            Phát Bài
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleFinalizeVoteVerdict()}
+            disabled={isExecutionPhase}
+            className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold text-rose-300 hover:bg-rose-500/20 disabled:opacity-40 transition cursor-pointer"
+            title="Chốt kết quả bỏ phiếu: Hòa -> Ngày bình yên | Cao nhất duy nhất -> Treo cổ"
+          >
+            Chốt Phiếu
+          </button>
+
+          <button
+            type="button"
+            onClick={handleSimulateTieVote}
+            disabled={isExecutionPhase}
+            className="hidden sm:inline-block px-2 py-0.5 rounded-full text-[10px] font-mono text-emerald-300/90 hover:bg-emerald-500/20 disabled:opacity-40 transition cursor-pointer"
+            title="Thử trường hợp Hòa phiếu cao nhất -> Hòa phiếu - Ngày bình yên"
+          >
+            Hòa Phiếu
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              if (isNight) {
+                setLocalPhase('DAY_VOTING');
+                werewolfAudio.playBell();
+              } else {
+                setLocalPhase('NIGHT_WEREWOLVES');
+                werewolfAudio.playWolfHowl();
+              }
+            }}
+            disabled={isExecutionPhase}
+            className="px-2 py-0.5 rounded-full text-[10px] font-mono text-stone-300 hover:bg-white/10 disabled:opacity-40 transition cursor-pointer"
+            title="Chuyển Ngày / Đêm"
+          >
+            {isNight ? '☀️ Ngày' : '🌙 Đêm'}
+          </button>
+        </div>
+
+        {/* 1ST / 2ND DUAL PERSPECTIVE SWITCHER ([V]) */}
+        <div
+          className="flex items-center bg-black/60 backdrop-blur-sm p-0.5 rounded-full border border-amber-500/30 shadow-lg"
+          title="Đổi góc nhìn Camera [Phím V]"
+        >
+          <button
+            type="button"
+            onClick={() => {
+              setPerspective('1ST');
+              werewolfAudio.playVoteStamp();
+            }}
+            className={`px-2.5 py-1 rounded-full text-[10px] font-mono font-black tracking-wider transition cursor-pointer ${
+              perspective === '1ST'
+                ? 'bg-amber-500 text-black shadow'
+                : 'text-stone-400 hover:text-white'
+            }`}
+          >
+            1ST
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setPerspective('2ND');
+              werewolfAudio.playVoteStamp();
+            }}
+            className={`px-2.5 py-1 rounded-full text-[10px] font-mono font-black tracking-wider transition cursor-pointer ${
+              perspective === '2ND'
+                ? 'bg-amber-500 text-black shadow'
+                : 'text-stone-400 hover:text-white'
+            }`}
+          >
+            2ND
+          </button>
+          <span className="px-1.5 text-[9px] font-mono text-stone-500 hidden sm:inline">[V]</span>
+        </div>
+      </div>
+
+      {/* Subtle Diegetic Center Verdict Toast (Peaceful Tie or Execution Verdict — pointer-events-none, auto-fades) */}
+      {verdictBanner && (
+        <div className="absolute top-14 left-1/2 -translate-x-1/2 z-20 pointer-events-none px-4 py-1.5 rounded-full bg-black/70 backdrop-blur-sm border border-amber-400/35 text-xs font-serif tracking-wide text-amber-100 shadow-xl">
+          {verdictBanner}
         </div>
       )}
 
-      {/* 2. UNIFIED TOP NAVIGATION & CONTROLS BAR (RESPONSIVE & ZERO OVERLAPPING) */}
-      <header className="absolute top-2.5 inset-x-3 md:inset-x-4 z-30 flex items-center justify-between pointer-events-none gap-2">
-        {/* Left: Streamer Profile + Mic / Speaker Controls + Rời Bàn */}
-        <div className="flex items-center gap-1.5 md:gap-2 pointer-events-auto bg-black/85 backdrop-blur-md px-2.5 md:px-3 py-1.5 rounded-full border border-white/10 shadow-2xl shrink-0">
-          <div className="relative w-8 h-8 rounded-full border border-amber-400/80 bg-zinc-900 overflow-hidden flex items-center justify-center text-sm shadow shrink-0">
-            <img
-              src={`/assets/characters/${
-                (typeof window !== 'undefined' && localStorage.getItem('werewolf_selected_character')) || 'cowboy'
-              }_idle.png`}
-              alt="Avatar"
-              className="w-full h-full object-cover object-top"
-            />
-            <span
-              className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border border-black ${
-                isMicOn ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'
-              }`}
-            />
-          </div>
-
-          <div className="hidden sm:flex flex-col pr-1 text-left">
-            <span className="text-[11px] font-bold text-amber-300 font-display leading-tight truncate max-w-[90px] md:max-w-[120px]">
-              {myNickname}
-            </span>
-            <span className="text-[9px] font-mono text-stone-400">
-              Ghế #{myPlayerInfo?.seat || 1}
-            </span>
-          </div>
-
-          {/* Mic Toggle Button */}
-          <button
-            type="button"
-            onClick={() => {
-              setIsMicOn((prev) => !prev);
-              werewolfAudio.playVoteStamp();
-            }}
-            className={`px-2 py-1 rounded-full text-[10px] font-mono font-bold flex items-center gap-1 transition cursor-pointer ${
-              isMicOn
-                ? 'bg-emerald-950/80 border border-emerald-500/50 text-emerald-300 hover:bg-emerald-900/80 shadow-[0_0_10px_rgba(16,185,129,0.3)]'
-                : 'bg-red-950/80 border border-red-500/50 text-red-300 hover:bg-red-900/80'
-            }`}
-            title={isMicOn ? 'Tắt Microphone [M]' : 'Bật Microphone [M]'}
-          >
-            <span className="material-symbols-outlined text-[13px]">
-              {isMicOn ? 'mic' : 'mic_off'}
-            </span>
-            <span className="hidden md:inline">{isMicOn ? 'BẬT MIC' : 'TẮT MIC'}</span>
-            {isMicOn && (
-              <span className="flex items-center gap-0.5">
-                <span className="w-0.5 h-2 bg-emerald-400 rounded-full eq-bar-1" />
-                <span className="w-0.5 h-3 bg-emerald-400 rounded-full eq-bar-2" />
-              </span>
-            )}
-          </button>
-
-          {/* Speaker / Loa Toggle Button */}
-          <button
-            type="button"
-            onClick={() => {
-              const next = !isSpeakerOn;
-              setIsSpeakerOn(next);
-              werewolfAudio.setMuted(!next);
-              if (next) werewolfAudio.playVoteStamp();
-            }}
-            className={`px-2 py-1 rounded-full text-[10px] font-mono font-bold flex items-center gap-1 transition cursor-pointer ${
-              isSpeakerOn
-                ? 'bg-amber-950/80 border border-amber-500/50 text-amber-300 hover:bg-amber-900/80 shadow-[0_0_10px_rgba(245,158,11,0.3)]'
-                : 'bg-zinc-900/80 border border-zinc-700 text-stone-400 hover:text-white'
-            }`}
-            title={isSpeakerOn ? 'Tắt Loa / Âm thanh [U]' : 'Bật Loa / Âm thanh [U]'}
-          >
-            <span className="material-symbols-outlined text-[13px]">
-              {isSpeakerOn ? 'volume_up' : 'volume_off'}
-            </span>
-            <span className="hidden md:inline">{isSpeakerOn ? 'BẬT LOA' : 'TẮT LOA'}</span>
-          </button>
-
-          {/* Rời Bàn */}
-          <button
-            type="button"
-            onClick={() => (window.location.href = '/')}
-            className="px-2 py-1 rounded-full bg-zinc-900 hover:bg-zinc-800 border border-white/10 text-stone-400 hover:text-white text-[10px] font-mono flex items-center gap-1 transition cursor-pointer"
-            title="Rời phòng chơi"
-          >
-            <span className="material-symbols-outlined text-[13px]">logout</span>
-            <span className="hidden lg:inline">Rời Bàn</span>
-          </button>
-        </div>
-
-        {/* Center: Phase & Countdown Timer + Accused Status */}
-        <div className="flex items-center gap-2 bg-black/85 backdrop-blur-md px-3.5 py-1.5 rounded-full border border-white/10 shadow-2xl pointer-events-auto shrink-0">
-          <div className="flex items-center gap-2">
-            <span className={`w-2 h-2 rounded-full ${isNight ? 'bg-purple-500' : 'bg-red-500'} animate-ping`} />
-            <span className="text-xs font-bold text-red-400 font-display uppercase tracking-wider">
-              {isNight ? '🌙 ' : '☀️ '}
-              {effectiveRoom.phase.replace(/_/g, ' ')}
-            </span>
-            <span className="text-base font-black font-display text-red-500 neon-text-red leading-none">
-              {formatTimer(remainingSeconds)}s
-            </span>
-          </div>
-
-          <div className="hidden xl:flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-950/60 border border-red-500/40 text-[10px] font-mono text-red-200">
-            <span className="text-amber-400 font-bold">#02 LordVader:</span>
-            <span className="font-black text-amber-300">3/{Math.ceil(aliveCount / 2) + 1} Phiếu</span>
-          </div>
-        </div>
-
-        {/* Right: Quick Controls (Phát bài, Ngày/Đêm, POV toggle, Sizer) */}
-        <div className="flex items-center gap-1.5 md:gap-2 pointer-events-auto bg-black/85 backdrop-blur-md px-2.5 md:px-3 py-1.5 rounded-full border border-white/10 shadow-2xl shrink-0">
-          {/* Dynamic Council Sizer (Hidden on small screens) */}
-          <div className="hidden 2xl:flex items-center gap-0.5 bg-zinc-900/80 p-0.5 rounded-full border border-white/10">
-            {[4, 6, 8, 12, 16].map((num) => (
+      {/* Optional Slide-out Whisper Popover (Hidden by default so zero UI blocks the 3D scene) */}
+      {isChatDrawerOpen && (
+        <div className="absolute top-13 left-3 z-30 w-64 bg-black/80 backdrop-blur-md p-2.5 rounded-xl border border-white/10 shadow-2xl pointer-events-auto">
+          <div className="flex items-center justify-between gap-1 pb-1.5 mb-1.5 border-b border-white/10">
+            {(['public', 'wolves', 'lovers', 'dead'] as ChatChannel[]).map((ch) => (
               <button
-                key={num}
+                key={ch}
                 type="button"
-                onClick={() => {
-                  setDemoCouncilSize(num);
-                  werewolfAudio.playVoteStamp();
-                }}
-                className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold font-mono transition ${
-                  activePlayers.length === num
-                    ? 'bg-amber-600 text-white shadow'
+                onClick={() => store.setActiveChatChannel(ch)}
+                className={`flex-1 py-0.5 rounded text-[10px] font-mono uppercase transition cursor-pointer ${
+                  state.activeChatChannel === ch
+                    ? 'bg-amber-500/25 text-amber-200 border border-amber-400/40'
                     : 'text-stone-400 hover:text-white'
                 }`}
-                title={`${num} Người tham gia`}
               >
-                {num}
+                {ch === 'public' ? 'Làng' : ch === 'wolves' ? 'Sói' : ch === 'lovers' ? 'Đôi' : 'Ma'}
               </button>
             ))}
           </div>
 
-          {/* Random Card Deal Button */}
-          <button
-            type="button"
-            onClick={handleRandomDeal}
-            disabled={isDealingSequence}
-            className={`flex items-center gap-1 px-2.5 py-1 rounded-full bg-gradient-to-r from-amber-500 via-amber-600 to-amber-700 hover:from-amber-400 hover:to-amber-600 text-black font-black text-[10px] font-display uppercase tracking-wider shadow-[0_0_15px_rgba(245,158,11,0.5)] border border-amber-300 transition-all transform hover:scale-105 active:scale-95 ${
-              isDealingSequence ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
-            }`}
-            title="Phát bài ngẫu nhiên cho tất cả người chơi"
-          >
-            <span>🎴</span>
-            <span className="hidden sm:inline">Phát Bài</span>
-          </button>
-
-          {/* Day / Night Quick Toggle */}
-          <div className="flex items-center gap-0.5 bg-zinc-900 p-0.5 rounded-full border border-white/10">
-            <button
-              type="button"
-              onClick={handleSwitchToDay}
-              className={`px-2 py-0.5 rounded-full text-[10px] font-bold font-display transition cursor-pointer ${
-                !isNight
-                  ? 'bg-amber-500/30 text-amber-300 border border-amber-500/50 shadow'
-                  : 'text-stone-500 hover:text-stone-300'
-              }`}
-              title="Chuyển sang Ban Ngày (Thức dậy)"
-            >
-              ☀️ Ngày
-            </button>
-            <button
-              type="button"
-              onClick={handleSwitchToNight}
-              className={`px-2 py-0.5 rounded-full text-[10px] font-bold font-display transition cursor-pointer ${
-                isNight
-                  ? 'bg-purple-950 text-purple-300 border border-purple-500/60 shadow-[0_0_10px_rgba(168,85,247,0.5)]'
-                  : 'text-stone-500 hover:text-stone-300'
-              }`}
-              title="Chuyển sang Ban Đêm (Cả làng đi ngủ)"
-            >
-              🌙 Đêm
-            </button>
-          </div>
-
-          {/* 1ST / 2ND POV Camera */}
-          <div className="flex items-center gap-0.5 bg-zinc-900 p-0.5 rounded-full border border-white/10">
-            <button
-              type="button"
-              onClick={() => setIsPov2(false)}
-              className={`px-2 py-0.5 rounded-full text-[10px] font-bold font-display uppercase tracking-wider transition cursor-pointer ${
-                !isPov2
-                  ? 'bg-gradient-to-r from-red-600 to-rose-700 text-white shadow border border-red-400'
-                  : 'text-gray-400 hover:text-white'
-              }`}
-              title="Góc nhìn người chơi [V]"
-            >
-              1ST
-            </button>
-            <button
-              type="button"
-              onClick={() => setIsPov2(true)}
-              className={`px-2 py-0.5 rounded-full text-[10px] font-bold font-display uppercase tracking-wider transition cursor-pointer ${
-                isPov2
-                  ? 'bg-gradient-to-r from-red-600 to-rose-700 text-white shadow border border-red-400'
-                  : 'text-gray-400 hover:text-white'
-              }`}
-              title="Góc nhìn toàn cảnh [V]"
-            >
-              2ND
-            </button>
-          </div>
-        </div>
-      </header>
-
-      {/* Night Fall / Day Break Cinematic Notification Banner */}
-      {nightNotification && (
-        <div className="absolute top-14 left-1/2 -translate-x-1/2 z-40 bg-zinc-950/95 backdrop-blur-md border border-purple-500/60 px-5 py-2 rounded-full shadow-[0_0_30px_rgba(168,85,247,0.4)] flex items-center gap-3 animate-fadeIn pointer-events-none">
-          <span className="text-xl animate-bounce">🌙</span>
-          <span className="text-xs font-display font-black text-purple-200 tracking-wider uppercase">
-            {nightNotification}
-          </span>
-        </div>
-      )}
-
-      {/* Status Notification Pill (Only shown when NOT dealing, leaving 3D table completely unobstructed) */}
-      {!isDealingSequence && dealNotification && !nightNotification && (
-        <div className="absolute top-14 left-1/2 -translate-x-1/2 z-40 bg-zinc-950/85 backdrop-blur-md border border-amber-500/50 px-5 py-1.5 rounded-full shadow-[0_0_20px_rgba(245,158,11,0.35)] flex items-center gap-2.5 animate-fadeIn pointer-events-none">
-          <span className="text-base animate-bounce">🎴</span>
-          <span className="text-[11px] font-display font-bold text-amber-200 tracking-wider uppercase">
-            {dealNotification}
-          </span>
-        </div>
-      )}
-
-      {/* 4. LEFT HUD: DYNAMIC COUNCIL ROSTER (SHOWS EXACT PARTICIPANTS) */}
-      <aside className="absolute left-4 top-16 z-30 pointer-events-auto">
-        {isCouncilCollapsed ? (
-          <button
-            type="button"
-            onClick={() => {
-              werewolfAudio.playVoteStamp();
-              setIsCouncilCollapsed(false);
-            }}
-            className="group flex items-center gap-2 px-3 py-1.5 rounded-xl bg-black/80 hover:bg-black/95 backdrop-blur-md border border-amber-500/40 hover:border-amber-400 text-stone-200 hover:text-white shadow-[0_0_15px_rgba(0,0,0,0.8)] hover:shadow-[0_0_20px_rgba(245,158,11,0.3)] transition-all transform hover:scale-105 active:scale-95 cursor-pointer text-xs font-mono animate-fadeIn"
-            title="Mở rộng danh sách Hội Đồng"
-          >
-            <div className="w-5 h-5 rounded-lg bg-amber-500/20 border border-amber-500/50 flex items-center justify-center text-amber-400">
-              <span className="material-symbols-outlined text-[13px]">groups</span>
-            </div>
-            <span className="font-bold font-display uppercase tracking-wider text-amber-300">
-              Hội Đồng ({aliveCount}/{activePlayers.length})
-            </span>
-            <span className="text-[9px] font-mono text-emerald-400 bg-emerald-950/80 px-1.5 py-0.2 rounded border border-emerald-500/40 font-bold">
-              SỐNG {aliveCount}
-            </span>
-            <span className="text-[10px] text-stone-400 font-mono flex items-center gap-0.5 ml-0.5 group-hover:text-amber-200">
-              <span>👁️ Mở</span>
-            </span>
-          </button>
-        ) : (
-          <div className="w-56 bg-black/75 backdrop-blur-md p-2.5 rounded-xl border border-white/10 shadow-2xl animate-fadeIn">
-            <div className="text-[9px] font-mono uppercase tracking-wider text-gray-400 mb-1.5 flex items-center justify-between pb-1 border-b border-white/10">
-              <span className="font-bold flex items-center gap-1 text-slate-200">
-                <span className="material-symbols-outlined text-[12px] text-amber-400">groups</span>
-                <span>HỘI ĐỒNG ({aliveCount}/{activePlayers.length})</span>
-              </span>
-              <div className="flex items-center gap-1.5">
-                <span className="text-emerald-400 font-bold text-[9px]">SỐNG {aliveCount}</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    werewolfAudio.playVoteStamp();
-                    setIsCouncilCollapsed(true);
-                  }}
-                  className="w-5 h-5 rounded hover:bg-white/15 text-stone-400 hover:text-amber-300 flex items-center justify-center transition cursor-pointer"
-                  title="Ẩn danh sách Hội Đồng"
-                >
-                  <span className="material-symbols-outlined text-[13px]">visibility_off</span>
-                </button>
-              </div>
-            </div>
-
-            <div className="space-y-1 text-[10px] max-h-48 overflow-y-auto pr-1">
-              {activePlayers.map((p) => {
-                const isSelected = selectedTargetId === p.id;
-                const isAccused = accusedPlayerId === p.id;
-                const voteCount = effectiveTally[p.id] || 0;
-                const isMe = p.id === myPlayerInfo?.id || (!myPlayerInfo && p.seat === 1);
-
-                return (
-                  <div
-                    key={p.id}
-                    onClick={() => {
-                      if (p.isAlive && !isMe) {
-                        setSelectedTargetId(p.id);
-                        werewolfAudio.playVoteStamp();
-                      }
-                    }}
-                    className={`flex items-center justify-between px-2 py-1 rounded transition-all cursor-pointer ${
-                      !p.isAlive
-                        ? 'bg-zinc-900/40 text-stone-500 line-through cursor-not-allowed opacity-60'
-                        : isSelected
-                        ? 'bg-red-950/90 border border-red-500 text-white font-bold shadow-[0_0_10px_rgba(220,38,38,0.5)]'
-                        : isAccused
-                        ? 'bg-amber-950/70 border border-amber-500/50 text-amber-200 font-bold animate-pulse'
-                        : isMe
-                        ? 'bg-emerald-950/60 border border-emerald-500/30 text-emerald-200'
-                        : 'hover:bg-zinc-800/80 text-gray-300'
-                    }`}
-                  >
-                    <div className="flex items-center gap-1.5 truncate">
-                      <span className="font-mono text-[9px] text-stone-400">#{p.seat < 10 ? `0${p.seat}` : p.seat}</span>
-                      <span className="truncate">{p.nickname}</span>
-                      {isMe && <span className="text-[8px] bg-emerald-500/20 text-emerald-400 px-1 rounded">Bạn</span>}
-                    </div>
-
-                    <div className="shrink-0 flex items-center gap-1 font-mono text-[9px]">
-                      {!p.isAlive ? (
-                        <span className="text-stone-500 font-bold">💀 Chết</span>
-                      ) : voteCount > 0 ? (
-                        <span className="text-red-400 font-bold bg-red-950/80 px-1 rounded border border-red-500/40">
-                          {voteCount} Phiếu
-                        </span>
-                      ) : (
-                        <span className="text-emerald-400">Sống</span>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-      </aside>
-
-      {/* 4.5. BOTTOM LEFT: PLAYER ROLE CARD HUD (3D FLIP, ACTIONS & LORE) */}
-      <aside className="absolute left-4 bottom-3 z-40">
-        <PlayerRoleCard
-          role={myCurrentRole}
-          team={state.assignedTeam}
-          wolfTeammates={state.wolfTeammates}
-          lover={(effectiveRoom.me as any)?.lover}
-          isCardRevealed={state.isCardRevealed}
-          hasDealt={hasDealt}
-          onDealNow={handleRandomDeal}
-          onToggleReveal={() => {
-            store.toggleCardReveal();
-            werewolfAudio.playCardDeal();
-          }}
-          onOpenCenterReveal={handleOpenCenterReveal}
-          onSelectRoleTest={(newRole) => {
-            const roleInfo = getRoleInfo(newRole);
-            const team =
-              roleInfo.category === 'werewolf'
-                ? 'WEREWOLF'
-                : roleInfo.category === 'third'
-                ? 'NEUTRAL'
-                : 'VILLAGE';
-            store.setAssignedRole({
-              role: newRole,
-              team: team as any,
-            });
-            setHasDealt(true);
-            werewolfAudio.playCardDeal();
-          }}
-          isAlive={myPlayerInfo?.isAlive}
-        />
-      </aside>
-
-      {/* 5. RIGHT HUD: COMBAT / TRIAL LOG & IN-GAME CHAT STREAM */}
-      <aside className="absolute top-16 right-4 z-30 flex flex-col items-end pointer-events-auto gap-2">
-        {/* Battle Log Box */}
-        {isBattleLogCollapsed ? (
-          <button
-            type="button"
-            onClick={() => {
-              werewolfAudio.playVoteStamp();
-              setIsBattleLogCollapsed(false);
-            }}
-            className="group flex items-center gap-2 px-3 py-1.5 rounded-xl bg-black/80 hover:bg-black/95 backdrop-blur-md border border-amber-500/40 hover:border-amber-400 text-stone-200 hover:text-white shadow-[0_0_15px_rgba(0,0,0,0.8)] hover:shadow-[0_0_20px_rgba(245,158,11,0.3)] transition-all transform hover:scale-105 active:scale-95 cursor-pointer text-xs font-mono animate-fadeIn"
-            title="Mở rộng Nhật Ký Bàn Đấu"
-          >
-            <div className="w-5 h-5 rounded-lg bg-red-500/20 border border-red-500/50 flex items-center justify-center text-red-400">
-              <span className="material-symbols-outlined text-[13px]">history_edu</span>
-            </div>
-            <span className="text-[11px] font-bold text-amber-400 font-display tracking-wider">
-              NHẬT KÝ BÀN ĐẤU
-            </span>
-            <span className="text-[9px] font-mono text-emerald-400 bg-emerald-950/80 px-1.5 py-0.2 rounded border border-emerald-500/40 font-bold">
-              LIVE
-            </span>
-            <span className="text-[10px] text-stone-400 font-mono flex items-center gap-0.5 ml-0.5 group-hover:text-amber-200">
-              <span>👁️ Mở</span>
-            </span>
-          </button>
-        ) : (
-          <div className="w-72 bg-black/60 backdrop-blur-md p-3 rounded-xl border border-white/10 shadow-lg animate-fadeIn">
-            <div className="flex items-center justify-between pb-1.5 border-b border-white/10 mb-2">
-              <span className="text-[11px] font-bold text-amber-400 font-display tracking-wider flex items-center gap-1">
-                <span className="material-symbols-outlined text-[13px] text-amber-400">history_edu</span>
-                <span>NHẬT KÝ BÀN ĐẤU</span>
-              </span>
-              <div className="flex items-center gap-1.5">
-                <span className="text-[9px] font-mono text-emerald-400 bg-emerald-950/80 px-1.5 py-0.2 rounded border border-emerald-500/40 font-bold">
-                  LIVE
-                </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    werewolfAudio.playVoteStamp();
-                    setIsBattleLogCollapsed(true);
-                  }}
-                  className="w-5 h-5 rounded hover:bg-white/15 text-stone-400 hover:text-amber-300 flex items-center justify-center transition cursor-pointer"
-                  title="Ẩn Nhật Ký Bàn Đấu"
-                >
-                  <span className="material-symbols-outlined text-[13px]">visibility_off</span>
-                </button>
-              </div>
-            </div>
-            <div className="space-y-1.5 text-xs text-gray-300 font-sans max-h-36 overflow-y-auto pr-1">
-              <div className="border-l-2 border-red-500 pl-2 text-[11px]">
-                <span className="text-red-400 font-semibold">#06 Độ Mixi:</span> Cáo buộc #02 LordVader có biểu hiện mờ ám.
-              </div>
-              <div className="border-l-2 border-amber-500 pl-2 text-[11px]">
-                <span className="text-amber-300 font-semibold">#02 LordVader:</span> &ldquo;Tôi là Dân làng lương thiện!&rdquo;
-              </div>
-              <div className="border-l-2 border-red-500 pl-2 text-[11px] text-red-200 font-bold">
-                #02 LordVader đang có 3 phiếu kết tội.
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Live Chat Box */}
-        {isChatCollapsed ? (
-          <button
-            type="button"
-            onClick={() => {
-              werewolfAudio.playVoteStamp();
-              setIsChatCollapsed(false);
-            }}
-            className="group flex items-center gap-2 px-3 py-1.5 rounded-xl bg-black/80 hover:bg-black/95 backdrop-blur-md border border-white/20 hover:border-amber-400 text-stone-200 hover:text-white shadow-[0_0_15px_rgba(0,0,0,0.8)] hover:shadow-[0_0_20px_rgba(245,158,11,0.3)] transition-all transform hover:scale-105 active:scale-95 cursor-pointer text-xs font-mono animate-fadeIn"
-            title="Mở rộng khung Trò Chuyện"
-          >
-            <div className="w-5 h-5 rounded-lg bg-zinc-800 border border-white/20 flex items-center justify-center text-slate-300">
-              <span className="material-symbols-outlined text-[13px]">chat</span>
-            </div>
-            <span className="font-bold text-[11px] font-mono tracking-wider text-slate-200">
-              TRÒ CHUYỆN
-            </span>
-            <span className="text-[10px] text-stone-400 font-mono flex items-center gap-0.5 ml-0.5 group-hover:text-amber-200">
-              <span>👁️ Mở</span>
-            </span>
-          </button>
-        ) : (
-          <div className="w-72 bg-black/70 backdrop-blur-md p-3 rounded-xl border border-white/10 shadow-lg flex flex-col h-56 justify-between animate-fadeIn">
-            <div className="flex items-center justify-between border-b border-white/10 pb-1 mb-1">
-              <div className="flex items-center gap-1 flex-1">
-                {(['public', 'wolves', 'lovers', 'dead'] as ChatChannel[]).map((ch) => (
-                  <button
-                    key={ch}
-                    onClick={() => store.setActiveChatChannel(ch)}
-                    className={`flex-1 py-0.5 rounded text-[10px] font-mono uppercase font-bold transition-colors ${
-                      state.activeChatChannel === ch
-                        ? 'bg-red-950 text-red-300 border border-red-500/40'
-                        : 'text-gray-400 hover:text-white'
-                    }`}
-                  >
-                    {ch === 'public' ? 'Làng' : ch === 'wolves' ? 'Sói' : ch === 'lovers' ? 'Đôi' : 'Ma'}
-                  </button>
-                ))}
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  werewolfAudio.playVoteStamp();
-                  setIsChatCollapsed(true);
-                }}
-                className="w-5 h-5 ml-1.5 rounded hover:bg-white/15 text-stone-400 hover:text-amber-300 flex items-center justify-center transition cursor-pointer"
-                title="Ẩn khung Trò Chuyện"
-              >
-                <span className="material-symbols-outlined text-[13px]">visibility_off</span>
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto space-y-1 text-[11px] pr-1">
-              {(state.chatMessages[state.activeChatChannel] || []).map((msg) => (
-                <div key={msg.id} className="text-slate-300">
+          <div className="h-32 overflow-y-auto space-y-1 text-[11px] pr-1 mb-1.5">
+            {(state.chatMessages[state.activeChatChannel] || []).length === 0 ? (
+              <p className="text-stone-500 italic text-[10px]">Chưa có lời thì thầm nào...</p>
+            ) : (
+              (state.chatMessages[state.activeChatChannel] || []).map((msg) => (
+                <div key={msg.id} className="text-stone-200">
                   <span className="text-amber-300 font-mono font-bold mr-1">
                     {msg.senderNickname || msg.senderId}:
                   </span>
                   <span>{msg.text}</span>
                 </div>
-              ))}
-            </div>
-
-            <form onSubmit={handleSendChat} className="flex gap-1 pt-1.5 border-t border-white/10">
-              <input
-                type="text"
-                value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
-                placeholder="Nói gì đó..."
-                className="flex-1 bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-red-500"
-              />
-              <button
-                type="submit"
-                className="px-2 py-1 bg-red-800 hover:bg-red-700 text-white text-xs rounded font-mono"
-              >
-                Gửi
-              </button>
-            </form>
+              ))
+            )}
           </div>
-        )}
-      </aside>
 
-      {/* 6. BOTTOM ACTION CONTROLLER BAR (PURE WEREWOLF GAME RULES) */}
-      <footer className="absolute bottom-3 inset-x-0 z-30 flex justify-center px-4 pointer-events-auto">
-        <div className="bg-black/90 backdrop-blur-md px-3.5 py-2 rounded-2xl border border-white/15 shadow-2xl flex items-center gap-2.5 max-w-2xl w-full justify-between">
-          {/* Main Action Button */}
-          {selectedPlayer && selectedPlayer.isAlive && selectedPlayer.id !== myPlayerInfo?.id ? (
+          <form onSubmit={handleSendChat} className="flex gap-1">
+            <input
+              type="text"
+              value={chatInput}
+              onChange={(e) => setChatInput(e.target.value)}
+              placeholder="Thì thầm..."
+              className="flex-1 bg-zinc-950/90 border border-white/15 rounded px-2 py-1 text-[11px] text-white focus:outline-none focus:border-amber-400"
+            />
+            <button
+              type="submit"
+              className="px-2 py-1 bg-amber-600/80 hover:bg-amber-500 text-black font-bold text-[10px] rounded font-mono cursor-pointer"
+            >
+              Gửi
+            </button>
+          </form>
+        </div>
+      )}
+
+      {/* Game Over Victory / Defeat Overlay (only when match concludes) */}
+      {(effectivePhase === 'GAME_OVER' || Boolean(state.room?.winner)) && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4">
+          <div className="bg-[#0d0c10] border border-amber-500/40 rounded-2xl p-7 max-w-md w-full text-center shadow-2xl">
+            <h2 className="font-serif font-bold text-2xl uppercase text-amber-300 tracking-wider mb-2">
+              {state.room?.winner === 'WEREWOLF' ? 'Phe Bóng Đêm Thắng' : 'Phe Dân Làng Thắng'}
+            </h2>
+            <p className="text-xs text-stone-400 mb-6">
+              Ván đấu tại bàn Hội Đồng đã khép lại. Toàn bộ thân phận đã được phơi bày dưới ánh đèn.
+            </p>
             <button
               type="button"
               onClick={() => {
-                if (isNight) {
-                  werewolfAudio.playWolfHowl();
-                  onEmitAction('night:wolfVote', { targetId: selectedPlayer.id });
-                } else {
-                  werewolfAudio.playGavel();
-                  onEmitAction('day:vote', { targetId: selectedPlayer.id });
-                }
+                window.location.href = '/';
               }}
-              className="flex-1 bg-gradient-to-r from-red-700 to-rose-800 hover:from-red-600 hover:to-rose-700 border border-red-400/80 text-white rounded-xl px-3.5 py-2 flex items-center justify-between text-xs font-bold transition shadow-[0_0_20px_rgba(220,38,38,0.6)] animate-pulse"
+              className="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-mono font-bold text-xs uppercase tracking-wider transition cursor-pointer"
             >
-              <span className="flex items-center gap-2 font-display">
-                <span>{isNight ? '🐺' : '🪢'}</span>
-                <span>
-                  {isNight ? 'Biểu quyết Cắn' : 'Bỏ phiếu Treo cổ'} #{selectedPlayer.seat} {selectedPlayer.nickname}
-                </span>
-              </span>
-              <kbd className="px-1.5 py-0.5 bg-black/50 rounded text-[9px] font-mono text-red-200 border border-white/20">
-                [1]
-              </kbd>
-            </button>
-          ) : (
-            <div className="flex-1 bg-zinc-900/60 border border-white/5 rounded-xl px-3 py-2 flex items-center justify-center gap-2 text-xs text-stone-400 font-mono">
-              <span className="material-symbols-outlined text-[16px] text-amber-400">touch_app</span>
-              <span>Click chọn 1 người chơi trên bàn 3D để biểu quyết</span>
-            </div>
-          )}
-
-          {/* Quick Debate Button */}
-          <button
-            type="button"
-            onClick={() => {
-              onEmitAction('day:debate', { message: 'Tôi khẳng định mình là Dân làng lương thiện!' });
-            }}
-            className="bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 hover:border-zinc-500 text-slate-200 hover:text-white rounded-xl px-3.5 py-2 flex items-center gap-2 text-xs font-bold transition shadow"
-          >
-            <span className="flex items-center gap-1.5 font-display">
-              <span>🗣️</span> Tranh Luận
-            </span>
-            <kbd className="px-1.5 py-0.5 bg-black/60 rounded text-[9px] font-mono text-gray-400 border border-white/10">
-              [E]
-            </kbd>
-          </button>
-
-          {/* Skip / Blank Vote Button */}
-          <button
-            type="button"
-            onClick={() => {
-              werewolfAudio.playVoteStamp();
-              onEmitAction('day:vote', { targetId: 'SKIP' });
-            }}
-            className="bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 hover:border-zinc-500 text-gray-300 hover:text-white rounded-xl px-3.5 py-2 flex items-center gap-2 text-xs font-bold transition"
-          >
-            <span className="flex items-center gap-1.5 font-display">
-              <span>🕊️</span> Phiếu Trắng
-            </span>
-            <kbd className="px-1.5 py-0.5 bg-black/60 rounded text-[9px] font-mono text-gray-400 border border-white/10">
-              [SPACE]
-            </kbd>
-          </button>
-        </div>
-      </footer>
-
-      {/* 7. GAME OVER VICTORY / DEFEAT MODAL */}
-      {(effectiveRoom.phase === 'GAME_OVER' || (effectiveRoom as any).winner) && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4">
-          <div className="bg-[#111622] border border-amber-500/50 rounded-2xl p-8 max-w-lg w-full text-center shadow-[0_0_50px_rgba(245,158,11,0.3)] animate-fadeIn">
-            <span className="text-4xl block mb-2">{(effectiveRoom as any).winner === 'WEREWOLF' ? '🐺' : '🏆'}</span>
-            <h2 className="font-syne font-extrabold text-2xl uppercase text-amber-400 tracking-wider">
-              {(effectiveRoom as any).winner === 'WEREWOLF'
-                ? 'PHE MA SÓI THẮNG!'
-                : (effectiveRoom as any).winner === 'VILLAGE'
-                ? 'PHE DÂN LÀNG THẮNG!'
-                : 'TRÒ CHƠI KẾT THÚC!'}
-            </h2>
-            <p className="font-geist text-xs text-slate-300 mt-2">
-              Toàn bộ danh tính đã được hé lộ. Thành tích và phần thưởng đã được cập nhật vào cơ sở dữ liệu!
-            </p>
-
-            <div className="my-6 grid grid-cols-3 gap-2">
-              <div className="bg-[#1a2030] p-3 rounded-xl border border-white/10">
-                <span className="text-[10px] text-slate-400 font-space uppercase block">Điểm Danh Vọng</span>
-                <span className="text-lg font-bold text-emerald-400 font-syne">+25 Elo</span>
-              </div>
-              <div className="bg-[#1a2030] p-3 rounded-xl border border-white/10">
-                <span className="text-[10px] text-slate-400 font-space uppercase block">Tiền Thưởng Bạc</span>
-                <span className="text-lg font-bold text-amber-400 font-syne">+180 Bạc</span>
-              </div>
-              <div className="bg-[#1a2030] p-3 rounded-xl border border-white/10">
-                <span className="text-[10px] text-slate-400 font-space uppercase block">Kinh Nghiệm</span>
-                <span className="text-lg font-bold text-purple-400 font-syne">+90 EXP</span>
-              </div>
-            </div>
-
-            <button
-              onClick={() => (window.location.href = '/')}
-              className="w-full py-3 rounded-xl bg-gradient-to-r from-red-800 to-red-600 hover:from-red-700 hover:to-red-500 text-white font-space font-bold text-xs uppercase tracking-wider shadow-lg shadow-red-950/60 transition-all flex items-center justify-center gap-2"
-            >
-              <span className="material-symbols-outlined text-[18px]">home</span>
-              <span>QUAY VỀ SẢNH CHỜ</span>
+              Quay Về Sảnh Chờ
             </button>
           </div>
         </div>
       )}
-
-
-      {/* 9. CENTER-SCREEN GRAND ROLE CARD REVEAL (100% COMPLETE UNCROPPED ARTWORK) */}
-      <CenterRoleRevealModal
-        isOpen={isCenterRevealOpen}
-        role={myCurrentRole}
-        team={state.assignedTeam}
-        wolfTeammates={state.wolfTeammates}
-        lover={(effectiveRoom.me as any)?.lover}
-        onClose={handleCloseCenterReveal}
-      />
     </div>
   );
 };

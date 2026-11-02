@@ -207,7 +207,13 @@ export class TimerWorker {
   private determineNextPhase(room: RoomState): Phase | null {
     switch (room.phase) {
       case 'ASSIGN_ROLES':
-        return 'NIGHT_START';
+        return 'NIGHT_FALL';
+
+      case 'NIGHT_FALL':
+        if (room.round === 1 && room.settings.roleConfig['CUPID'] && room.settings.roleConfig['CUPID'] > 0) {
+          return 'CUPID_TURN';
+        }
+        return 'NIGHT_BODYGUARD';
 
       case 'NIGHT_START':
         // Nếu đêm 1 và có Cupid -> CUPID_TURN; ngược lại -> BODYGUARD_TURN
@@ -220,44 +226,61 @@ export class TimerWorker {
         return 'LOVERS_TURN';
 
       case 'LOVERS_TURN':
-        return 'BODYGUARD_TURN';
+        return 'NIGHT_BODYGUARD';
+
+      case 'NIGHT_BODYGUARD':
+        return 'NIGHT_WEREWOLF';
 
       case 'BODYGUARD_TURN':
         return 'WEREWOLF_TURN';
 
-      case 'WEREWOLF_TURN':
-        return 'WITCH_TURN';
+      case 'NIGHT_WEREWOLF':
+        if (room.settings.roleConfig['WITCH'] && room.settings.roleConfig['WITCH'] > 0) {
+          return 'WITCH_TURN';
+        }
+        return 'NIGHT_SEER';
 
-      case 'WITCH_TURN':
+      case 'WEREWOLF_TURN':
+        if (room.settings.roleConfig['WITCH'] && room.settings.roleConfig['WITCH'] > 0) {
+          return 'WITCH_TURN';
+        }
         return 'SEER_TURN';
 
+      case 'WITCH_TURN':
+        return 'NIGHT_SEER';
+
+      case 'NIGHT_SEER':
       case 'SEER_TURN':
         return 'NIGHT_RESOLVE';
 
       case 'NIGHT_RESOLVE':
-        return 'DAY_ANNOUNCEMENT';
+        return 'DAY_ANNOUNCE';
 
+      case 'DAY_ANNOUNCE':
       case 'DAY_ANNOUNCEMENT':
-        // Nếu có người chết cần trigger (ví dụ Thợ Săn) -> DEATH_TRIGGERS; nếu không -> CHECK_WIN
+        // Nếu có người chết cần trigger (ví dụ Thợ Săn) -> DEATH_TRIGGERS; nếu không -> DAY_DISCUSSION
         if (room.pendingTriggers.length > 0) {
           return 'DEATH_TRIGGERS';
         }
-        return 'CHECK_WIN';
+        return 'DAY_DISCUSSION';
 
       case 'DEATH_TRIGGERS':
-        return 'CHECK_WIN';
+        return 'CHECK_WIN_CONDITION';
 
       case 'DAY_DISCUSSION':
         return 'DAY_VOTING';
 
       case 'DAY_VOTING':
       case 'DAY_REVOTE':
-        return 'VOTE_RESOLVE';
+        return 'DAY_EXECUTION';
+
+      case 'VOTE_RESOLVE':
+        return 'DAY_DEFENSE';
 
       case 'DAY_DEFENSE':
         return 'DAY_JUDGMENT';
 
-      case 'DAY_JUDGMENT':
+      case 'DAY_JUDGMENT': {
         // Tính phiếu phán quyết
         let guilty = 0;
         let innocent = 0;
@@ -268,13 +291,18 @@ export class TimerWorker {
         if (guilty > innocent && room.day.accusedId) {
           return 'DAY_EXECUTION';
         }
-        return 'CHECK_WIN';
+        return 'CHECK_WIN_CONDITION';
+      }
 
       case 'DAY_EXECUTION':
         if (room.pendingTriggers.length > 0) {
           return 'DEATH_TRIGGERS';
         }
-        return 'CHECK_WIN';
+        return 'CHECK_WIN_CONDITION';
+
+      case 'CHECK_WIN_CONDITION':
+      case 'CHECK_WIN':
+        return 'NIGHT_FALL';
 
       default:
         return null;

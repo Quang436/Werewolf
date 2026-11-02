@@ -180,8 +180,10 @@ export class GameLoopService {
     const d = room.settings.durations;
 
     switch (to) {
+      case 'NIGHT_FALL':
       case 'NIGHT_START': {
-        room.phaseEndsAt = Date.now() + d.nightStart * 1000;
+        const durationSec = to === 'NIGHT_FALL' ? (d.nightFall || 3) : d.nightStart;
+        room.phaseEndsAt = Date.now() + durationSec * 1000;
         // Reset bảng hành động đêm
         room.night = {
           bodyguardTarget: null,
@@ -191,6 +193,11 @@ export class GameLoopService {
           witchPoisonTarget: null,
           seerTarget: null,
         };
+        this.broadcaster.emitToRoom(room.id, 'NIGHT_FALL', {
+          round: room.round,
+          timestamp: Date.now(),
+          durationMs: durationSec * 1000,
+        });
         break;
       }
 
@@ -202,25 +209,97 @@ export class GameLoopService {
         room.phaseEndsAt = Date.now() + d.lovers * 1000;
         break;
 
-      case 'BODYGUARD_TURN':
-        room.phaseEndsAt = Date.now() + d.bodyguard * 1000;
-        break;
+      case 'NIGHT_BODYGUARD':
+      case 'BODYGUARD_TURN': {
+        const aliveBodyguard = room.players.find((p) => p.role === 'BODYGUARD' && p.isAlive);
+        if (aliveBodyguard) {
+          room.phaseEndsAt = Date.now() + d.bodyguard * 1000;
+          const validTargets = room.players
+            .filter((p) => p.isAlive && p.id !== aliveBodyguard.roleState?.lastProtectedId)
+            .map((p) => ({ id: p.id, nickname: p.nickname, seat: p.seat }));
 
-      case 'WEREWOLF_TURN':
-        room.phaseEndsAt = Date.now() + d.werewolf * 1000;
+          this.broadcaster.emitToUser(aliveBodyguard.id, 'YOUR_TURN_ACTION', {
+            phase: to,
+            actionType: 'BODYGUARD_PROTECT',
+            candidates: validTargets,
+            timeoutMs: d.bodyguard * 1000,
+          });
+        } else {
+          // Fake delay 6s nếu Bảo Vệ đã chết/không có để đối phương không đoán được
+          room.phaseEndsAt = Date.now() + 6000;
+        }
         break;
+      }
+
+      case 'NIGHT_WEREWOLF':
+      case 'WEREWOLF_TURN': {
+        room.phaseEndsAt = Date.now() + d.werewolf * 1000;
+        const aliveWolves = room.players.filter((p) => p.team === 'WEREWOLF' && p.isAlive);
+        const validVictims = room.players
+          .filter((p) => p.isAlive && p.team !== 'WEREWOLF')
+          .map((p) => ({ id: p.id, nickname: p.nickname, seat: p.seat }));
+
+        for (const wolf of aliveWolves) {
+          this.broadcaster.emitToUser(wolf.id, 'YOUR_TURN_ACTION', {
+            phase: to,
+            actionType: 'WOLF_VOTE',
+            candidates: validVictims,
+            timeoutMs: d.werewolf * 1000,
+            teammates: aliveWolves.map((w) => ({ id: w.id, nickname: w.nickname, seat: w.seat })),
+          });
+        }
+        break;
+      }
 
       case 'WITCH_TURN':
         room.phaseEndsAt = Date.now() + d.witch * 1000;
         break;
 
-      case 'SEER_TURN':
-        room.phaseEndsAt = Date.now() + d.seer * 1000;
+      case 'NIGHT_SEER':
+      case 'SEER_TURN': {
+        const aliveSeer = room.players.find((p) => p.role === 'SEER' && p.isAlive);
+        if (aliveSeer) {
+          room.phaseEndsAt = Date.now() + d.seer * 1000;
+          const validTargets = room.players
+            .filter((p) => p.isAlive && p.id !== aliveSeer.id)
+            .map((p) => ({ id: p.id, nickname: p.nickname, seat: p.seat }));
+
+          this.broadcaster.emitToUser(aliveSeer.id, 'YOUR_TURN_ACTION', {
+            phase: to,
+            actionType: 'SEER_INSPECT',
+            candidates: validTargets,
+            timeoutMs: d.seer * 1000,
+          });
+        } else {
+          // Fake delay 6s nếu Tiên Tri đã chết/không có
+          room.phaseEndsAt = Date.now() + 6000;
+        }
         break;
+      }
 
       case 'NIGHT_RESOLVE': {
         // Pha tính toán nội bộ tức thì của Server
         room.phaseEndsAt = null;
+
+        // Xử lý wolfTarget từ wolfVotes nếu chưa chọn
+        if (!room.night.wolfTarget && Object.keys(room.night.wolfVotes).length > 0) {
+          const tally: Record<string, number> = {};
+          for (const targetId of Object.values(room.night.wolfVotes)) {
+            if (targetId && targetId !== 'SKIP') {
+              tally[targetId] = (tally[targetId] || 0) + 1;
+            }
+          }
+          let maxCount = 0;
+          let selectedWolfTarget: string | null = null;
+          for (const [tId, cnt] of Object.entries(tally)) {
+            if (cnt > maxCount) {
+              maxCount = cnt;
+              selectedWolfTarget = tId;
+            }
+          }
+          room.night.wolfTarget = selectedWolfTarget;
+        }
+
         const resolution = NightResolver.resolve({
           round: room.round,
           players: room.players,
@@ -253,21 +332,27 @@ export class GameLoopService {
           deaths: resolution.deaths.map((d) => ({ playerId: d.playerId, cause: d.cause })),
         });
 
-        // Chuyển tiếp ngay sang DAY_ANNOUNCEMENT
-        room.phase = 'DAY_ANNOUNCEMENT';
-        room.phaseEndsAt = Date.now() + d.announcement * 1000;
+        // Chuyển tiếp ngay sang DAY_ANNOUNCE / DAY_ANNOUNCEMENT
+        const nextDayPhase: Phase = from === 'NIGHT_SEER' ? 'DAY_ANNOUNCE' : 'DAY_ANNOUNCEMENT';
+        room.phase = nextDayPhase;
+        const announceDuration = nextDayPhase === 'DAY_ANNOUNCE' ? (d.dayAnnounce || 7) : d.announcement;
+        room.phaseEndsAt = Date.now() + announceDuration * 1000;
         room.afterCheckWin = 'DAY';
         break;
       }
 
-      case 'DAY_ANNOUNCEMENT':
-        room.phaseEndsAt = Date.now() + d.announcement * 1000;
+      case 'DAY_ANNOUNCE':
+      case 'DAY_ANNOUNCEMENT': {
+        const announceDur = to === 'DAY_ANNOUNCE' ? (d.dayAnnounce || 7) : d.announcement;
+        room.phaseEndsAt = Date.now() + announceDur * 1000;
         break;
+      }
 
       case 'DEATH_TRIGGERS':
         room.phaseEndsAt = Date.now() + d.deathTriggers * 1000;
         break;
 
+      case 'CHECK_WIN_CONDITION':
       case 'CHECK_WIN': {
         // Kiểm tra điều kiện thắng tức thì
         room.phaseEndsAt = null;
@@ -300,8 +385,10 @@ export class GameLoopService {
           } else {
             // Vừa xong phiên treo cổ ban ngày -> Chuyển sang đêm tiếp theo
             room.round++;
-            room.phase = 'NIGHT_START';
-            room.phaseEndsAt = Date.now() + d.nightStart * 1000;
+            const nextNightPhase: Phase = to === 'CHECK_WIN_CONDITION' ? 'NIGHT_FALL' : 'NIGHT_START';
+            room.phase = nextNightPhase;
+            const nightDur = nextNightPhase === 'NIGHT_FALL' ? (d.nightFall || 3) : d.nightStart;
+            room.phaseEndsAt = Date.now() + nightDur * 1000;
             room.night = {
               bodyguardTarget: null,
               wolfVotes: {},
@@ -310,6 +397,13 @@ export class GameLoopService {
               witchPoisonTarget: null,
               seerTarget: null,
             };
+            if (nextNightPhase === 'NIGHT_FALL') {
+              this.broadcaster.emitToRoom(room.id, 'NIGHT_FALL', {
+                round: room.round,
+                timestamp: Date.now(),
+                durationMs: nightDur * 1000,
+              });
+            }
           }
         }
         break;
@@ -391,6 +485,34 @@ export class GameLoopService {
       case 'DAY_EXECUTION': {
         room.phaseEndsAt = Date.now() + d.execution * 1000;
         room.afterCheckWin = 'NIGHT';
+
+        // Nếu chưa có accusedId (chuyển thẳng từ DAY_VOTING), tự kiểm tra tally phiếu
+        if (!room.day.accusedId && Object.keys(room.day.votes).length > 0) {
+          const tally: Record<string, number> = {};
+          for (const targetId of Object.values(room.day.votes)) {
+            if (targetId && targetId !== 'SKIP') {
+              tally[targetId] = (tally[targetId] || 0) + 1;
+            }
+          }
+          let maxVotes = 0;
+          let topCandidates: string[] = [];
+          for (const [candidateId, count] of Object.entries(tally)) {
+            if (count > maxVotes) {
+              maxVotes = count;
+              topCandidates = [candidateId];
+            } else if (count === maxVotes) {
+              topCandidates.push(candidateId);
+            }
+          }
+
+          if (topCandidates.length === 1 && maxVotes > 0) {
+            room.day.accusedId = topCandidates[0];
+          } else {
+            // Hòa phiếu hoặc không ai bị vote -> không ai bị treo cổ
+            room.day.accusedId = null;
+          }
+        }
+
         if (room.day.accusedId) {
           const accused = room.players.find((p) => p.id === room.day.accusedId);
           if (accused && accused.isAlive) {
@@ -401,8 +523,8 @@ export class GameLoopService {
             };
 
             // Chuỗi chết cặp đôi tình nhân Cupid
-            if (room.lovers && (room.lovers.playerAId === accused.id || room.lovers.playerBId === accused.id)) {
-              const otherId = room.lovers.playerAId === accused.id ? room.lovers.playerBId : room.lovers.playerAId;
+            if (room.lovers && (room.lovers[0] === accused.id || room.lovers[1] === accused.id)) {
+              const otherId = room.lovers[0] === accused.id ? room.lovers[1] : room.lovers[0];
               const lover = room.players.find((p) => p.id === otherId);
               if (lover && lover.isAlive) {
                 lover.isAlive = false;

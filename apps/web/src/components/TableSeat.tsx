@@ -7,6 +7,7 @@ import { Billboard, RoundedBox, useCursor } from '@react-three/drei';
 import {
   CameraPerspective,
   ComputedSeat,
+  TABLE_SURFACE_Y,
   getDarkLeatherTexture,
   getFloatingVoteCountTexture,
   getGothicTarotBackTexture,
@@ -22,6 +23,13 @@ export interface TableSeatProps {
   isCondemned: boolean;
   isLeadingVote?: boolean;
   hasDealtCards: boolean;
+  isSleeping?: boolean;
+  isWolfAwake?: boolean;
+  isWolfTarget?: boolean;
+  seerPeekResult?: { targetId: string; isWerewolf: boolean } | null;
+  isSpeaking?: boolean;
+  isKilledTonight?: boolean;
+  moodLighting?: string;
   onSelectSeat: (playerId: string) => void;
 }
 
@@ -43,11 +51,18 @@ export const TableSeat: React.FC<TableSeatProps> = ({
   isCondemned,
   isLeadingVote = false,
   hasDealtCards,
+  isSleeping = false,
+  isWolfAwake = false,
+  isWolfTarget = false,
+  seerPeekResult = null,
+  isSpeaking = false,
+  isKilledTonight = false,
+  moodLighting = 'day_pub',
   onSelectSeat,
 }) => {
   const [hovered, setHovered] = useState(false);
 
-  const isAlive = seat.player.isAlive;
+  const isAlive = seat.player.isAlive && !isKilledTonight;
   const interactive = !seat.isLocal && isAlive && canVote;
   useCursor(hovered && interactive, 'pointer', 'auto');
 
@@ -108,11 +123,11 @@ export const TableSeat: React.FC<TableSeatProps> = ({
     let targetForearmYIn = 0.34;
 
     if (!isAlive) {
-      // Condemned / Dead pose: slumped forward, head dropped, both arms hanging limply toward table/floor
-      targetTorsoX = 0.58;
-      targetHeadX = 0.62;
+      // Condemned / Dead pose: slumped forward limp, head dropped, both arms hanging limply
+      targetTorsoX = 0.62;
+      targetHeadX = 0.68;
       targetHeadY = 0.12;
-      targetHeadZ = seat.player.seat % 2 === 0 ? 0.24 : -0.24;
+      targetHeadZ = seat.player.seat % 2 === 0 ? 0.28 : -0.28;
 
       targetUpperArmX = -0.92;
       targetUpperArmZOut = 0.08;
@@ -123,13 +138,18 @@ export const TableSeat: React.FC<TableSeatProps> = ({
       targetTorsoX = 0.06;
       targetHeadX = -0.16 + Math.sin(t * 18) * 0.015;
       targetHeadY = Math.sin(t * 14) * 0.03;
-    } else if (isNight) {
+    } else if (isSleeping || (isNight && !isWolfAwake)) {
       // Night sleep pose: whole village bows heads down toward table
-      targetTorsoX = 0.42;
-      targetHeadX = 0.45;
+      targetTorsoX = 0.44;
+      targetHeadX = 0.48;
       targetHeadY = 0;
       targetForearmX = -0.95;
       targetForearmYIn = 0.52;
+    } else if (isSpeaking) {
+      // Speaking rhythm during discussion
+      targetTorsoX = 0.08 + Math.sin(t * 4.5) * 0.03;
+      targetHeadX = -0.04 + Math.sin(t * 6.2) * 0.04;
+      targetHeadY = Math.sin(t * 2.8) * 0.14;
     }
 
     torsoRef.current.rotation.x = THREE.MathUtils.lerp(torsoRef.current.rotation.x, targetTorsoX, alpha);
@@ -472,6 +492,35 @@ export const TableSeat: React.FC<TableSeatProps> = ({
                   </group>
                 )}
 
+                {/* Glowing Blood-Red Eyes for Wolf Teammates during Werewolf Turn */}
+                {isAlive && isWolfAwake && (
+                  <group position={[0, 0.015, 0.096]}>
+                    <mesh position={[-0.038, 0, 0]}>
+                      <sphereGeometry args={[0.014, 10, 10]} />
+                      <meshBasicMaterial color="#ff1744" />
+                    </mesh>
+                    <mesh position={[0.038, 0, 0]}>
+                      <sphereGeometry args={[0.014, 10, 10]} />
+                      <meshBasicMaterial color="#ff1744" />
+                    </mesh>
+                    <pointLight color="#ff1744" intensity={2.0} distance={0.6} />
+                  </group>
+                )}
+
+                {/* Diegetic Audio Waveform / Speaking Indicator above Head */}
+                {isSpeaking && isAlive && (
+                  <Billboard position={[0, 0.35, 0]}>
+                    <group>
+                      {[-0.06, -0.03, 0, 0.03, 0.06].map((bx, bIdx) => (
+                        <mesh key={bIdx} position={[bx, 0, 0]}>
+                          <boxGeometry args={[0.012, 0.04 + (bIdx % 2 === 0 ? 0.025 : 0.01), 0.008]} />
+                          <meshBasicMaterial color="#38bdf8" />
+                        </mesh>
+                      ))}
+                    </group>
+                  </Billboard>
+                )}
+
                 {/* 6 DISTINCT DARK NOIR HEADGEAR ARCHETYPES */}
                 {seat.archetypeIndex === 0 && (
                   /* 0: Detective Fedora */
@@ -614,7 +663,82 @@ export const TableSeat: React.FC<TableSeatProps> = ({
         </mesh>
       )}
 
-      {!seat.isLocal && isAlive && (hovered || isSelected) && canVote && (
+      {/* Red Claw Mark on Wolf Target Chair */}
+      {isWolfTarget && (
+        <group
+          position={[seat.voteSpotPosition[0], TABLE_SURFACE_Y + 0.006, seat.voteSpotPosition[2]]}
+          rotation={[-Math.PI / 2, 0, seat.rotationY]}
+        >
+          {[-0.045, 0, 0.045].map((cx, cIdx) => (
+            <mesh key={cIdx} position={[cx, cIdx === 1 ? 0.015 : -0.01, 0]} rotation={[0, 0, (cIdx - 1) * 0.18]}>
+              <planeGeometry args={[0.016, 0.14]} />
+              <meshBasicMaterial color="#ff1133" transparent opacity={0.92} />
+            </mesh>
+          ))}
+          <pointLight color="#ff1133" intensity={1.6} distance={0.6} />
+        </group>
+      )}
+
+      {/* Seer Peek Glowing Reveal Card over Target Seat */}
+      {seerPeekResult && seerPeekResult.targetId === seat.player.id && (
+        <Billboard
+          position={[seat.cardRestPosition[0], TABLE_SURFACE_Y + 0.28, seat.cardRestPosition[2]]}
+          follow
+        >
+          <group>
+            {/* Mystic Glow Backing */}
+            <mesh position={[0, 0, -0.005]}>
+              <planeGeometry args={[0.34, 0.14]} />
+              <meshBasicMaterial
+                color={seerPeekResult.isWerewolf ? '#7f1d1d' : '#064e3b'}
+                transparent
+                opacity={0.88}
+              />
+            </mesh>
+            {/* Border */}
+            <mesh position={[0, 0, -0.003]}>
+              <planeGeometry args={[0.36, 0.16]} />
+              <meshBasicMaterial
+                color={seerPeekResult.isWerewolf ? '#ef4444' : '#10b981'}
+                transparent
+                opacity={0.5}
+                wireframe
+              />
+            </mesh>
+            <pointLight
+              color={seerPeekResult.isWerewolf ? '#ff1744' : '#10b981'}
+              intensity={2.0}
+              distance={0.8}
+            />
+          </group>
+        </Billboard>
+      )}
+
+      {/* Casualty Spotlight on Night Victim Chair during Daybreak */}
+      {isKilledTonight && (
+        <spotLight
+          position={[seat.position[0], 3.8, seat.position[2]]}
+          target-position={[seat.position[0], 0.6, seat.position[2]]}
+          color="#ff1744"
+          intensity={12}
+          distance={5.5}
+          angle={0.35}
+          penumbra={0.5}
+        />
+      )}
+
+      {/* Bodyguard Cyan Targeting Ring when Hovered */}
+      {!seat.isLocal && isAlive && hovered && canVote && moodLighting === 'bodyguard_cyan' && (
+        <mesh
+          position={[seat.voteSpotPosition[0], seat.voteSpotPosition[1] - 0.003, seat.voteSpotPosition[2]]}
+          rotation={[-Math.PI / 2, 0, 0]}
+        >
+          <ringGeometry args={[0.12, 0.155, 32]} />
+          <meshBasicMaterial color="#00e5ff" transparent opacity={0.85} side={THREE.DoubleSide} />
+        </mesh>
+      )}
+
+      {!seat.isLocal && isAlive && (hovered || isSelected) && canVote && moodLighting !== 'bodyguard_cyan' && (
         <mesh
           position={[seat.voteSpotPosition[0], seat.voteSpotPosition[1] - 0.004, seat.voteSpotPosition[2]]}
           rotation={[-Math.PI / 2, 0, 0]}

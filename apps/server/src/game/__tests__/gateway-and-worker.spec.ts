@@ -299,4 +299,115 @@ describe('TimerWorker Distributed Scheduler Tests', () => {
     assert.equal(finalRoom.phase, 'GAME_OVER');
     assert.equal(finalRoom.winner, 'VILLAGE');
   });
+
+  it('Full 10-Phase FSM Sequence Test: NIGHT_FALL -> NIGHT_BODYGUARD -> NIGHT_WEREWOLF -> NIGHT_SEER -> NIGHT_RESOLVE -> DAY_ANNOUNCE -> DAY_DISCUSSION -> DAY_VOTING -> DAY_EXECUTION -> CHECK_WIN_CONDITION', async () => {
+    const redis = new InMemoryZSetRedisAdapter();
+    const broadcaster = new MockServerBroadcaster();
+    const gameLoop = new GameLoopService(redis, broadcaster);
+    const timerWorker = new TimerWorker(redis, gameLoop);
+    gameLoop.setTimerScheduler(timerWorker);
+    const roomManager = new GameRoomManager(redis);
+
+    // 1. Tạo phòng 4 người (1 Sói, 1 Tiên Tri, 1 Bảo Vệ, 1 Dân Làng)
+    const room = await roomManager.createRoom(
+      { id: 'u1', nickname: 'Bảo Vệ' },
+      {
+        roleConfig: {
+          WEREWOLF: 1,
+          SEER: 1,
+          BODYGUARD: 1,
+          VILLAGER: 1,
+        },
+      }
+    );
+    await roomManager.joinRoom(room.code, { id: 'u2', nickname: 'Ma Sói' });
+    await roomManager.joinRoom(room.code, { id: 'u3', nickname: 'Tiên Tri' });
+    await roomManager.joinRoom(room.code, { id: 'u4', nickname: 'Dân Làng' });
+
+    // Bắt đầu game -> ASSIGN_ROLES
+    await gameLoop.startGame(room.id, 'u1');
+    const started = (await redis.getRoom(room.id))!;
+    assert.equal(started.phase, 'ASSIGN_ROLES');
+
+    // Cố định vai trò để test luồng FSM tuần tự xác định
+    const pU1 = started.players.find((p) => p.id === 'u1')!;
+    pU1.role = 'BODYGUARD';
+    pU1.team = 'VILLAGE';
+    const pU2 = started.players.find((p) => p.id === 'u2')!;
+    pU2.role = 'WEREWOLF';
+    pU2.team = 'WEREWOLF';
+    const pU3 = started.players.find((p) => p.id === 'u3')!;
+    pU3.role = 'SEER';
+    pU3.team = 'VILLAGE';
+    const pU4 = started.players.find((p) => p.id === 'u4')!;
+    pU4.role = 'VILLAGER';
+    pU4.team = 'VILLAGE';
+    await redis.setRoom(started);
+
+    // Chuyển sang PHA 1: NIGHT_FALL (3s)
+    await gameLoop.transition(room.id, 'NIGHT_FALL');
+    const p1 = (await redis.getRoom(room.id))!;
+    assert.equal(p1.phase, 'NIGHT_FALL');
+    assert.ok(broadcaster.roomBroadcasts.some((b) => b.event === 'NIGHT_FALL'));
+
+    // Chuyển sang PHA 2: NIGHT_BODYGUARD (15s)
+    await gameLoop.transition(room.id, 'NIGHT_BODYGUARD');
+    const p2 = (await redis.getRoom(room.id))!;
+    assert.equal(p2.phase, 'NIGHT_BODYGUARD');
+
+    // Chuyển sang PHA 3: NIGHT_WEREWOLF (20s)
+    await gameLoop.transition(room.id, 'NIGHT_WEREWOLF');
+    const p3 = (await redis.getRoom(room.id))!;
+    assert.equal(p3.phase, 'NIGHT_WEREWOLF');
+
+    // Giả lập Sói vote cắn u4 (Dân Làng)
+    p3.night.wolfVotes = { u2: 'u4' };
+    await redis.setRoom(p3);
+
+    // Chuyển sang PHA 4: NIGHT_SEER (15s)
+    await gameLoop.transition(room.id, 'NIGHT_SEER');
+    const p4 = (await redis.getRoom(room.id))!;
+    assert.equal(p4.phase, 'NIGHT_SEER');
+
+    // Chuyển sang PHA 5: NIGHT_RESOLVE -> Server tự tính và chuyển tiếp sang PHA 6: DAY_ANNOUNCE
+    await gameLoop.transition(room.id, 'NIGHT_RESOLVE');
+    const p6 = (await redis.getRoom(room.id))!;
+    assert.equal(p6.phase, 'DAY_ANNOUNCE');
+    const victim = p6.players.find((p) => p.id === 'u4')!;
+    assert.equal(victim.isAlive, false);
+    assert.equal(victim.deathInfo?.cause, 'WOLF');
+
+    // Chuyển sang PHA 7: DAY_DISCUSSION (60s)
+    await gameLoop.transition(room.id, 'DAY_DISCUSSION');
+    const p7 = (await redis.getRoom(room.id))!;
+    assert.equal(p7.phase, 'DAY_DISCUSSION');
+
+    // Chuyển sang PHA 8: DAY_VOTING (20s)
+    await gameLoop.transition(room.id, 'DAY_VOTING');
+    const p8 = (await redis.getRoom(room.id))!;
+    assert.equal(p8.phase, 'DAY_VOTING');
+
+    // 2 người sống (u1 Bảo Vệ, u3 Tiên Tri) bỏ phiếu treo cổ u2 (Sói)
+    p8.day.votes = {
+      u1: 'u2',
+      u3: 'u2',
+      u2: 'u1',
+    };
+    await redis.setRoom(p8);
+
+    // Chuyển sang PHA 9: DAY_EXECUTION (8s) -> Xử tử Sói u2
+    await gameLoop.transition(room.id, 'DAY_EXECUTION');
+    const p9 = (await redis.getRoom(room.id))!;
+    assert.equal(p9.phase, 'DAY_EXECUTION');
+    assert.equal(p9.day.accusedId, 'u2');
+    const executedWolf = p9.players.find((p) => p.id === 'u2')!;
+    assert.equal(executedWolf.isAlive, false);
+    assert.equal(executedWolf.deathInfo?.cause, 'EXECUTION');
+
+    // Chuyển sang PHA 10: CHECK_WIN_CONDITION -> Vì tất cả sói đã chết, phe DÂN LÀNG THẮNG!
+    await gameLoop.transition(room.id, 'CHECK_WIN_CONDITION');
+    const p10 = (await redis.getRoom(room.id))!;
+    assert.equal(p10.phase, 'GAME_OVER');
+    assert.equal(p10.winner, 'VILLAGE');
+  });
 });

@@ -121,17 +121,24 @@ export type SeerAppearance = z.infer<typeof SeerAppearance>;
 export const Phase = z.enum([
   'LOBBY',
   'ASSIGN_ROLES',
+  'READING_CARDS',
   'NIGHT_START',
+  'NIGHT_FALL',
   'CUPID_TURN',
   'LOVERS_TURN',
   'BODYGUARD_TURN',
+  'NIGHT_BODYGUARD',
   'WEREWOLF_TURN',
+  'NIGHT_WEREWOLF',
   'WITCH_TURN',
   'SEER_TURN',
+  'NIGHT_SEER',
   'NIGHT_RESOLVE',
   'DAY_ANNOUNCEMENT',
+  'DAY_ANNOUNCE',
   'DEATH_TRIGGERS',
   'CHECK_WIN',
+  'CHECK_WIN_CONDITION',
   'DAY_DISCUSSION',
   'DAY_VOTING',
   'DAY_REVOTE',
@@ -186,21 +193,25 @@ export const RoomSettings = z.object({
   hideVoteTargetsUntilResolved: z.boolean().default(false),
   durations: z.object({
     assignRoles: z.number().int().default(8),
+    readingCards: z.number().int().default(30),
     nightStart: z.number().int().default(3),
+    nightFall: z.number().int().default(3),
     cupid: z.number().int().default(20),
     lovers: z.number().int().default(8),
     bodyguard: z.number().int().default(15),
-    werewolf: z.number().int().default(30),
+    werewolf: z.number().int().default(20),
     witch: z.number().int().default(20),
     seer: z.number().int().default(15),
-    announcement: z.number().int().default(6),
+    nightResolve: z.number().int().default(2),
+    announcement: z.number().int().default(7),
+    dayAnnounce: z.number().int().default(7),
     deathTriggers: z.number().int().default(20),
-    discussion: z.number().int().min(15).max(600).default(120),
-    voting: z.number().int().default(30),
+    discussion: z.number().int().min(15).max(600).default(60),
+    voting: z.number().int().default(20),
     revote: z.number().int().default(20),
     defense: z.number().int().default(30),
     judgment: z.number().int().default(15),
-    execution: z.number().int().default(6),
+    execution: z.number().int().default(8),
     reconnectGrace: z.number().int().default(60),
   }).default({}),
 });
@@ -364,6 +375,7 @@ export const ClientRoomView = z
       })
       .strict()
       .optional(),
+    eliminatedTonight: z.array(z.string()).optional(),
     winner: Team.nullable().optional(),
   })
   .strict();
@@ -410,6 +422,8 @@ export interface S2CEvents {
   'role:assigned': (p: ServerPacket<{ role: Role; team: Team; teammates?: { id: string; nickname: string }[] }>) => void;
   'lovers:paired': (p: ServerPacket<{ partnerId: string; partnerNickname: string; partnerRole: Role }>) => void;
   'action:request': (p: ServerPacket<ActionRequest>) => void;
+  'YOUR_TURN_ACTION': (p: ServerPacket<ActionRequest>) => void;
+  'NIGHT_FALL': (p: ServerPacket<{ round: number; duration: number }>) => void;
   'action:accepted': (p: ServerPacket<{ kind: ActionKind }>) => void;
   'wolf:votesUpdated': (p: ServerPacket<{ votes: Record<string, string> }>) => void;
   'seer:result': (p: ServerPacket<{ targetId: string; result: SeerAppearance | Role }>) => void;

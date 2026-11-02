@@ -47,12 +47,21 @@ export interface GameScene3DProps {
   condemnedPlayerId: string | null;
   condemnedRole: Role | string;
   onExecuteSlump?: (playerId: string) => void;
-  onExecutionComplete?: (playerId: string) => void;
+  onExecutionComplete?: () => void;
   /** Diegetic status plaque strings */
   diegeticPhaseTitle: string;
   diegeticTimerText: string;
   diegeticSubtitle: string;
   isPeacefulTie?: boolean;
+  /** FSM Game Loop Director Props */
+  isSleeping?: boolean;
+  moodLighting?: 'pitch_dark' | 'bodyguard_cyan' | 'wolf_crimson' | 'seer_gold' | 'execution_red' | 'day_pub';
+  isWolfAwake?: boolean;
+  wolfTeammateIds?: Set<string>;
+  wolfTargetId?: string | null;
+  seerPeekResult?: { targetId: string; isWerewolf: boolean } | null;
+  speakingPlayerIds?: Set<string>;
+  eliminatedTonight?: Set<string>;
   /** Interaction callback when player clicks an opponent seat or vote badge */
   onCastVote: (targetId: string) => void;
 }
@@ -64,7 +73,8 @@ export interface GameScene3DProps {
 const DualPerspectiveCameraRig: React.FC<{
   perspective: CameraPerspective;
   executionFocusPos: [number, number, number] | null;
-}> = ({ perspective, executionFocusPos }) => {
+  isSleeping?: boolean;
+}> = ({ perspective, executionFocusPos, isSleeping = false }) => {
   const { camera } = useThree();
   const currentLookAtRef = useRef(new THREE.Vector3(0, 0.85, 0));
   const smoothedPointerRef = useRef(new THREE.Vector2(0, 0));
@@ -89,7 +99,8 @@ const DualPerspectiveCameraRig: React.FC<{
       rawPointerRef.current,
       perspective,
       delta,
-      executionFocusPos
+      executionFocusPos,
+      isSleeping
     );
   });
 
@@ -103,12 +114,14 @@ const DualPerspectiveCameraRig: React.FC<{
 const PubNoirLightingRig: React.FC<{
   isNight: boolean;
   isExecutionPhase: boolean;
-}> = ({ isNight, isExecutionPhase }) => {
+  moodLighting?: 'pitch_dark' | 'bodyguard_cyan' | 'wolf_crimson' | 'seer_gold' | 'execution_red' | 'day_pub';
+}> = ({ isNight, isExecutionPhase, moodLighting = 'day_pub' }) => {
   const mainSpotRef = useRef<THREE.SpotLight>(null);
   const spotTargetRef = useRef<THREE.Object3D>(null);
   const cyanRimRef = useRef<THREE.PointLight>(null);
   const redRimRef = useRef<THREE.PointLight>(null);
   const lampConeMatRef = useRef<THREE.MeshBasicMaterial>(null);
+  const ambientRef = useRef<THREE.AmbientLight>(null);
 
   useEffect(() => {
     if (mainSpotRef.current && spotTargetRef.current) {
@@ -121,11 +134,61 @@ const PubNoirLightingRig: React.FC<{
     const alpha = 1 - Math.exp(-4.2 * Math.min(delta, 0.1));
     const flicker = 1 + Math.sin(state.clock.elapsedTime * 11) * 0.012;
 
-    // During EXECUTION_PHASE, entire room dims sharply so blood-red gallows spotlight dominates
-    const targetSpotIntensity = isExecutionPhase ? 2.2 : isNight ? 9.5 : 22.0 * flicker;
-    const targetCyanIntensity = isExecutionPhase ? 0.8 : isNight ? 5.5 : 4.2;
-    const targetRedIntensity = isExecutionPhase ? 1.4 : isNight ? 3.5 : 4.6;
-    const targetConeOpacity = isExecutionPhase ? 0.012 : isNight ? 0.028 : 0.048;
+    let targetSpotIntensity = 22.0 * flicker;
+    let targetSpotColor = '#ffe0b2';
+    let targetCyanIntensity = 4.2;
+    let targetRedIntensity = 4.6;
+    let targetConeOpacity = 0.048;
+    let targetAmbient = 0.05;
+
+    if (moodLighting === 'pitch_dark') {
+      // PHA 1: CẢ LÀNG ĐI NGỦ (ambientLight = 0.02, room pitch black)
+      targetSpotIntensity = 0.3;
+      targetSpotColor = '#1e1b4b';
+      targetCyanIntensity = 0.2;
+      targetRedIntensity = 0.2;
+      targetConeOpacity = 0.005;
+      targetAmbient = 0.02;
+    } else if (moodLighting === 'bodyguard_cyan') {
+      // PHA 2: BẢO VỆ THỨC DẬY - emerald / cyan ambient & rim glow
+      targetSpotIntensity = 4.5;
+      targetSpotColor = '#06b6d4';
+      targetCyanIntensity = 8.5;
+      targetRedIntensity = 0.8;
+      targetConeOpacity = 0.025;
+      targetAmbient = 0.035;
+    } else if (moodLighting === 'wolf_crimson') {
+      // PHA 3: MA SÓI THỨC DẬY - blood-red eerie ambient & wine rim
+      targetSpotIntensity = 5.5;
+      targetSpotColor = '#e11d48';
+      targetCyanIntensity = 0.6;
+      targetRedIntensity = 9.5;
+      targetConeOpacity = 0.03;
+      targetAmbient = 0.04;
+    } else if (moodLighting === 'seer_gold') {
+      // PHA 4: TIÊN TRI THỨC DẬY - golden mystic lighting
+      targetSpotIntensity = 8.5;
+      targetSpotColor = '#f59e0b';
+      targetCyanIntensity = 2.5;
+      targetRedIntensity = 2.0;
+      targetConeOpacity = 0.035;
+      targetAmbient = 0.045;
+    } else if (isExecutionPhase || moodLighting === 'execution_red') {
+      // PHA 9: XỬ TỬ TREO CỔ - room dims sharply so gallows spotlight dominates
+      targetSpotIntensity = 2.2;
+      targetSpotColor = '#7f1d1d';
+      targetCyanIntensity = 0.8;
+      targetRedIntensity = 1.4;
+      targetConeOpacity = 0.012;
+      targetAmbient = 0.02;
+    } else if (isNight) {
+      targetSpotIntensity = 9.5;
+      targetSpotColor = '#c7d2fe';
+      targetCyanIntensity = 5.5;
+      targetRedIntensity = 3.5;
+      targetConeOpacity = 0.028;
+      targetAmbient = 0.03;
+    }
 
     if (mainSpotRef.current) {
       mainSpotRef.current.intensity = THREE.MathUtils.lerp(
@@ -133,10 +196,7 @@ const PubNoirLightingRig: React.FC<{
         targetSpotIntensity,
         alpha
       );
-      mainSpotRef.current.color.lerp(
-        new THREE.Color(isNight && !isExecutionPhase ? '#c7d2fe' : '#ffe0b2'),
-        alpha
-      );
+      mainSpotRef.current.color.lerp(new THREE.Color(targetSpotColor), alpha);
     }
     if (cyanRimRef.current) {
       cyanRimRef.current.intensity = THREE.MathUtils.lerp(
@@ -159,12 +219,19 @@ const PubNoirLightingRig: React.FC<{
         alpha
       );
     }
+    if (ambientRef.current) {
+      ambientRef.current.intensity = THREE.MathUtils.lerp(
+        ambientRef.current.intensity,
+        targetAmbient,
+        alpha
+      );
+    }
   });
 
   return (
     <group>
-      {/* Ultra-low Dark Noir Ambient Base */}
-      <ambientLight color="#050508" intensity={isExecutionPhase ? 0.02 : 0.05} />
+      {/* Dynamic Dark Noir Ambient Base */}
+      <ambientLight ref={ambientRef} color="#050508" intensity={0.05} />
 
       {/* Center Overhead Narrow-Cone Spotlight at [0, 4.5, 0] -> Table Center */}
       <object3D ref={spotTargetRef} position={[0, 0.8, 0]} />
@@ -635,6 +702,14 @@ export const GameScene3D: React.FC<GameScene3DProps> = ({
   diegeticTimerText,
   diegeticSubtitle,
   isPeacefulTie = false,
+  isSleeping = false,
+  moodLighting = 'day_pub',
+  isWolfAwake = false,
+  wolfTeammateIds,
+  wolfTargetId = null,
+  seerPeekResult = null,
+  speakingPlayerIds = new Set(),
+  eliminatedTonight = new Set(),
   onCastVote,
 }) => {
   const seats: ComputedSeat[] = useMemo(
@@ -696,10 +771,15 @@ export const GameScene3D: React.FC<GameScene3DProps> = ({
         <DualPerspectiveCameraRig
           perspective={perspective}
           executionFocusPos={isExecutionPhase && condemnedSeat ? condemnedSeat.position : null}
+          isSleeping={isSleeping}
         />
 
         {/* 2. Dark Noir Pub Lighting Rig */}
-        <PubNoirLightingRig isNight={isNight} isExecutionPhase={isExecutionPhase} />
+        <PubNoirLightingRig
+          isNight={isNight}
+          isExecutionPhase={isExecutionPhase}
+          moodLighting={moodLighting}
+        />
 
         {/* Subtle Floating Dust Motes Under the Overhead Pub Lamp */}
         <Sparkles
@@ -737,6 +817,13 @@ export const GameScene3D: React.FC<GameScene3DProps> = ({
             isCondemned={isExecutionPhase && condemnedPlayerId === seat.player.id}
             isLeadingVote={maxVotes > 0 && seat.voteCount === maxVotes}
             hasDealtCards={hasDealtCards && !(isExecutionPhase && condemnedPlayerId === seat.player.id)}
+            isSleeping={isSleeping}
+            isWolfAwake={Boolean(isWolfAwake && (wolfTeammateIds ? wolfTeammateIds.has(seat.player.id) : seat.player.revealedRole === 'WEREWOLF'))}
+            isWolfTarget={Boolean(wolfTargetId === seat.player.id)}
+            seerPeekResult={seerPeekResult}
+            isSpeaking={Boolean(speakingPlayerIds?.has(seat.player.id))}
+            isKilledTonight={Boolean(eliminatedTonight?.has(seat.player.id))}
+            moodLighting={moodLighting}
             onSelectSeat={(targetId) => {
               if (isCardInspecting) {
                 onToggleCardInspect(false);

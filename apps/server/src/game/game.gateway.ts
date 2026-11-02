@@ -217,7 +217,7 @@ export class GameGateway {
     if (!parsed.success) return { ok: false, error: { code: 'INVALID_PAYLOAD', message: 'Dữ liệu sai' } };
 
     const room = await this.getRoomOrThrow(socket.data.roomId);
-    if (!room || room.phase !== 'BODYGUARD_TURN') {
+    if (!room || (room.phase !== 'BODYGUARD_TURN' && room.phase !== 'NIGHT_BODYGUARD')) {
       return { ok: false, error: { code: 'NOT_ALLOWED', message: 'Hành động không hợp lệ' } };
     }
 
@@ -244,7 +244,7 @@ export class GameGateway {
     if (!parsed.success) return { ok: false, error: { code: 'INVALID_PAYLOAD', message: 'Dữ liệu sai' } };
 
     const room = await this.getRoomOrThrow(socket.data.roomId);
-    if (!room || room.phase !== 'WEREWOLF_TURN') {
+    if (!room || (room.phase !== 'WEREWOLF_TURN' && room.phase !== 'NIGHT_WEREWOLF')) {
       return { ok: false, error: { code: 'NOT_ALLOWED', message: 'Hành động không hợp lệ' } };
     }
 
@@ -257,12 +257,17 @@ export class GameGateway {
     room.night.wolfVotes[player.id] = parsed.data.targetId;
     await this.redis.setRoom(room);
 
-    // Broadcast phiếu cho bầy sói
-    this.io.to(`room:${room.id}:wolves`).emit('wolf:votesUpdated', {
+    // Broadcast phiếu cho bầy sói (kênh wolves và từng socket cá nhân bầy sói)
+    const wolfVotePayload = {
       v: room.stateVersion,
       ts: Date.now(),
       data: { votes: room.night.wolfVotes },
-    });
+    };
+    this.io.to(`room:${room.id}:wolves`).emit('wolf:votesUpdated', wolfVotePayload);
+    const aliveWolves = room.players.filter((p) => p.team === 'WEREWOLF' && p.isAlive);
+    for (const w of aliveWolves) {
+      this.io.to(`user:${w.id}`).emit('wolf:votesUpdated', wolfVotePayload);
+    }
 
     return { ok: true };
   }
@@ -311,7 +316,7 @@ export class GameGateway {
     if (!parsed.success) return { ok: false, error: { code: 'INVALID_PAYLOAD', message: 'Dữ liệu sai' } };
 
     const room = await this.getRoomOrThrow(socket.data.roomId);
-    if (!room || room.phase !== 'SEER_TURN') {
+    if (!room || (room.phase !== 'SEER_TURN' && room.phase !== 'NIGHT_SEER')) {
       return { ok: false, error: { code: 'NOT_ALLOWED', message: 'Hành động không hợp lệ' } };
     }
 
@@ -325,10 +330,11 @@ export class GameGateway {
 
     // Tính toán kết quả soi
     let inspectResult: SeerAppearance | Role;
+    const isWerewolf = target.team === 'WEREWOLF';
     if (room.settings.seerRevealMode === 'EXACT_ROLE') {
       inspectResult = target.role || 'VILLAGER';
     } else {
-      inspectResult = target.team === 'WEREWOLF' ? 'WEREWOLF' : 'NOT_WEREWOLF';
+      inspectResult = isWerewolf ? 'WEREWOLF' : 'NOT_WEREWOLF';
     }
 
     // Lưu vào lịch sử soi của Tiên Tri
@@ -343,7 +349,7 @@ export class GameGateway {
     socket.emit('seer:result', {
       v: room.stateVersion,
       ts: Date.now(),
-      data: { targetId: target.id, result: inspectResult },
+      data: { targetId: target.id, isWerewolf, result: inspectResult },
     });
 
     return { ok: true, data: { result: inspectResult } };

@@ -137,7 +137,8 @@ export function interpolateCameraRig(
   rawPointer: { x: number; y: number },
   perspective: CameraPerspective,
   delta: number,
-  executionFocusTarget?: [number, number, number] | null
+  executionFocusTarget?: [number, number, number] | null,
+  isSleeping: boolean = false
 ): void {
   const dt = Math.min(Math.max(delta, 0.001), 0.1);
   const preset = CAMERA_PRESETS[perspective];
@@ -161,6 +162,17 @@ export function interpolateCameraRig(
     preset.lookAt[1] + smoothedPointer.y * preset.parallaxLook.y,
     preset.lookAt[2]
   );
+
+  // Sleeping posture (PHA 1 & dormant night turns): head-down tilt toward table & tray
+  if (isSleeping && perspective === '1ST') {
+    _desiredCamPos.y = 1.18;
+    _desiredCamPos.z = 2.22;
+    _desiredLookAt.set(
+      smoothedPointer.x * 0.12,
+      0.46 + smoothedPointer.y * 0.06,
+      1.46
+    );
+  }
 
   // Subtle cinematic glance toward condemned seat during Hanging Execution
   if (executionFocusTarget) {

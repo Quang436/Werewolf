@@ -102,7 +102,7 @@ export class RoomProjector {
     if (isAliveWolf) {
       wolfPack = {
         teammates: room.players.filter((p) => p.isAlive && p.team === 'WEREWOLF').map((p) => p.id),
-        votes: room.phase === 'WEREWOLF_TURN' ? room.night.wolfVotes : {},
+        votes: room.phase === 'WEREWOLF_TURN' || room.phase === 'NIGHT_WEREWOLF' ? room.night.wolfVotes : {},
       };
     }
 
@@ -157,6 +157,14 @@ export class RoomProjector {
       };
     }
 
+    // Lấy danh sách nạn nhân bị hạ sát đêm qua (để client 3D hiển thị spotlight và lật thẻ)
+    const latestNightResult = room.history
+      .filter((h): h is Extract<typeof room.history[number], { type: 'NIGHT_RESULT' }> => h.type === 'NIGHT_RESULT' && h.round === room.round)
+      .pop();
+    const eliminatedTonight = latestNightResult && latestNightResult.deaths.length > 0
+      ? latestNightResult.deaths.map((d) => d.playerId)
+      : undefined;
+
     // 7. Tổng hợp gói tin View hoàn chỉnh
     const rawView = {
       id: room.id,
@@ -179,6 +187,7 @@ export class RoomProjector {
       ...(pendingAction ? { pendingAction } : {}),
       ...(wolfPack ? { wolfPack } : {}),
       ...(dayView ? { day: dayView } : {}),
+      ...(eliminatedTonight ? { eliminatedTonight } : {}),
       ...(isGameOver ? { winner: room.winner } : {}),
     };
 
@@ -206,7 +215,8 @@ export class RoomProjector {
         break;
       }
 
-      case 'BODYGUARD_TURN': {
+      case 'BODYGUARD_TURN':
+      case 'NIGHT_BODYGUARD': {
         if (viewer.role === 'BODYGUARD') {
           // Lọc những ai không được chọn (ví dụ người vừa bảo vệ đêm trước)
           const validCandidates = aliveCandidates.filter((id) => {
@@ -223,7 +233,8 @@ export class RoomProjector {
         break;
       }
 
-      case 'WEREWOLF_TURN': {
+      case 'WEREWOLF_TURN':
+      case 'NIGHT_WEREWOLF': {
         if (viewer.team === 'WEREWOLF') {
           // Sói không được cắn đồng loại
           const nonWolfCandidates = aliveCandidates.filter((id) => {
@@ -271,7 +282,8 @@ export class RoomProjector {
         break;
       }
 
-      case 'SEER_TURN': {
+      case 'SEER_TURN':
+      case 'NIGHT_SEER': {
         if (viewer.role === 'SEER') {
           return {
             kind: 'SEER_INSPECT',

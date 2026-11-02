@@ -15,6 +15,7 @@ import {
   getRoleInfo,
   shuffleArray,
 } from '../constants/roles-data';
+import { useGameLoopDirector } from '../hooks/useGameLoopDirector';
 
 export interface WerewolfGameAppProps {
   store: GameStateManager;
@@ -33,7 +34,18 @@ const SAMPLE_NOIR_PLAYERS: PublicPlayerView[] = [
   { id: 'p8', seat: 8, nickname: 'Bạn', avatarUrl: null, isHost: false, isAlive: true, ready: true, connection: 'ONLINE' },
 ];
 
-type LocalScenePhase = 'DEALING_CARDS' | 'DAY_VOTING' | 'EXECUTION_PHASE' | 'NIGHT_WEREWOLVES';
+type LocalScenePhase =
+  | 'DEALING_CARDS'
+  | 'NIGHT_FALL'
+  | 'NIGHT_BODYGUARD'
+  | 'NIGHT_WEREWOLF'
+  | 'NIGHT_SEER'
+  | 'DAY_ANNOUNCE'
+  | 'DAY_DISCUSSION'
+  | 'DAY_VOTING'
+  | 'DAY_EXECUTION'
+  | 'EXECUTION_PHASE'
+  | 'NIGHT_WEREWOLVES';
 
 export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
   store,
@@ -245,7 +257,20 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
 
   const isNight = isNightPhase(effectivePhase);
   const isExecutionPhase = effectivePhase === 'EXECUTION_PHASE' || effectivePhase === 'DAY_EXECUTION';
-  const canVote = !isNight && !isExecutionPhase;
+
+  const director = useGameLoopDirector({
+    phase: effectivePhase,
+    localPlayerId: localPlayer?.id,
+    localRole: myCurrentRole,
+    isAlive: localPlayer ? localPlayer.isAlive : true,
+    players: activePlayers,
+    eliminatedTonightFromServer: state.room?.eliminatedTonight,
+    wolfVotesFromServer: state.room?.wolfPack?.votes,
+    isMicActive: isMicOn,
+    onEmitAction,
+  });
+
+  const canVote = (!isNight && !isExecutionPhase) || director.canInteractChair;
 
   const effectiveVoteTally: Record<string, number> = useMemo(() => {
     const serverTally = state.room?.day?.tally as Record<string, number> | undefined;
@@ -254,6 +279,21 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
     }
     return localVoteTally;
   }, [state.room?.day?.tally, localVoteTally]);
+
+  const wolfTeammateIds = useMemo(() => {
+    const set = new Set<string>();
+    if (state.room?.wolfPack?.teammates) {
+      for (const t of state.room.wolfPack.teammates) {
+        set.add(typeof t === 'string' ? t : (t as any).id);
+      }
+    }
+    for (const [pid, role] of Object.entries(seatRoles)) {
+      if (role === 'WEREWOLF' || role === 'BIG_BAD_WOLF' || role === 'WOLF_CUB' || role === 'LONE_WOLF') {
+        set.add(pid);
+      }
+    }
+    return set;
+  }, [state.room?.wolfPack?.teammates, seatRoles]);
 
   // Player clicks an opponent seat or an engraved token in VotingTokenTray
   const handleCastVote = useCallback(
@@ -394,12 +434,20 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
     if (isExecutionPhase) return 'XỬ TỬ TREO CỔ';
     if (isPeacefulTie) return 'NGÀY BÌNH YÊN';
     if (effectivePhase === 'DEALING_CARDS') return 'PHÁT BÀI ĐỊNH MỆNH';
+    if (effectivePhase === 'NIGHT_FALL') return 'CẢ LÀNG ĐI NGỦ';
+    if (effectivePhase === 'NIGHT_BODYGUARD' || effectivePhase === 'BODYGUARD_TURN') return 'BẢO VỆ THỨC DẬY';
+    if (effectivePhase === 'NIGHT_WEREWOLF' || effectivePhase === 'WEREWOLF_TURN' || effectivePhase === 'NIGHT_WEREWOLVES') return 'MA SÓI THỨC DẬY';
+    if (effectivePhase === 'NIGHT_SEER' || effectivePhase === 'SEER_TURN') return 'TIÊN TRI THỨC DẬY';
+    if (effectivePhase === 'DAY_ANNOUNCE' || effectivePhase === 'DAY_ANNOUNCEMENT') return 'TRỜI SÁNG & CÔNG BỐ';
+    if (effectivePhase === 'DAY_DISCUSSION') return 'THẢO LUẬN BAN NGÀY';
+    if (effectivePhase === 'DAY_VOTING') return 'BỎ PHIẾU TREO CỔ';
     if (isNight) return 'ĐÊM BÓNG TỐI';
     return 'HỘI ĐỒNG BỎ PHIẾU';
   }, [effectivePhase, isExecutionPhase, isNight, isPeacefulTie]);
 
   const diegeticSubtitle = useMemo(() => {
     if (verdictBanner) return verdictBanner;
+    if (director.interactionPrompt) return director.interactionPrompt;
     if (effectivePhase === 'DEALING_CARDS') return 'Lật xem vai trò • Sau đó bài nằm gọn vào rãnh khay gỗ';
     if (isNight) return 'Cả làng gục đầu say ngủ • Sói thức giấc';
     if (myVotedTargetId && myVotedTargetId !== 'SKIP') {
@@ -408,8 +456,8 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
         return `Đã chỉ định phiếu cho #${String(target.seat).padStart(2, '0')} ${target.nickname}`;
       }
     }
-    return 'Click ghế / tên đối thủ để vote • Click khay gỗ để xem bài';
-  }, [activePlayers, effectivePhase, isNight, myVotedTargetId, verdictBanner]);
+    return 'Click ghế / tên đối thủ để tương tác • Click khay gỗ để xem bài';
+  }, [activePlayers, director.interactionPrompt, effectivePhase, isNight, myVotedTargetId, verdictBanner]);
 
   const condemnedRole: Role = useMemo(() => {
     if (!condemnedPlayerId) return 'WEREWOLF';
@@ -457,7 +505,20 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
         diegeticTimerText={timerStr}
         diegeticSubtitle={diegeticSubtitle}
         isPeacefulTie={isPeacefulTie}
-        onCastVote={handleCastVote}
+        isSleeping={director.isSleeping}
+        moodLighting={director.moodLighting}
+        isWolfAwake={director.isWolfAwake}
+        wolfTeammateIds={wolfTeammateIds}
+        wolfTargetId={director.wolfTargetId}
+        seerPeekResult={director.seerPeekResult}
+        speakingPlayerIds={director.speakingPlayerIds}
+        eliminatedTonight={director.eliminatedTonight}
+        onCastVote={(targetId) => {
+          if (director.canInteractChair) {
+            director.handleChairClick(targetId);
+          }
+          handleCastVote(targetId);
+        }}
       />
 
       {/* ====================================================================
@@ -527,12 +588,43 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
 
       {/* Top-Right: Dual Perspective (1ST / 2ND [V]) & Subtle Noir Table Triggers */}
       <div className="absolute top-3 right-3 z-20 flex items-center gap-1.5 pointer-events-auto flex-wrap justify-end">
-        {/* Phase / Mechanic Micro-Actions */}
-        <div className="flex items-center gap-1 bg-black/50 backdrop-blur-sm px-1.5 py-1 rounded-full border border-white/10">
+        {/* Phase / Mechanic Micro-Actions & 10-Phase Director Switcher */}
+        <div className="flex items-center gap-1 bg-black/50 backdrop-blur-sm px-1.5 py-1 rounded-full border border-white/10 flex-wrap">
+          <select
+            value={effectivePhase}
+            onChange={(e) => {
+              const val = e.target.value as LocalScenePhase;
+              setLocalPhase(val);
+              if (val === 'DEALING_CARDS') {
+                triggerDealCards(false);
+              } else if (val === 'NIGHT_FALL') {
+                werewolfAudio.playBell();
+              } else if (val === 'NIGHT_WEREWOLF') {
+                werewolfAudio.playWolfHowl();
+              } else if (val === 'DAY_ANNOUNCE') {
+                werewolfAudio.playBell();
+              } else if (val === 'EXECUTION_PHASE') {
+                handleFinalizeVoteVerdict();
+              }
+            }}
+            className="bg-black/70 text-amber-300 font-mono text-[10px] px-2 py-0.5 rounded border border-white/10 outline-none cursor-pointer"
+            title="Chuyển pha thử nghiệm 10 pha chuẩn FSM"
+          >
+            <option value="DEALING_CARDS">1. Phát Bài (ASSIGN)</option>
+            <option value="NIGHT_FALL">2. Cả Làng Ngủ (NIGHT_FALL)</option>
+            <option value="NIGHT_BODYGUARD">3. Bảo Vệ Thức Dậy</option>
+            <option value="NIGHT_WEREWOLF">4. Ma Sói Thức Dậy</option>
+            <option value="NIGHT_SEER">5. Tiên Tri Thức Dậy</option>
+            <option value="DAY_ANNOUNCE">6. Trời Sáng & Công Bố</option>
+            <option value="DAY_DISCUSSION">7. Thảo Luận 60s</option>
+            <option value="DAY_VOTING">8. Bỏ Phiếu Treo Cổ</option>
+            <option value="EXECUTION_PHASE">9. Xử Tử Treo Cổ</option>
+          </select>
+
           <button
             type="button"
             onClick={() => triggerDealCards(true)}
-            className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold text-amber-300 hover:bg-amber-500/20 transition cursor-pointer"
+            className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold text-amber-300 hover:bg-amber-500/20 transition cursor-pointer"
             title="Phát & lật bài Tarot đầu ván (DEALING_CARDS)"
           >
             Phát Bài
@@ -542,7 +634,7 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
             type="button"
             onClick={() => handleFinalizeVoteVerdict()}
             disabled={isExecutionPhase}
-            className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold text-rose-300 hover:bg-rose-500/20 disabled:opacity-40 transition cursor-pointer"
+            className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold text-rose-300 hover:bg-rose-500/20 disabled:opacity-40 transition cursor-pointer"
             title="Chốt kết quả bỏ phiếu: Hòa -> Ngày bình yên | Cao nhất duy nhất -> Treo cổ"
           >
             Chốt Phiếu
@@ -552,7 +644,7 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
             type="button"
             onClick={handleSimulateTieVote}
             disabled={isExecutionPhase}
-            className="hidden sm:inline-block px-2 py-0.5 rounded-full text-[10px] font-mono text-emerald-300/90 hover:bg-emerald-500/20 disabled:opacity-40 transition cursor-pointer"
+            className="hidden sm:inline-block px-1.5 py-0.5 rounded-full text-[10px] font-mono text-emerald-300/90 hover:bg-emerald-500/20 disabled:opacity-40 transition cursor-pointer"
             title="Thử trường hợp Hòa phiếu cao nhất -> Hòa phiếu - Ngày bình yên"
           >
             Hòa Phiếu
@@ -565,7 +657,7 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
                 setLocalPhase('DAY_VOTING');
                 werewolfAudio.playBell();
               } else {
-                setLocalPhase('NIGHT_WEREWOLVES');
+                setLocalPhase('NIGHT_FALL');
                 werewolfAudio.playWolfHowl();
               }
             }}

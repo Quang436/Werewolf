@@ -6,9 +6,10 @@
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "baseUrl": ".",
     "paths": {
-      "@werewolf/shared": ["packages/shared/src/index.ts"]
+      "@werewolf/shared": ["./packages/shared/src/index.ts"],
+      "*": ["./*"]
     }
-  }
+  },
+  "exclude": ["apps/web", "node_modules"]
 }

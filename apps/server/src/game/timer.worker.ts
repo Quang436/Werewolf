@@ -19,6 +19,7 @@ import {
 } from '@werewolf/shared';
 import { GameLoopService } from './game-loop.service';
 import { RedisStoreAdapter } from './game-room.manager';
+import { NightQueueManager } from './night-queue.manager';
 
 export interface RedisZSetStore extends RedisStoreAdapter {
   zadd(key: string, score: number, member: string): Promise<void>;
@@ -210,35 +211,17 @@ export class TimerWorker {
         return 'NIGHT_FALL';
 
       case 'NIGHT_FALL':
-        if (room.round === 1 && room.settings.roleConfig['CUPID'] && room.settings.roleConfig['CUPID'] > 0) {
-          return 'CUPID_TURN';
+      case 'NIGHT_START': {
+        const queue = NightQueueManager.buildNightQueue(room.round, room.settings.roleConfig || {}, room.players);
+        if (queue.length > 0) {
+          return queue[0].phase;
         }
         return 'NIGHT_BODYGUARD';
+      }
 
-      case 'NIGHT_START':
-        // Nếu đêm 1 và có Cupid -> CUPID_TURN; ngược lại -> BODYGUARD_TURN
-        if (room.round === 1 && room.settings.roleConfig['CUPID'] && room.settings.roleConfig['CUPID'] > 0) {
-          return 'CUPID_TURN';
-        }
-        return 'BODYGUARD_TURN';
-
-      case 'CUPID_TURN':
-        return 'LOVERS_TURN';
-
-      case 'LOVERS_TURN':
-        return 'NIGHT_BODYGUARD';
-
-      case 'NIGHT_BODYGUARD':
-        return 'NIGHT_WEREWOLF';
-
+      // Classic 4-turn legacy support
       case 'BODYGUARD_TURN':
         return 'WEREWOLF_TURN';
-
-      case 'NIGHT_WEREWOLF':
-        if (room.settings.roleConfig['WITCH'] && room.settings.roleConfig['WITCH'] > 0) {
-          return 'WITCH_TURN';
-        }
-        return 'NIGHT_SEER';
 
       case 'WEREWOLF_TURN':
         if (room.settings.roleConfig['WITCH'] && room.settings.roleConfig['WITCH'] > 0) {
@@ -247,11 +230,40 @@ export class TimerWorker {
         return 'SEER_TURN';
 
       case 'WITCH_TURN':
-        return 'NIGHT_SEER';
+        return 'SEER_TURN';
 
-      case 'NIGHT_SEER':
       case 'SEER_TURN':
         return 'NIGHT_RESOLVE';
+
+      // Các pha đêm trong Dynamic Night Queue
+      case 'DOPPELGANGER_TURN':
+      case 'CUPID_TURN':
+      case 'LOVERS_TURN':
+      case 'VIRGINIA_WOOLF_TURN':
+      case 'HOODLUM_TURN':
+      case 'DIRE_WOLF_TURN':
+      case 'MASON_TURN':
+      case 'NIGHT_BODYGUARD':
+      case 'PRIEST_TURN':
+      case 'SPELLCASTER_TURN':
+      case 'OLD_HAG_TURN':
+      case 'NIGHT_WEREWOLF':
+      case 'NIGHT_SEER':
+      case 'SORCERESS_TURN':
+      case 'PI_TURN':
+      case 'CULT_LEADER_TURN':
+      case 'VAMPIRE_TURN':
+      case 'DRUNK_TURN': {
+        const queue = NightQueueManager.buildNightQueue(room.round, room.settings.roleConfig || {}, room.players);
+        const next = NightQueueManager.getNextNightPhase(room.phase, queue);
+        if (next === 'NIGHT_RESOLVE' && queue.length === 0) {
+          // Fallback nếu phòng chưa cấu hình vai trò
+          if (room.phase === 'NIGHT_BODYGUARD') return 'NIGHT_WEREWOLF';
+          if (room.phase === 'NIGHT_WEREWOLF') return 'NIGHT_SEER';
+          if (room.phase === 'NIGHT_SEER') return 'NIGHT_RESOLVE';
+        }
+        return next;
+      }
 
       case 'NIGHT_RESOLVE':
         return 'DAY_ANNOUNCE';

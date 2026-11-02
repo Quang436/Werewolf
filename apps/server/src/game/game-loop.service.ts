@@ -26,6 +26,7 @@ import {
 } from '@werewolf/shared';
 import { RedisStoreAdapter } from './game-room.manager';
 import { DatabaseService } from '../db/db.service';
+import { NightQueueManager } from './night-queue.manager';
 
 export interface Broadcaster {
   emitToRoom(roomId: string, event: string, payload: unknown): void;
@@ -201,13 +202,65 @@ export class GameLoopService {
         break;
       }
 
-      case 'CUPID_TURN':
-        room.phaseEndsAt = Date.now() + d.cupid * 1000;
+      case 'CUPID_TURN': {
+        const aliveCupid = room.players.find((p) => p.role === 'CUPID' && p.isAlive);
+        if (aliveCupid) {
+          room.phaseEndsAt = Date.now() + d.cupid * 1000;
+          this.broadcaster.emitToUser(aliveCupid.id, 'YOUR_TURN_ACTION', {
+            phase: to,
+            actionType: 'CUPID_LINK',
+            glowColor: '#ec4899',
+            candidates: room.players.filter((p) => p.isAlive).map((p) => ({ id: p.id, nickname: p.nickname, seat: p.seat })),
+            timeoutMs: d.cupid * 1000,
+          });
+        } else {
+          room.phaseEndsAt = Date.now() + NightQueueManager.getRandomFakeDelaySec() * 1000;
+        }
         break;
+      }
 
       case 'LOVERS_TURN':
-        room.phaseEndsAt = Date.now() + d.lovers * 1000;
+        room.phaseEndsAt = Date.now() + (d.lovers || 5) * 1000;
         break;
+
+      case 'DOPPELGANGER_TURN':
+      case 'VIRGINIA_WOOLF_TURN':
+      case 'HOODLUM_TURN':
+      case 'DIRE_WOLF_TURN':
+      case 'MASON_TURN':
+      case 'PRIEST_TURN':
+      case 'SPELLCASTER_TURN':
+      case 'OLD_HAG_TURN':
+      case 'SORCERESS_TURN':
+      case 'PI_TURN':
+      case 'CULT_LEADER_TURN':
+      case 'VAMPIRE_TURN':
+      case 'DRUNK_TURN': {
+        // Tìm vai trò tương ứng với pha
+        const step = [...NightQueueManager.FIRST_NIGHT_STEPS, ...NightQueueManager.RECURRING_STEPS].find(
+          (s) => s.phase === to
+        );
+        const alivePlayer = step ? room.players.find((p) => p.role === step.role && p.isAlive) : null;
+        if (alivePlayer && step) {
+          const duration = step.defaultDurationSec;
+          room.phaseEndsAt = Date.now() + duration * 1000;
+          const validTargets = room.players
+            .filter((p) => p.isAlive && p.id !== alivePlayer.id)
+            .map((p) => ({ id: p.id, nickname: p.nickname, seat: p.seat }));
+
+          this.broadcaster.emitToUser(alivePlayer.id, 'YOUR_TURN_ACTION', {
+            phase: to,
+            actionType: step.actionType,
+            glowColor: step.glowColor,
+            candidates: validTargets,
+            timeoutMs: duration * 1000,
+          });
+        } else {
+          // Fake delay 4-7s để đối phương không đoán được
+          room.phaseEndsAt = Date.now() + NightQueueManager.getRandomFakeDelaySec() * 1000;
+        }
+        break;
+      }
 
       case 'NIGHT_BODYGUARD':
       case 'BODYGUARD_TURN': {
@@ -221,12 +274,13 @@ export class GameLoopService {
           this.broadcaster.emitToUser(aliveBodyguard.id, 'YOUR_TURN_ACTION', {
             phase: to,
             actionType: 'BODYGUARD_PROTECT',
+            glowColor: '#10b981',
             candidates: validTargets,
             timeoutMs: d.bodyguard * 1000,
           });
         } else {
-          // Fake delay 6s nếu Bảo Vệ đã chết/không có để đối phương không đoán được
-          room.phaseEndsAt = Date.now() + 6000;
+          // Fake delay ngẫu nhiên 4-7s nếu Bảo Vệ đã chết/không có để đối phương không đoán được
+          room.phaseEndsAt = Date.now() + NightQueueManager.getRandomFakeDelaySec() * 1000;
         }
         break;
       }
@@ -239,25 +293,44 @@ export class GameLoopService {
           .filter((p) => p.isAlive && p.team !== 'WEREWOLF')
           .map((p) => ({ id: p.id, nickname: p.nickname, seat: p.seat }));
 
-        for (const wolf of aliveWolves) {
-          this.broadcaster.emitToUser(wolf.id, 'YOUR_TURN_ACTION', {
-            phase: to,
-            actionType: 'WOLF_VOTE',
-            candidates: validVictims,
-            timeoutMs: d.werewolf * 1000,
-            teammates: aliveWolves.map((w) => ({ id: w.id, nickname: w.nickname, seat: w.seat })),
-          });
+        if (aliveWolves.length > 0) {
+          for (const wolf of aliveWolves) {
+            this.broadcaster.emitToUser(wolf.id, 'YOUR_TURN_ACTION', {
+              phase: to,
+              actionType: 'WOLF_VOTE',
+              glowColor: '#ef4444',
+              candidates: validVictims,
+              timeoutMs: d.werewolf * 1000,
+              teammates: aliveWolves.map((w) => ({ id: w.id, nickname: w.nickname, seat: w.seat })),
+            });
+          }
+        } else {
+          room.phaseEndsAt = Date.now() + NightQueueManager.getRandomFakeDelaySec() * 1000;
         }
         break;
       }
 
-      case 'WITCH_TURN':
-        room.phaseEndsAt = Date.now() + d.witch * 1000;
+      case 'WITCH_TURN': {
+        const aliveWitch = room.players.find((p) => p.role === 'WITCH' && p.isAlive);
+        if (aliveWitch) {
+          room.phaseEndsAt = Date.now() + d.witch * 1000;
+          this.broadcaster.emitToUser(aliveWitch.id, 'YOUR_TURN_ACTION', {
+            phase: to,
+            actionType: 'WITCH_ACTION',
+            glowColor: '#a855f7',
+            candidates: room.players.filter((p) => p.isAlive).map((p) => ({ id: p.id, nickname: p.nickname, seat: p.seat })),
+            timeoutMs: d.witch * 1000,
+            victimId: room.night.wolfTarget || null,
+          });
+        } else {
+          room.phaseEndsAt = Date.now() + NightQueueManager.getRandomFakeDelaySec() * 1000;
+        }
         break;
+      }
 
       case 'NIGHT_SEER':
       case 'SEER_TURN': {
-        const aliveSeer = room.players.find((p) => p.role === 'SEER' && p.isAlive);
+        const aliveSeer = room.players.find((p) => (p.role === 'SEER' || p.role === 'AURA_SEER') && p.isAlive);
         if (aliveSeer) {
           room.phaseEndsAt = Date.now() + d.seer * 1000;
           const validTargets = room.players
@@ -267,12 +340,13 @@ export class GameLoopService {
           this.broadcaster.emitToUser(aliveSeer.id, 'YOUR_TURN_ACTION', {
             phase: to,
             actionType: 'SEER_INSPECT',
+            glowColor: '#eab308',
             candidates: validTargets,
             timeoutMs: d.seer * 1000,
           });
         } else {
-          // Fake delay 6s nếu Tiên Tri đã chết/không có
-          room.phaseEndsAt = Date.now() + 6000;
+          // Fake delay 4-7s nếu Tiên Tri đã chết/không có
+          room.phaseEndsAt = Date.now() + NightQueueManager.getRandomFakeDelaySec() * 1000;
         }
         break;
       }

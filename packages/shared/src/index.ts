@@ -3,11 +3,12 @@
  * Mọi payload Socket đều được validate bằng Zod ở cả 2 đầu.
  */
 import { z } from 'zod';
+export * from './types/roles';
 
 /* ============================== ENUMS ============================== */
 
 export const Role = z.enum([
-  // 1. Phe Dân Làng (21 vai trò)
+  // 1. Phe Dân Làng (22 vai trò)
   'VILLAGER',
   'SEER',
   'APPRENTICE_SEER',
@@ -15,6 +16,7 @@ export const Role = z.enum([
   'BODYGUARD',
   'CUPID',
   'DISEASED',
+  'GHOST',
   'HUNTER',
   'IDIOT',
   'LYCAN',
@@ -29,27 +31,26 @@ export const Role = z.enum([
   'TOUGH_GUY',
   'TROUBLE_MAKER',
   'WITCH',
-  // 2. Phe Ma Sói (5 vai trò)
+  // 2. Phe Ma Sói (10 vai trò)
   'WEREWOLF',
   'MINION',
   'SORCERESS',
   'LONE_WOLF',
   'WOLF_CUB',
-  // 3. Đổi phe & Trung lập (3 vai trò)
+  'BIG_BAD_WOLF',
+  'DIRE_WOLF',
+  'FRUIT_BRUTE',
+  'FRUIT_WOLF',
+  'FANG_FACE',
+  'WOLVERINE',
+  // 3. Phe Đổi Phe & Biệt Lập (8 vai trò)
   'CURSED',
   'DOPPELGANGER',
   'DRUNK',
-  // 4. Phe Biệt Lập / Thứ Ba (4 vai trò)
   'CULT_LEADER',
   'HOODLUM',
   'TANNER',
   'VAMPIRE',
-  // 5. Bản Mở Rộng Wolfpack (6 vai trò)
-  'BIG_BAD_WOLF',
-  'DIRE_WOLF',
-  'FRUIT_WOLF',
-  'FANG_FACE',
-  'WOLVERINE',
   'VIRGINIA_WOOLF',
 ]);
 export type Role = z.infer<typeof Role>;
@@ -76,6 +77,7 @@ export const ROLE_TEAM: Record<Role, Exclude<Team, 'LOVERS'>> = {
   BODYGUARD: 'VILLAGE',
   CUPID: 'VILLAGE',
   DISEASED: 'VILLAGE',
+  GHOST: 'VILLAGE',
   HUNTER: 'VILLAGE',
   IDIOT: 'VILLAGE',
   LYCAN: 'VILLAGE',
@@ -96,21 +98,20 @@ export const ROLE_TEAM: Record<Role, Exclude<Team, 'LOVERS'>> = {
   SORCERESS: 'WEREWOLF',
   LONE_WOLF: 'WEREWOLF',
   WOLF_CUB: 'WEREWOLF',
-  // 3. Đổi phe
+  BIG_BAD_WOLF: 'WEREWOLF',
+  DIRE_WOLF: 'WEREWOLF',
+  FRUIT_BRUTE: 'WEREWOLF',
+  FRUIT_WOLF: 'WEREWOLF',
+  FANG_FACE: 'WEREWOLF',
+  WOLVERINE: 'WEREWOLF',
+  // 3. Đổi phe & Biệt lập
   CURSED: 'VILLAGE',
   DOPPELGANGER: 'VILLAGE',
   DRUNK: 'VILLAGE',
-  // 4. Phe thứ 3 / Biệt lập
   CULT_LEADER: 'CULT_LEADER',
   HOODLUM: 'HOODLUM',
   TANNER: 'TANNER',
   VAMPIRE: 'VAMPIRE',
-  // 5. Wolfpack
-  BIG_BAD_WOLF: 'WEREWOLF',
-  DIRE_WOLF: 'WEREWOLF',
-  FRUIT_WOLF: 'WEREWOLF',
-  FANG_FACE: 'WEREWOLF',
-  WOLVERINE: 'WEREWOLF',
   VIRGINIA_WOOLF: 'VILLAGE',
 };
 
@@ -124,15 +125,31 @@ export const Phase = z.enum([
   'READING_CARDS',
   'NIGHT_START',
   'NIGHT_FALL',
+  // Đêm đầu
+  'DOPPELGANGER_TURN',
   'CUPID_TURN',
   'LOVERS_TURN',
+  'VIRGINIA_WOOLF_TURN',
+  'HOODLUM_TURN',
+  'DIRE_WOLF_TURN',
+  'MASON_TURN',
+  // Các đêm tiếp theo
   'BODYGUARD_TURN',
   'NIGHT_BODYGUARD',
+  'PRIEST_TURN',
+  'SPELLCASTER_TURN',
+  'OLD_HAG_TURN',
   'WEREWOLF_TURN',
   'NIGHT_WEREWOLF',
   'WITCH_TURN',
   'SEER_TURN',
   'NIGHT_SEER',
+  'SORCERESS_TURN',
+  'PI_TURN',
+  'CULT_LEADER_TURN',
+  'VAMPIRE_TURN',
+  'DRUNK_TURN',
+  // Giải quyết đêm & Ban ngày
   'NIGHT_RESOLVE',
   'DAY_ANNOUNCEMENT',
   'DAY_ANNOUNCE',

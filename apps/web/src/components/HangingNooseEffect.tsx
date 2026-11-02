@@ -12,6 +12,7 @@ import {
   getGothicTarotFrontTexture,
   werewolfAudio,
 } from './scene3d.helpers';
+import { RoleCard } from './RoleCard';
 
 export interface HangingNooseEffectProps {
   /** Active when phase === EXECUTION_PHASE / DAY_EXECUTION and a player is condemned */
@@ -116,10 +117,13 @@ export const HangingNooseEffect: React.FC<HangingNooseEffectProps> = ({
     }
 
     // 3. Condemned character slumps head & arms down onto table -> isAlive = false
+    // (Nếu là Hoàng tử PRINCE thì thoát chết, không gục đầu và không gọi onExecuteSlump)
     if (!triggeredSlumpRef.current && t >= 1.95) {
       triggeredSlumpRef.current = true;
       werewolfAudio.playGavel();
-      onExecuteSlump?.(condemnedSeat.player.id);
+      if (revealedRole !== 'PRINCE') {
+        onExecuteSlump?.(condemnedSeat.player.id);
+      }
     }
 
     // 4. Dead player's Role Card glides to center of table & flips face-up for the whole room
@@ -288,31 +292,13 @@ export const HangingNooseEffect: React.FC<HangingNooseEffectProps> = ({
           </mesh>
         )}
 
-        <group ref={revealFlipRef}>
-          <mesh castShadow>
-            <boxGeometry args={[0.224, 0.35, 0.003]} />
-            <meshStandardMaterial color="#c99b3b" roughness={0.35} metalness={0.78} />
-          </mesh>
-
-          {frontTex && (
-            <mesh position={[0, 0, 0.0018]}>
-              <planeGeometry args={[0.22, 0.345]} />
-              <meshStandardMaterial
-                map={frontTex}
-                roughness={0.4}
-                metalness={0.14}
-                emissive="#4a160c"
-                emissiveIntensity={0.28}
-              />
-            </mesh>
-          )}
-
-          {backTex && (
-            <mesh position={[0, 0, -0.0018]} rotation={[0, Math.PI, 0]}>
-              <planeGeometry args={[0.22, 0.345]} />
-              <meshStandardMaterial map={backTex} roughness={0.5} metalness={0.2} />
-            </mesh>
-          )}
+        <group ref={revealFlipRef} scale={[1.15, 1.15, 1.15]}>
+          <RoleCard
+            role={revealedRole}
+            isInspecting={true}
+            onToggleInspect={() => {}}
+            isAlive={revealedRole === 'PRINCE'}
+          />
         </group>
       </group>
     </group>

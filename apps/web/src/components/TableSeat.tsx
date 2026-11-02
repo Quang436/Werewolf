@@ -478,34 +478,11 @@ export const TableSeat: React.FC<TableSeatProps> = ({
                   <meshStandardMaterial color="#2e2420" roughness={0.8} metalness={0.06} />
                 </RoundedBox>
 
-                {/* Subtle Shadowed Brow & Faint Noir Eye Glint (Only when alive & awake) */}
-                {isAlive && !isNight && (
-                  <group position={[0, 0.015, 0.096]}>
-                    <mesh position={[-0.038, 0, 0]}>
-                      <sphereGeometry args={[0.009, 8, 8]} />
-                      <meshBasicMaterial color="#d6c39c" />
-                    </mesh>
-                    <mesh position={[0.038, 0, 0]}>
-                      <sphereGeometry args={[0.009, 8, 8]} />
-                      <meshBasicMaterial color="#d6c39c" />
-                    </mesh>
-                  </group>
-                )}
-
-                {/* Glowing Blood-Red Eyes for Wolf Teammates during Werewolf Turn */}
-                {isAlive && isWolfAwake && (
-                  <group position={[0, 0.015, 0.096]}>
-                    <mesh position={[-0.038, 0, 0]}>
-                      <sphereGeometry args={[0.014, 10, 10]} />
-                      <meshBasicMaterial color="#ff1744" />
-                    </mesh>
-                    <mesh position={[0.038, 0, 0]}>
-                      <sphereGeometry args={[0.014, 10, 10]} />
-                      <meshBasicMaterial color="#ff1744" />
-                    </mesh>
-                    <pointLight color="#ff1744" intensity={2.0} distance={0.6} />
-                  </group>
-                )}
+                {/* Noir Silhouette Sculpted Face - Không dùng các viên bi mắt ma trôi nổi */}
+                <mesh position={[0, -0.02, 0.098]}>
+                  <boxGeometry args={[0.08, 0.04, 0.015]} />
+                  <meshStandardMaterial color="#221b18" roughness={0.9} />
+                </mesh>
 
                 {/* Diegetic Audio Waveform / Speaking Indicator above Head */}
                 {isSpeaking && isAlive && (
@@ -625,22 +602,47 @@ export const TableSeat: React.FC<TableSeatProps> = ({
         )}
 
         {/* ================================================================
-            3. RETRO FLOATING NAMEPLATE & SEAT NUMBER ABOVE HEAD (CLICK TO VOTE)
+            3. DIEGETIC TABLE-RIM NAMEPLATE (CỐ ĐỊNH Ở MÉP BÀN TRƯỚC MỖI GHẾ)
            ================================================================ */}
         {(!seat.isLocal || cameraPerspective === '2ND') && nameplateTex && (
-          <Billboard position={[0, 1.66, 0.04]} follow lockX={false} lockY={false} lockZ={false}>
-            <mesh
-              onPointerOver={(e) => {
-                e.stopPropagation();
-                if (!seat.isLocal) setHovered(true);
-              }}
-              onPointerOut={() => setHovered(false)}
-              onClick={handleSeatClick}
-            >
-              <planeGeometry args={[0.68, 0.18]} />
-              <meshBasicMaterial map={nameplateTex} transparent depthWrite={false} />
+          <group
+            position={[0, TABLE_SURFACE_Y + 0.018, -0.68]}
+            rotation={[-0.42, 0, 0]}
+            onPointerOver={(e) => {
+              e.stopPropagation();
+              if (!seat.isLocal) setHovered(true);
+            }}
+            onPointerOut={() => setHovered(false)}
+            onClick={handleSeatClick}
+          >
+            {/* Khối đế kim loại đồng thau vát mép sang trọng */}
+            <mesh castShadow receiveShadow>
+              <boxGeometry args={[0.28, 0.075, 0.014]} />
+              <meshStandardMaterial
+                color={isAlive ? (hovered ? '#42280d' : '#23180f') : '#18181c'}
+                roughness={0.4}
+                metalness={0.7}
+                emissive={hovered && interactive ? '#78350f' : isCondemned ? '#7f1d1d' : '#000000'}
+                emissiveIntensity={hovered || isCondemned ? 0.6 : 0}
+              />
             </mesh>
-          </Billboard>
+
+            {/* Mặt biển tên kim loại khắc số ghế và tên người chơi (#04 Xemesis) */}
+            <mesh position={[0, 0, 0.008]}>
+              <planeGeometry args={[0.27, 0.068]} />
+              <meshBasicMaterial
+                map={nameplateTex}
+                transparent
+                depthWrite={false}
+              />
+            </mesh>
+
+            {/* Đèn chỉ báo trạng thái nhỏ ở góc biển tên (Xanh khi sống, đỏ khi bị treo/chết) */}
+            <mesh position={[0.125, 0, 0.009]}>
+              <circleGeometry args={[0.005, 12]} />
+              <meshBasicMaterial color={isAlive ? '#22c55e' : '#ef4444'} />
+            </mesh>
+          </group>
         )}
       </group>
 

@@ -1,0 +1,96 @@
+Bạn là một Principal Game Architect và Lead Creative Developer chuyên về Multiplayer Realtime Web 3D (React Three Fiber + Three.js + @react-three/drei + Socket.io / Node.js).
+
+Tôi cần nâng cấp và sửa toàn bộ hệ thống Game Ma Sói 3D (FPS seated quán bar ngầm phong cách Liar's Bar) để tích hợp TRỌN BỘ CÁC VAI TRÒ (Ultimate Werewolf Deluxe Edition & Wolfpack Expansion) cùng việc dọn dẹp triệt để các lỗi thị giác đang gặp phải.
+
+---
+### 1. SỬA DỨT ĐIỂM CÁC LỖI THỊ GIÁC (VISUAL BUGS FIX)
+1. Lỗi font Tiếng Việt gãy nét trên lá bài:
+   - Hiện tượng: Chữ "THẦ'N TÌNH YÊU" bị tách dấu sắc thành dấu phẩy, văn bản mô tả nhòe và xộc xệch.
+   - Giải pháp: Chuyển toàn bộ mặt trước của lá bài sang sử dụng component `<Html transform occlude>` của Drei hoặc gắn Canvas Texture có nạp font chuẩn Unicode (ví dụ: Google Fonts 'Be Vietnam Pro' / 'Cinzel Decorative') để văn bản sắc nét 100%, không bao giờ gãy dấu tiếng Việt.
+2. Lá bài dựng đứng 90 độ che hết màn hình:
+   - Khi ở trạng thái nghỉ: Lá bài phải ngả nghiêng tự nhiên khoảng 20-25 độ (`rotation={[-0.4, 0, 0]}`), nằm tựa vừa vặn trong rãnh của khay gỗ cá nhân, không nhô cao chắn tầm nhìn đối thủ đối diện.
+   - Khi bấm xem (Inspect mode): Lá bài bay nâng lên nhẹ nhàng [0, 1.05, 1.8], nghiêng nhẹ đón góc mắt, click lần nữa hoặc click ra ngoài bàn sẽ trượt êm ái về lại khay gỗ.
+3. Bỏ các cặp "mắt ma phát sáng" trôi nổi:
+   - Xóa bỏ triệt để các chấm sáng mắt ma lơ lửng trong không trung.
+   - Thay bằng mô hình ghế bành da có hình bóng nhân vật (Silhouette/Mannequin tỉ lệ chuẩn) ngồi ngay ngắn quanh bàn tròn.
+4. Tinh gọn Nameplate người chơi:
+   - Chuyển các bảng tên to bản bay lộn xộn thành các biển tên gỗ/kim loại nhỏ gắn cố định ở mép bàn trước mỗi ghế (Diegetic Nameplate: `#04 Xemesis`, `#10 Bác Sĩ`...).
+
+---
+### 2. DANH MỤC LOGIC TẤT CẢ VAI TRÒ (ROLES SPECIFICATION)
+Tích hợp State Machine và xử lý chức năng đêm cho toàn bộ các vai trò sau:
+
+A. PHE DÂN LÀNG (VILLAGE TEAM):
+- Seer (Tiên tri): Mỗi đêm chọn 1 người để biết có phải Sói hay không.
+- Apprentice Seer (Tiên tri tập sự): Nhận quyền của Tiên tri khi Tiên tri chính bị loại.
+- Aura Seer (Tiên tri hào quang): Mỗi đêm soi 1 người xem có chức năng đặc biệt hay không (không phải Dân thường hay Sói).
+- Bodyguard (Bảo vệ): Mỗi đêm chọn 1 người bảo vệ khỏi cái chết (không chọn cùng 1 người 2 đêm liên tiếp).
+- Cupid (Thần tình yêu): Đêm đầu tiên chọn 2 người liên kết thành Cặp đôi (yêu nhau). 1 người chết thì người kia chết theo. Khác phe thành Phe thứ 3.
+- Diseased (Người bệnh): Nếu bị Sói cắn, bầy Sói bị lây bệnh và mất lượt cắn ở đêm kế tiếp.
+- Ghost (Hồn ma): Bị loại đêm 1, mỗi đêm/ngày được gửi 1 ký tự gợi ý cho cả làng.
+- Hunter (Thợ săn): Khi chết lập tức được kích hoạt bắn hạ thêm 1 người chơi khác.
+- Idiot (Thằng ngốc): Luôn tự động vote chết trong các phiên treo cổ.
+- Lycan (Người hóa sói): Thuộc phe Dân, nhưng Tiên tri soi vào sẽ bị báo là Sói.
+- Mason (Sinh đôi): Đêm đầu tiên thức dậy để nhìn thấy nhau.
+- Mayor (Thị trưởng): Phiếu biểu quyết treo cổ được tính gấp đôi (2 phiếu).
+- Old Hag (Phù thủy già): Mỗi đêm chọn 1 người phải rời làng hôm sau (bị cấm nói và cấm vote).
+- Pacifist (Người yêu hòa bình): Luôn tự động vote cho người chơi được sống.
+- P.I. (Thám tử): 1 lần trong 3 đêm đầu, chọn 1 người để biết người đó hoặc 2 người bên cạnh có ai là Sói hay không.
+- Priest (Thầy tu): 1 lần trong game, chọn bảo vệ 1 người bất tử suốt đêm.
+- Prince (Hoàng tử): Nếu bị vote treo cổ, tự động lật bài thoát chết lần đầu, cả làng lập tức đi ngủ.
+- Spellcaster (Người phù phép): Mỗi đêm chọn 1 người bị câm (không được nói/chat) vào ngày hôm sau.
+- Tough Guy (Người cứng cỏi): Bị Sói cắn sẽ trì hoãn cái chết sang đêm tiếp theo mới chết.
+- Trouble Maker (Kẻ phá rối): 1 lần trong game, kích hoạt để ngày hôm sau có 2 phiên treo cổ liên tiếp.
+- Witch (Phù thủy): Có 1 bình cứu (biết ai bị cắn để cứu) và 1 bình độc (chọn 1 người để giết). Có thể dùng cả 2 bình trong 1 đêm.
+- Villager (Dân thường): Ngủ suốt đêm, tham gia tranh luận và vote ban ngày.
+
+B. PHE MA SÓI (WEREWOLF TEAM):
+- Werewolf (Ma sói thường): Cùng đàn sói thức dậy mỗi đêm vote cắn 1 người.
+- Minion (Kẻ phản bội): Biết Sói là ai nhưng không thức dậy cùng Sói; Tiên tri soi ra Dân làng.
+- Sorceress (Pháp sư sói): Mỗi đêm thức dậy tìm Tiên tri (không biết Sói là ai, Tiên tri soi ra Dân).
+- Lone Wolf (Sói cô đơn): Thức dậy cùng Sói, nhưng chỉ thắng khi là người sống sót cuối cùng.
+- Wolf Cub (Sói con): Thức dậy cùng Sói. Nếu Sói con bị giết, đêm hôm sau bầy Sói được cắn 2 người.
+- Big Bad Wolf (Sói đại ca): Chừng nào còn sống, bầy Sói được quyền cắn 2 người ngồi cạnh nhau mỗi đêm.
+- Dire Wolf (Sói tuyết): Đêm đầu chọn 1 người làm bạn đồng hành. Người đó chết thì Sói tuyết chết theo.
+- Fruit Brute (Sói ăn chay): Thức dậy cùng Sói, nhưng nếu là Sói cuối cùng còn lại sẽ không thể cắn ai.
+- Fang Face (Nanh sói): Thức dậy cùng Sói đêm đầu, các đêm sau ngủ cho đến khi các Sói khác chết hết.
+- Wolverine (Vuốt sói): Thức dậy cùng Sói, nếu là con Sói ngồi gần nạn nhân nhất thì phát ra âm thanh kim loại.
+
+C. PHE ĐỔI PHE & BIỆT LẬP (SOLO / THIRD-PARTY):
+- Cursed (Kẻ bị nguyền rủa): Ban đầu là Dân, nếu bị Sói cắn sẽ không chết mà biến thành Ma Sói từ đêm tiếp theo.
+- Doppelganger (Nhân bản): Đêm 1 chọn 1 người. Khi người đó chết, Nhân bản nhận toàn bộ vai trò và phe phái của người đó.
+- Drunk (Say rượu): Thuộc phe Dân trong 2 đêm đầu. Đến đêm 3 mới thức dậy rút ngẫu nhiên vai trò thật sự của mình.
+- Cult Leader (Trưởng giáo phái): Mỗi đêm kết nạp 1 người vào giáo phái. Thắng khi tất cả người còn sống đều thuộc giáo phái.
+- Hoodlum (Du côn): Đêm 1 chỉ định 2 người. Thắng nếu 2 người đó chết còn Du côn vẫn sống sót ở cuối game.
+- Tanner (Chán đời): Thắng ngay lập tức nếu bị cả làng vote treo cổ ban ngày.
+- Vampire (Ma cà rồng): Không thể bị Sói cắn chết ban đêm. Mỗi đêm chọn 1 người, nạn nhân sẽ chết sau phiên treo cổ ngày hôm sau.
+- Virginia Woolf (Mẹ trẻ): Đêm 1 chọn 1 người sợ mình. Khi Mẹ trẻ chết, người đó cũng chết theo.
+
+---
+### 3. QUY TRÌNH QUẢN TRÒ ĐIỀU PHỐI BAN ĐÊM (DYNAMIC NIGHT QUEUE)
+Hệ thống Server Quản trò sẽ sắp xếp thứ tự thức dậy ban đêm theo đúng chuẩn:
+1. `NIGHT_FALL`: Cả làng nhắm mắt ngủ (3s).
+2. `FIRST_NIGHT_ONLY`: Gọi các vai kích hoạt 1 lần đêm đầu theo thứ tự: Doppelganger -> Cupid (ghép đôi) -> Virginia Woolf -> Hoodlum -> Dire Wolf -> Mason (nhìn nhau) -> Big Bad Wolf (nhận diện).
+3. `RECURRING_NIGHT_QUEUE` (Thứ tự các đêm):
+   - Bước 1 (Bảo vệ/Hóa giải): Bodyguard -> Priest -> Spellcaster (chỉ định câm) -> Old Hag.
+   - Bước 2 (Phe Sói): Werewolves + Lone Wolf + Wolf Cub + Big Bad Wolf (đồng thuận chọn mục tiêu cắn).
+   - Bước 3 (Cứu/Độc): Witch (Phù Thủy biết nạn nhân, chọn cứu/độc).
+   - Bước 4 (Thông tin): Seer / Aura Seer -> Sorceress -> P.I.
+   - Bước 5 (Phe thứ 3): Cult Leader (thu nạp) -> Vampire (chọn nạn nhân).
+   - Bước 6 (Đặc biệt): Drunk (chỉ thức đêm 3 để nhận vai).
+4. `NIGHT_RESOLVE`: Xử lý sát thương tổng hợp, kiểm tra Cursed biến hình, Tough Guy trì hoãn cái chết, Diseased lây bệnh cho Sói, và chuyển sang trời sáng.
+
+*Quy tắc giả lập thời gian (Fake Delay):* Nếu vai trò nào trong hàng đợi đã chết hoặc không có trong ván, Server vẫn chạy bộ đếm ngẫu nhiên 4-7s để người chơi không đoán được sự tồn tại của vai trò đó.
+
+---
+### 4. TƯƠNG TÁC CHỌN MỤC TIÊU 3D & HOẠT CẢNH TREO CỔ
+- Chọn mục tiêu đêm: Chỉ vai trò đang đến lượt mới được ngẩng đầu dậy, mở khóa click chuột vào các ghế đối diện, xuất hiện hiệu ứng ánh sáng riêng (xanh lá cho Bảo vệ, đỏ cho Sói, tím cho Phù thủy, vàng cho Tiên tri). Chọn xong tự động gục đầu ngủ.
+- Xử tử treo cổ ban ngày: Người bị vote nhiều nhất bị rọi Spotlight đỏ, dây thòng lọng thả từ trần quán bar xuống, nhân vật gục chết, lá bài thân phận bay ra giữa bàn và tự động lật ngửa 180 độ công bố danh tính (nếu là Hoàng tử thì lật bài thoát chết, cả làng đi ngủ).
+
+---
+### YÊU CẦU ĐẦU RA MÃ NGUỒN:
+1. File định nghĩa Type/Interface chuẩn cho toàn bộ 30+ vai trò trên (`types/roles.ts`).
+2. Class quản lý hàng đợi đêm linh hoạt (`NightQueueManager.ts`) trên Server.
+3. Cập nhật `RoleCard.tsx` dùng `<Html>` của Drei để chữ tiếng Việt nét căng, không bị gãy nét và góc nghiêng chuẩn 20 độ tựa vào khay gỗ.
+4. Cập nhật `GameScene3D.tsx` loại bỏ mắt ma, gắn biển tên diegetic lên mép bàn.
+5. Đã có hình ảnh cụ thể cho các roll và hãy sửa lại đúng với prompt các roll thuộc đúng phe nào 

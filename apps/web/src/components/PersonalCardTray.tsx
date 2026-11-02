@@ -15,6 +15,7 @@ import {
   getGothicTarotFrontTexture,
   werewolfAudio,
 } from './scene3d.helpers';
+import { RoleCard } from './RoleCard';
 
 export interface PersonalCardTrayProps {
   seatNumber: number;
@@ -42,10 +43,10 @@ const TRAY_WORLD_POS: [number, number, number] = [0, 0.768, 1.58];
 const POS_CENTER_DECK = new THREE.Vector3(0, TABLE_SURFACE_Y + 0.016, 0);
 const POS_SLIDE_APPROACH = new THREE.Vector3(0, TABLE_SURFACE_Y + 0.05, 1.56);
 const POS_EYE_INSPECT = new THREE.Vector3(0, 1.05, 1.8);
-const POS_TRAY_GROOVE = new THREE.Vector3(0, 0.818, 1.575);
+const POS_TRAY_GROOVE = new THREE.Vector3(0, 0.795, 1.575);
 
-// 18-degree lean angle (within 15-20 deg spec) resting against the back wall of the dark oak tray
-const GROOVE_TILT_PITCH = -Math.PI / 2 + THREE.MathUtils.degToRad(18);
+// 20-25 degree natural resting pitch (-0.4 rad) leaning comfortably inside the dark oak tray groove
+const GROOVE_TILT_PITCH = -0.4;
 
 function easeOutCubic(x: number): number {
   const t = THREE.MathUtils.clamp(x, 0, 1);
@@ -542,35 +543,14 @@ export const PersonalCardTray: React.FC<PersonalCardTrayProps> = ({
           </mesh>
         )}
 
-        {/* 180-Degree Flip Group */}
+        {/* 180-Degree Flip Group with Drei Html RoleCard */}
         <group ref={cardFlipRef}>
-          {/* Brushed Gold Tarot Card Core */}
-          <mesh castShadow receiveShadow>
-            <boxGeometry args={[0.174, 0.27, 0.0028]} />
-            <meshStandardMaterial color="#c99b3b" roughness={0.34} metalness={0.76} />
-          </mesh>
-
-          {/* Front Face: Gothic Tarot Role Name, Faction & Skill Info */}
-          {frontTex && (
-            <mesh position={[0, 0, 0.0017]}>
-              <planeGeometry args={[0.17, 0.266]} />
-              <meshStandardMaterial
-                map={frontTex}
-                roughness={0.44}
-                metalness={0.1}
-                emissive="#2e1f08"
-                emissiveIntensity={0.28}
-              />
-            </mesh>
-          )}
-
-          {/* Back Face: Ornate Gothic Tarot Back */}
-          {backTex && (
-            <mesh position={[0, 0, -0.0017]} rotation={[0, Math.PI, 0]}>
-              <planeGeometry args={[0.17, 0.266]} />
-              <meshStandardMaterial map={backTex} roughness={0.48} metalness={0.2} />
-            </mesh>
-          )}
+          <RoleCard
+            role={role}
+            isInspecting={isInspecting}
+            onToggleInspect={onToggleInspect}
+            isAlive={isAlive}
+          />
         </group>
       </group>
     </group>

@@ -19,10 +19,10 @@
 import {
   ActionRequest,
   ClientRoomView,
+  getDBRoleData,
   PlayerState,
   PublicPlayerView,
   Role,
-  RoomSettings,
   RoomState,
 } from '../index';
 
@@ -181,6 +181,7 @@ export class RoomProjector {
         id: viewer.id,
         role: viewer.role,
         team: viewer.team,
+        ...(viewer.role ? { roleData: getDBRoleData(viewer.role) } : {}),
         roleState: selfRoleState,
         ...(loverInfo ? { lover: loverInfo } : {}),
       },
@@ -218,7 +219,6 @@ export class RoomProjector {
       case 'BODYGUARD_TURN':
       case 'NIGHT_BODYGUARD': {
         if (viewer.role === 'BODYGUARD') {
-          // Lọc những ai không được chọn (ví dụ người vừa bảo vệ đêm trước)
           const validCandidates = aliveCandidates.filter((id) => {
             if (id === viewer.roleState.lastProtectedId) return false;
             if (id === viewer.id && !room.settings.bodyguardCanSelfProtect) return false;
@@ -236,7 +236,6 @@ export class RoomProjector {
       case 'WEREWOLF_TURN':
       case 'NIGHT_WEREWOLF': {
         if (viewer.team === 'WEREWOLF') {
-          // Sói không được cắn đồng loại
           const nonWolfCandidates = aliveCandidates.filter((id) => {
             const p = room.players.find((pl) => pl.id === id);
             return p && p.team !== 'WEREWOLF';
@@ -252,15 +251,13 @@ export class RoomProjector {
 
       case 'WITCH_TURN': {
         if (viewer.role === 'WITCH') {
-          // Mục tiêu bị sói cắn (tùy witchInfoMode)
           let wolfVictim: string | null = room.night.wolfTarget;
           if (room.settings.witchInfoMode === 'AFTER_PROTECTION') {
             if (room.night.bodyguardTarget === room.night.wolfTarget) {
-              wolfVictim = null; // Đã được bảo vệ chắn
+              wolfVictim = null;
             }
           }
 
-          // Kiểm tra quyền tự cứu của phù thủy
           let canSelfSave = true;
           if (wolfVictim === viewer.id) {
             if (room.settings.witchCanSelfSave === 'NEVER') canSelfSave = false;
@@ -269,7 +266,7 @@ export class RoomProjector {
 
           return {
             kind: 'WITCH_ACT',
-            candidates: aliveCandidates.filter((id) => id !== viewer.id), // mục tiêu bình độc
+            candidates: aliveCandidates.filter((id) => id !== viewer.id),
             witch: {
               wolfTargetId: wolfVictim,
               hasHeal: viewer.roleState.hasHealPotion,
@@ -309,7 +306,6 @@ export class RoomProjector {
       }
 
       case 'DAY_JUDGMENT': {
-        // Bị cáo không được bỏ phiếu phán quyết chính mình
         if (viewer.id !== room.day.accusedId) {
           return {
             kind: 'DAY_JUDGE',

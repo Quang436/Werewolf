@@ -1,7 +1,14 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChatChannel, PublicPlayerView, Role, Team } from '@werewolf/shared';
+import {
+  ChatChannel,
+  DBRoleData,
+  getDBRoleData,
+  PublicPlayerView,
+  Role,
+  Team,
+} from '@werewolf/shared';
 import { GameStateManager } from '../stores/game.store';
 import { GameScene3D } from './GameScene3D';
 import {
@@ -34,8 +41,9 @@ const SAMPLE_NOIR_PLAYERS: PublicPlayerView[] = [
   { id: 'p8', seat: 8, nickname: 'Bạn', avatarUrl: null, isHost: false, isAlive: true, ready: true, connection: 'ONLINE' },
 ];
 
-type LocalScenePhase =
-  | 'DEALING_CARDS'
+type AutoFSMPhase =
+  | 'READING_CARDS'
+  | 'ASSIGN_ROLES'
   | 'NIGHT_FALL'
   | 'NIGHT_BODYGUARD'
   | 'NIGHT_WEREWOLF'
@@ -44,8 +52,26 @@ type LocalScenePhase =
   | 'DAY_DISCUSSION'
   | 'DAY_VOTING'
   | 'DAY_EXECUTION'
-  | 'EXECUTION_PHASE'
-  | 'NIGHT_WEREWOLVES';
+  | 'EXECUTION_PHASE';
+
+const PHASE_DURATION_SEC: Record<string, number> = {
+  READING_CARDS: 20,
+  ASSIGN_ROLES: 20,
+  NIGHT_FALL: 3,
+  NIGHT_START: 3,
+  NIGHT_BODYGUARD: 12,
+  BODYGUARD_TURN: 12,
+  NIGHT_WEREWOLF: 15,
+  WEREWOLF_TURN: 15,
+  NIGHT_SEER: 12,
+  SEER_TURN: 12,
+  DAY_ANNOUNCE: 5,
+  DAY_ANNOUNCEMENT: 5,
+  DAY_DISCUSSION: 45,
+  DAY_VOTING: 20,
+  DAY_EXECUTION: 8,
+  EXECUTION_PHASE: 8,
+};
 
 export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
   store,
@@ -54,22 +80,21 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
 }) => {
   const [state, setState] = useState(store.getState());
   const [perspective, setPerspective] = useState<CameraPerspective>('1ST');
-  const [localPhase, setLocalPhase] = useState<LocalScenePhase>('DEALING_CARDS');
+  const [localPhase, setLocalPhase] = useState<AutoFSMPhase>('READING_CARDS');
+  const [localPhaseEndsAt, setLocalPhaseEndsAt] = useState<number>(() => Date.now() + 30000);
+  const [nowTick, setNowTick] = useState<number>(() => Date.now());
 
   // Local player mortality & role assignment map (synced with server when in live room)
   const [executedIds, setExecutedIds] = useState<Set<string>>(() => new Set());
   const [seatRoles, setSeatRoles] = useState<Record<string, Role>>({});
 
   // Cinematic card dealing & manual inspect state
-  const [dealTrigger, setDealTrigger] = useState<number>(0);
-  const [hasDealtCards, setHasDealtCards] = useState<boolean>(false);
-  const [isCardInspecting, setIsCardInspecting] = useState<boolean>(false);
+  const [dealTrigger, setDealTrigger] = useState<number>(1);
+  const [hasDealtCards, setHasDealtCards] = useState<boolean>(true);
+  const [isCardInspecting, setIsCardInspecting] = useState<boolean>(true);
 
   // Voting tokens & verdict state
-  const [localVoteTally, setLocalVoteTally] = useState<Record<string, number>>({
-    p2: 2,
-    p6: 1,
-  });
+  const [localVoteTally, setLocalVoteTally] = useState<Record<string, number>>({});
   const [myVotedTargetId, setMyVotedTargetId] = useState<string | null>(null);
   const [selectedTargetId, setSelectedTargetId] = useState<string | null>(null);
   const [verdictBanner, setVerdictBanner] = useState<string | null>(null);
@@ -93,8 +118,9 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
   useEffect(() => {
     const timer = setInterval(() => {
       store.updateRemainingTime();
+      setNowTick(Date.now());
       setState({ ...store.getState() });
-    }, 500);
+    }, 250);
     return () => clearInterval(timer);
   }, [store]);
 
@@ -157,10 +183,21 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
     );
   }, [state.assignedRole, state.room?.me?.role, localPlayer, seatRoles]);
 
-  // Trigger DEALING_CARDS sequence & assign balanced deck across all seats
+  // Dữ liệu vai trò chuẩn lấy trực tiếp từ Database (qua sự kiện ASSIGN_ROLE)
+  const myRole: DBRoleData = useMemo(() => {
+    if (state.myRole && state.myRole.roleName && state.myRole.description) {
+      return state.myRole;
+    }
+    if (state.room?.me?.roleData) {
+      return state.room.me.roleData;
+    }
+    return getDBRoleData(myCurrentRole);
+  }, [state.myRole, state.room?.me?.roleData, myCurrentRole]);
+
+  // Initialize balanced deck & start READING_CARDS (30s)
   const triggerDealCards = useCallback(
-    (emitToRoom: boolean) => {
-      if (emitToRoom && state.room) {
+    (emitToServer: boolean) => {
+      if (emitToServer && state.room) {
         onEmitAction('room:deal', {});
       }
 
@@ -172,7 +209,7 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
       });
       setSeatRoles(nextSeatRoles);
 
-      if (localPlayer && !state.room?.me?.role) {
+      if (localPlayer && !state.room?.me?.role && !state.assignedRole) {
         const myNewRole = nextSeatRoles[localPlayer.id] || 'SEER';
         const info = getRoleInfo(myNewRole);
         const thirdTeams: Team[] = ['LONE_WOLF', 'CULT_LEADER', 'HOODLUM', 'TANNER', 'VAMPIRE', 'LOVERS'];
@@ -187,7 +224,7 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
               : 'TANNER'
             : 'VILLAGE';
         store.setAssignedRole({
-          role: myNewRole,
+          role: getDBRoleData(myNewRole),
           team: myTeam,
         });
       }
@@ -198,79 +235,125 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
       setVerdictBanner(null);
       setMyVotedTargetId(null);
       setSelectedTargetId(null);
-      setLocalVoteTally({ p2: 2, p6: 1 });
-      setIsCardInspecting(false);
-      setLocalPhase('DEALING_CARDS');
+      setLocalVoteTally({});
+      setLocalPhase('READING_CARDS');
+      setLocalPhaseEndsAt(Date.now() + 30000);
+      setIsCardInspecting(true);
       setHasDealtCards(true);
       setDealTrigger((n) => n + 1);
     },
-    [activePlayers, localPlayer, onEmitAction, state.room, store]
+    [activePlayers, localPlayer, onEmitAction, state.assignedRole, state.room, store]
   );
 
-  // Automatic initial card deal on table entry so DEALING_CARDS plays right away
+  // Automatic initial card deal on table entry -> READING_CARDS (30s)
   const didAutoDealRef = useRef(false);
   useEffect(() => {
     if (didAutoDealRef.current || activePlayers.length === 0) return;
     didAutoDealRef.current = true;
-    const t = setTimeout(() => {
-      triggerDealCards(false);
-    }, 450);
-    return () => clearTimeout(t);
+    triggerDealCards(false);
   }, [activePlayers.length, triggerDealCards]);
 
-  // Listen to server dealNonce or ASSIGN_ROLES phase
+  // As soon as the server room connects in LOBBY phase, automatically request Server-Authoritative deal
+  const requestedServerAutoStartRef = useRef<string | null>(null);
+  useEffect(() => {
+    const roomId = state.room?.id;
+    const roomPhase = state.room?.phase;
+    if (!roomId || requestedServerAutoStartRef.current === roomId) return;
+    requestedServerAutoStartRef.current = roomId;
+
+    if (roomPhase === 'LOBBY') {
+      onEmitAction('room:deal', {});
+    }
+  }, [state.room?.id, state.room?.phase, onEmitAction]);
+
+  // Listen to server dealNonce
   const lastDealNonceRef = useRef(0);
   useEffect(() => {
     if (state.dealNonce && state.dealNonce > lastDealNonceRef.current) {
       lastDealNonceRef.current = state.dealNonce;
-      triggerDealCards(false);
+      setDealTrigger((n) => n + 1);
+      setHasDealtCards(true);
+      setIsCardInspecting(true);
     }
-  }, [state.dealNonce, triggerDealCards]);
+  }, [state.dealNonce]);
 
-  const lastServerPhaseRef = useRef<string | null>(null);
-  useEffect(() => {
-    const serverPhase = state.room?.phase;
-    if (!serverPhase || serverPhase === lastServerPhaseRef.current) return;
-    lastServerPhaseRef.current = serverPhase;
-
-    if (serverPhase === 'ASSIGN_ROLES') {
-      triggerDealCards(false);
-    } else if (serverPhase === 'DAY_EXECUTION') {
-      const accused = state.room?.day?.accusedId;
-      if (accused) {
-        setCondemnedPlayerId(accused);
-        setLocalPhase('EXECUTION_PHASE');
-      }
-    }
-  }, [state.room?.phase, state.room?.day?.accusedId, triggerDealCards]);
-
-  // Effective phase & vote tally combining live server snapshot + local interactive state
+  // Effective phase from Server-Authoritative FSM (with automatic local fallback when server is in LOBBY/disconnected)
+  const isServerDriving = Boolean(state.room && state.room.phase !== 'LOBBY');
   const effectivePhase: string = useMemo(() => {
-    if (localPhase === 'EXECUTION_PHASE' || localPhase === 'DEALING_CARDS') {
-      return localPhase;
-    }
-    if (state.room && state.room.phase !== 'LOBBY') {
+    if (isServerDriving && state.room) {
       return state.room.phase;
     }
     return localPhase;
-  }, [localPhase, state.room]);
+  }, [isServerDriving, localPhase, state.room]);
 
-  const isNight = isNightPhase(effectivePhase);
-  const isExecutionPhase = effectivePhase === 'EXECUTION_PHASE' || effectivePhase === 'DAY_EXECUTION';
+  // Sync card position & audio whenever phase transitions on Server or Local FSM
+  const lastEffectivePhaseRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!effectivePhase || effectivePhase === lastEffectivePhaseRef.current) return;
+    lastEffectivePhaseRef.current = effectivePhase;
 
-  const director = useGameLoopDirector({
-    phase: effectivePhase,
-    localPlayerId: localPlayer?.id,
-    localRole: myCurrentRole,
-    isAlive: localPlayer ? localPlayer.isAlive : true,
-    players: activePlayers,
-    eliminatedTonightFromServer: state.room?.eliminatedTonight,
-    wolfVotesFromServer: state.room?.wolfPack?.votes,
-    isMicActive: isMicOn,
-    onEmitAction,
-  });
+    if (effectivePhase === 'READING_CARDS' || effectivePhase === 'ASSIGN_ROLES') {
+      // 1. READING_CARDS (30s): Lá bài tự bay nâng lên trước mặt người xem để đọc dữ liệu từ DB
+      setIsCardInspecting(true);
+      werewolfAudio.playCardDeal();
+    } else if (effectivePhase === 'NIGHT_FALL' || effectivePhase === 'NIGHT_START') {
+      // 2. NIGHT_FALL (3s): Đèn tắt, bài tự trượt về nằm úp nghiêng 20 độ vào khay gỗ, cả làng gục đầu ngủ
+      setIsCardInspecting(false);
+      setSelectedTargetId(null);
+      setMyVotedTargetId(null);
+      setVerdictBanner(null);
+      setIsPeacefulTie(false);
+      werewolfAudio.playBell();
+    } else if (
+      effectivePhase === 'NIGHT_WEREWOLF' ||
+      effectivePhase === 'WEREWOLF_TURN' ||
+      effectivePhase === 'NIGHT_WEREWOLVES'
+    ) {
+      werewolfAudio.playWolfHowl();
+    } else if (effectivePhase === 'DAY_ANNOUNCE' || effectivePhase === 'DAY_ANNOUNCEMENT') {
+      werewolfAudio.playBell();
+      setIsCardInspecting(false);
 
-  const canVote = (!isNight && !isExecutionPhase) || director.canInteractChair;
+      // Xác định nạn nhân bị sát hại trong đêm
+      const serverEliminated = state.room?.eliminatedTonight || [];
+      let victim = activePlayers.find((p) => serverEliminated.includes(p.id));
+
+      if (!victim && !isServerDriving) {
+        // Mô phỏng fallback khi chạy offline
+        const candidates = activePlayers.filter(
+          (p) => p.isAlive && !executedIds.has(p.id) && seatRoles[p.id] !== 'WEREWOLF'
+        );
+        if (candidates.length > 0) {
+          victim = candidates[Math.floor(Math.random() * candidates.length)];
+        }
+      }
+
+      if (victim) {
+        setExecutedIds((prev) => new Set([...prev, victim!.id]));
+        const seatStr = String(victim.seat).padStart(2, '0');
+        setVerdictBanner(`Đêm qua người chơi #${seatStr} ${victim.nickname} đã bị sát hại`);
+      } else {
+        setVerdictBanner('Một đêm bình yên không ai chết');
+      }
+    } else if (effectivePhase === 'DAY_DISCUSSION') {
+      setIsCardInspecting(false);
+      setSelectedTargetId(null);
+    } else if (effectivePhase === 'DAY_EXECUTION' || effectivePhase === 'EXECUTION_PHASE') {
+      setIsCardInspecting(false);
+      const accused = state.room?.day?.accusedId;
+      if (accused) {
+        setCondemnedPlayerId(accused);
+      }
+    }
+  }, [
+    effectivePhase,
+    state.room?.day?.accusedId,
+    state.room?.eliminatedTonight,
+    activePlayers,
+    isServerDriving,
+    executedIds,
+    seatRoles,
+  ]);
 
   const effectiveVoteTally: Record<string, number> = useMemo(() => {
     const serverTally = state.room?.day?.tally as Record<string, number> | undefined;
@@ -279,6 +362,111 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
     }
     return localVoteTally;
   }, [state.room?.day?.tally, localVoteTally]);
+
+  // Advance local fallback FSM if server is not actively driving
+  const advanceLocalFallbackPhase = useCallback(
+    (current: AutoFSMPhase) => {
+      let next: AutoFSMPhase = 'NIGHT_FALL';
+
+      switch (current) {
+        case 'READING_CARDS':
+        case 'ASSIGN_ROLES':
+          next = 'NIGHT_FALL';
+          break;
+        case 'NIGHT_FALL':
+          next = 'NIGHT_BODYGUARD';
+          break;
+        case 'NIGHT_BODYGUARD':
+          next = 'NIGHT_WEREWOLF';
+          break;
+        case 'NIGHT_WEREWOLF':
+          next = 'NIGHT_SEER';
+          break;
+        case 'NIGHT_SEER':
+          next = 'DAY_ANNOUNCE';
+          break;
+        case 'DAY_ANNOUNCE':
+          next = 'DAY_DISCUSSION';
+          break;
+        case 'DAY_DISCUSSION':
+          next = 'DAY_VOTING';
+          break;
+        case 'DAY_VOTING': {
+          const resolution = resolveVoteTally(effectiveVoteTally, activePlayers);
+          if (resolution.outcome === 'EXECUTION' && resolution.condemnedId) {
+            setIsPeacefulTie(false);
+            setVerdictBanner(resolution.message);
+            setCondemnedPlayerId(resolution.condemnedId);
+            next = 'EXECUTION_PHASE';
+          } else {
+            werewolfAudio.playBell();
+            setIsPeacefulTie(true);
+            setVerdictBanner('Hòa phiếu / Chưa đủ phiếu - Ngày bình yên');
+            setCondemnedPlayerId(null);
+            next = 'NIGHT_FALL';
+          }
+          break;
+        }
+        case 'DAY_EXECUTION':
+        case 'EXECUTION_PHASE':
+          if (condemnedPlayerId) {
+            setExecutedIds((prev) => new Set([...prev, condemnedPlayerId]));
+          }
+          setCondemnedPlayerId(null);
+          next = 'NIGHT_FALL';
+          break;
+        default:
+          next = 'NIGHT_FALL';
+      }
+
+      const durSec = PHASE_DURATION_SEC[next] || 15;
+      setLocalPhase(next);
+      setLocalPhaseEndsAt(Date.now() + durSec * 1000);
+    },
+    [activePlayers, effectiveVoteTally]
+  );
+
+  // Automatic countdown trigger when in local fallback mode
+  useEffect(() => {
+    if (isServerDriving) return;
+    if (nowTick >= localPhaseEndsAt) {
+      advanceLocalFallbackPhase(localPhase);
+    }
+  }, [isServerDriving, nowTick, localPhaseEndsAt, localPhase, advanceLocalFallbackPhase]);
+
+  // Handler when player clicks "Đã hiểu" during READING_CARDS (30s) -> immediately transitions to NIGHT_FALL
+  const handleConfirmCardRead = useCallback(() => {
+    werewolfAudio.playCardDeal();
+    setIsCardInspecting(false);
+
+    if (isServerDriving) {
+      onEmitAction('card:confirmRead', {});
+    } else {
+      setLocalPhase('NIGHT_FALL');
+      setLocalPhaseEndsAt(Date.now() + 3000);
+    }
+  }, [isServerDriving, onEmitAction]);
+
+  const isReadingPhase = effectivePhase === 'READING_CARDS' || effectivePhase === 'ASSIGN_ROLES';
+  const isNight = isNightPhase(effectivePhase);
+  const isExecutionPhase = effectivePhase === 'EXECUTION_PHASE' || effectivePhase === 'DAY_EXECUTION';
+
+  const director = useGameLoopDirector({
+    phase: effectivePhase,
+    localPlayerId: localPlayer?.id,
+    localRole: myRole.roleId || myCurrentRole,
+    isAlive: localPlayer ? localPlayer.isAlive : true,
+    players: activePlayers,
+    eliminatedTonightFromServer: state.room?.eliminatedTonight,
+    wolfVotesFromServer: state.room?.wolfPack?.votes,
+    seerResultFromServer: state.seerResultModal,
+    isMicActive: isMicOn,
+    onEmitAction,
+  });
+
+  const canVote =
+    ((effectivePhase === 'DAY_VOTING' || effectivePhase === 'DAY_REVOTE') && !isExecutionPhase) ||
+    director.canInteractChair;
 
   const wolfTeammateIds = useMemo(() => {
     const set = new Set<string>();
@@ -295,21 +483,27 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
     return set;
   }, [state.room?.wolfPack?.teammates, seatRoles]);
 
-  // Player clicks an opponent seat or an engraved token in VotingTokenTray
+  // Player clicks an opponent seat during their night turn or day voting
   const handleCastVote = useCallback(
     (targetId: string) => {
       if (isExecutionPhase) return;
 
       if (isNight) {
+        if (!director.canInteractChair) return;
         setSelectedTargetId(targetId);
-        werewolfAudio.playVoteStamp();
-        if (targetId !== 'SKIP') {
-          onEmitAction('night:wolfVote', { targetId });
+        director.handleChairClick(targetId);
+
+        // If running local fallback, advance to next night role after 1.3s
+        if (!isServerDriving) {
+          setTimeout(() => {
+            advanceLocalFallbackPhase(localPhase);
+          }, 1300);
         }
         return;
       }
 
-      // Clicking the same opponent again retracts vote to SKIP; clicking another opponent casts/switches vote
+      if (effectivePhase !== 'DAY_VOTING' && effectivePhase !== 'DAY_REVOTE') return;
+
       const effectiveTarget = myVotedTargetId === targetId ? 'SKIP' : targetId;
 
       setSelectedTargetId(effectiveTarget === 'SKIP' ? null : effectiveTarget);
@@ -323,7 +517,7 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
           if (next[myVotedTargetId] === 0) delete next[myVotedTargetId];
         }
         if (effectiveTarget !== 'SKIP') {
-          next[effectiveTarget] = (next[effectiveTarget] || 0) + 1;
+          next[effectiveTarget] = (next[effectiveTarget] || 0) + 2;
         }
         return next;
       });
@@ -332,49 +526,19 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
       werewolfAudio.playVoteStamp();
       onEmitAction('day:vote', { targetId: effectiveTarget });
     },
-    [isExecutionPhase, isNight, myVotedTargetId, onEmitAction]
+    [
+      isExecutionPhase,
+      isNight,
+      director,
+      isServerDriving,
+      effectivePhase,
+      myVotedTargetId,
+      onEmitAction,
+      advanceLocalFallbackPhase,
+      localPhase,
+    ]
   );
 
-  // Resolve votes: Tie -> "Hòa phiếu - Ngày bình yên" | Unique Max -> EXECUTION_PHASE (HangingNooseEffect)
-  const handleFinalizeVoteVerdict = useCallback(
-    (overrideTally?: Record<string, number>) => {
-      if (isExecutionPhase) return;
-      const tallyToResolve = overrideTally || effectiveVoteTally;
-      const resolution = resolveVoteTally(tallyToResolve, activePlayers);
-
-      if (resolution.outcome === 'TIE_OR_PEACE' || !resolution.condemnedId) {
-        werewolfAudio.playBell();
-        setIsPeacefulTie(true);
-        setVerdictBanner('Hòa phiếu - Ngày bình yên');
-        setCondemnedPlayerId(null);
-        setLocalPhase('DAY_VOTING');
-      } else {
-        setIsPeacefulTie(false);
-        setVerdictBanner(resolution.message);
-        setCondemnedPlayerId(resolution.condemnedId);
-        setLocalPhase('EXECUTION_PHASE');
-      }
-    },
-    [activePlayers, effectiveVoteTally, isExecutionPhase]
-  );
-
-  // Quick helper to test tie-vote rule ("Hòa phiếu - Ngày bình yên")
-  const handleSimulateTieVote = useCallback(() => {
-    const aliveOpponents = activePlayers.filter((p) => p.isAlive && p.id !== localPlayer?.id);
-    if (aliveOpponents.length >= 2) {
-      const tiedTally: Record<string, number> = {
-        [aliveOpponents[0].id]: 3,
-        [aliveOpponents[1].id]: 3,
-      };
-      setLocalVoteTally(tiedTally);
-      setMyVotedTargetId(aliveOpponents[0].id);
-      handleFinalizeVoteVerdict(tiedTally);
-    } else {
-      handleFinalizeVoteVerdict({});
-    }
-  }, [activePlayers, handleFinalizeVoteVerdict, localPlayer?.id]);
-
-  // Called by HangingNooseEffect right as the rope settles at the neck -> character slumps & isAlive = false
   const handleExecuteSlump = useCallback((playerId: string) => {
     setExecutedIds((prev) => {
       const next = new Set(prev);
@@ -389,11 +553,14 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
   }, []);
 
   const handleExecutionComplete = useCallback(() => {
-    setLocalPhase('DAY_VOTING');
     setCondemnedPlayerId(null);
-  }, []);
+    if (!isServerDriving) {
+      setLocalPhase('NIGHT_FALL');
+      setLocalPhaseEndsAt(Date.now() + 3000);
+    }
+  }, [isServerDriving]);
 
-  // Keyboard shortcuts: [V] Dual Perspective, [C] Role Card Peek/Inspect, [Space] Skip Vote, [M]/[U] Audio
+  // Keyboard shortcuts: [V] Dual Perspective, [C] Role Card Inspect Any Time, [Space] Skip Vote, [M]/[U] Audio
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
@@ -424,8 +591,14 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleCastVote]);
 
-  // Diegetic 3D Table Plaque texts
-  const remainingSeconds = Math.max(0, Math.ceil(state.remainingMs ? state.remainingMs / 1000 : 45));
+  // Countdown calculation from Server NTP remainingMs or Local fallback timer
+  const remainingSeconds = useMemo(() => {
+    if (isServerDriving && state.room?.phaseEndsAt) {
+      return Math.max(0, Math.ceil((state.remainingMs || 0) / 1000));
+    }
+    return Math.max(0, Math.ceil((localPhaseEndsAt - nowTick) / 1000));
+  }, [isServerDriving, state.room?.phaseEndsAt, state.remainingMs, localPhaseEndsAt, nowTick]);
+
   const timerStr = `${String(Math.floor(remainingSeconds / 60)).padStart(2, '0')}:${String(
     remainingSeconds % 60
   ).padStart(2, '0')}`;
@@ -433,36 +606,45 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
   const diegeticPhaseTitle = useMemo(() => {
     if (isExecutionPhase) return 'XỬ TỬ TREO CỔ';
     if (isPeacefulTie) return 'NGÀY BÌNH YÊN';
-    if (effectivePhase === 'DEALING_CARDS') return 'PHÁT BÀI ĐỊNH MỆNH';
-    if (effectivePhase === 'NIGHT_FALL') return 'CẢ LÀNG ĐI NGỦ';
+    if (effectivePhase === 'READING_CARDS' || effectivePhase === 'ASSIGN_ROLES') return 'ĐỌC BÀI VAI TRÒ';
+    if (effectivePhase === 'NIGHT_FALL' || effectivePhase === 'NIGHT_START') return 'ĐÊM XUỐNG';
     if (effectivePhase === 'NIGHT_BODYGUARD' || effectivePhase === 'BODYGUARD_TURN') return 'BẢO VỆ THỨC DẬY';
-    if (effectivePhase === 'NIGHT_WEREWOLF' || effectivePhase === 'WEREWOLF_TURN' || effectivePhase === 'NIGHT_WEREWOLVES') return 'MA SÓI THỨC DẬY';
+    if (
+      effectivePhase === 'NIGHT_WEREWOLF' ||
+      effectivePhase === 'WEREWOLF_TURN' ||
+      effectivePhase === 'NIGHT_WEREWOLVES'
+    )
+      return 'MA SÓI THỨC DẬY';
     if (effectivePhase === 'NIGHT_SEER' || effectivePhase === 'SEER_TURN') return 'TIÊN TRI THỨC DẬY';
+    if (effectivePhase === 'CUPID_TURN') return 'THẦN TÌNH YÊU THỨC DẬY';
+    if (effectivePhase === 'WITCH_TURN') return 'PHÙ THỦY THỨC DẬY';
     if (effectivePhase === 'DAY_ANNOUNCE' || effectivePhase === 'DAY_ANNOUNCEMENT') return 'TRỜI SÁNG & CÔNG BỐ';
     if (effectivePhase === 'DAY_DISCUSSION') return 'THẢO LUẬN BAN NGÀY';
-    if (effectivePhase === 'DAY_VOTING') return 'BỎ PHIẾU TREO CỔ';
-    if (isNight) return 'ĐÊM BÓNG TỐI';
-    return 'HỘI ĐỒNG BỎ PHIẾU';
+    if (effectivePhase === 'DAY_VOTING' || effectivePhase === 'DAY_REVOTE') return 'BỎ PHIẾU TREO CỔ';
+    if (isNight) return 'ĐÊM XUỐNG';
+    return 'HỘI ĐỒNG PHÁN QUYẾT';
   }, [effectivePhase, isExecutionPhase, isNight, isPeacefulTie]);
 
   const diegeticSubtitle = useMemo(() => {
     if (verdictBanner) return verdictBanner;
     if (director.interactionPrompt) return director.interactionPrompt;
-    if (effectivePhase === 'DEALING_CARDS') return 'Lật xem vai trò • Sau đó bài nằm gọn vào rãnh khay gỗ';
-    if (isNight) return 'Cả làng gục đầu say ngủ • Sói thức giấc';
+    if (isReadingPhase) return 'Xem kỹ vai trò từ Database • Bấm "Đã hiểu" hoặc chờ hết giờ';
+    if (isNight) return 'Cả làng gục đầu say ngủ • Quản trò gọi từng vai thức dậy';
     if (myVotedTargetId && myVotedTargetId !== 'SKIP') {
       const target = activePlayers.find((p) => p.id === myVotedTargetId);
       if (target) {
         return `Đã chỉ định phiếu cho #${String(target.seat).padStart(2, '0')} ${target.nickname}`;
       }
     }
-    return 'Click ghế / tên đối thủ để tương tác • Click khay gỗ để xem bài';
-  }, [activePlayers, director.interactionPrompt, effectivePhase, isNight, myVotedTargetId, verdictBanner]);
+    return 'Click ghế đối thủ để bỏ phiếu • Click thẻ bài trong khay gỗ để xem lại vai trò';
+  }, [activePlayers, director.interactionPrompt, isReadingPhase, isNight, myVotedTargetId, verdictBanner]);
 
   const condemnedRole: Role = useMemo(() => {
     if (!condemnedPlayerId) return 'WEREWOLF';
+    const p = activePlayers.find((pl) => pl.id === condemnedPlayerId);
+    if (p?.revealedRole) return p.revealedRole;
     return seatRoles[condemnedPlayerId] || 'WEREWOLF';
-  }, [condemnedPlayerId, seatRoles]);
+  }, [activePlayers, condemnedPlayerId, seatRoles]);
 
   const handleSendChat = (e: React.FormEvent) => {
     e.preventDefault();
@@ -474,12 +656,13 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
   return (
     <div className="relative w-screen h-screen bg-[#040407] text-stone-200 overflow-hidden select-none">
       {/* ====================================================================
-          FULL-VIEWPORT 3D DARK NOIR PUB SCENE (DIEGETIC UI, ZERO CLUTTER)
+          FULL-VIEWPORT 3D DARK NOIR PUB SCENE (SERVER-AUTHORITATIVE FSM)
          ==================================================================== */}
       <GameScene3D
         players={activePlayers}
         localPlayerId={localPlayer?.id}
-        localRole={myCurrentRole}
+        myRole={myRole}
+        localRole={myRole.roleId || myCurrentRole}
         perspective={perspective}
         phase={effectivePhase}
         isNight={isNight}
@@ -490,12 +673,11 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
         dealTrigger={dealTrigger}
         hasDealtCards={hasDealtCards}
         isCardInspecting={isCardInspecting}
+        isReadingPhase={isReadingPhase}
         onToggleCardInspect={(next) =>
           setIsCardInspecting((prev) => (typeof next === 'boolean' ? next : !prev))
         }
-        onDealComplete={() => {
-          setLocalPhase((prev) => (prev === 'DEALING_CARDS' ? 'DAY_VOTING' : prev));
-        }}
+        onConfirmRead={handleConfirmCardRead}
         isExecutionPhase={isExecutionPhase}
         condemnedPlayerId={condemnedPlayerId}
         condemnedRole={condemnedRole}
@@ -513,16 +695,11 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
         seerPeekResult={director.seerPeekResult}
         speakingPlayerIds={director.speakingPlayerIds}
         eliminatedTonight={director.eliminatedTonight}
-        onCastVote={(targetId) => {
-          if (director.canInteractChair) {
-            director.handleChairClick(targetId);
-          }
-          handleCastVote(targetId);
-        }}
+        onCastVote={handleCastVote}
       />
 
       {/* ====================================================================
-          WHISPER-THIN PERIPHERAL CORNER MICRO-CONTROLS (NON-INTRUSIVE)
+          TOP-LEFT: PERIPHERAL CORNER MICRO-CONTROLS
          ==================================================================== */}
       <div className="absolute top-3 left-3 z-20 flex items-center gap-1.5 pointer-events-auto">
         <button
@@ -530,7 +707,7 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
           onClick={() => {
             window.location.href = '/';
           }}
-          className="h-8 px-2.5 rounded-full bg-black/50 hover:bg-black/80 backdrop-blur-sm border border-white/10 text-stone-400 hover:text-amber-200 text-[11px] font-mono transition cursor-pointer flex items-center gap-1"
+          className="h-8 px-2.5 rounded-full bg-black/55 hover:bg-black/80 backdrop-blur-sm border border-white/10 text-stone-400 hover:text-amber-200 text-[11px] font-mono transition cursor-pointer flex items-center gap-1"
           title="Rời bàn chơi"
         >
           <span>←</span>
@@ -545,7 +722,7 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
           }}
           className={`h-8 w-8 rounded-full backdrop-blur-sm border text-xs transition cursor-pointer flex items-center justify-center ${
             isMicOn
-              ? 'bg-black/50 border-emerald-500/40 text-emerald-300 hover:bg-emerald-950/60'
+              ? 'bg-black/55 border-emerald-500/40 text-emerald-300 hover:bg-emerald-950/60'
               : 'bg-red-950/60 border-red-500/40 text-red-300'
           }`}
           title="Bật / Tắt Mic [M]"
@@ -563,8 +740,8 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
           }}
           className={`h-8 w-8 rounded-full backdrop-blur-sm border text-xs transition cursor-pointer flex items-center justify-center ${
             isSpeakerOn
-              ? 'bg-black/50 border-amber-500/35 text-amber-300 hover:bg-amber-950/50'
-              : 'bg-black/50 border-white/10 text-stone-500'
+              ? 'bg-black/55 border-amber-500/35 text-amber-300 hover:bg-amber-950/50'
+              : 'bg-black/55 border-white/10 text-stone-500'
           }`}
           title="Bật / Tắt Âm thanh [U]"
         >
@@ -577,7 +754,7 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
           className={`h-8 px-2.5 rounded-full backdrop-blur-sm border text-[11px] font-mono transition cursor-pointer flex items-center gap-1 ${
             isChatDrawerOpen
               ? 'bg-amber-950/75 border-amber-400/60 text-amber-200'
-              : 'bg-black/50 border-white/10 text-stone-400 hover:text-stone-200'
+              : 'bg-black/55 border-white/10 text-stone-400 hover:text-stone-200'
           }`}
           title="Mở / Ẩn kênh thì thầm"
         >
@@ -586,90 +763,65 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
         </button>
       </div>
 
-      {/* Top-Right: Dual Perspective (1ST / 2ND [V]) & Subtle Noir Table Triggers */}
-      <div className="absolute top-3 right-3 z-20 flex items-center gap-1.5 pointer-events-auto flex-wrap justify-end">
-        {/* Phase / Mechanic Micro-Actions & 10-Phase Director Switcher */}
-        <div className="flex items-center gap-1 bg-black/50 backdrop-blur-sm px-1.5 py-1 rounded-full border border-white/10 flex-wrap">
-          <select
-            value={effectivePhase}
-            onChange={(e) => {
-              const val = e.target.value as LocalScenePhase;
-              setLocalPhase(val);
-              if (val === 'DEALING_CARDS') {
-                triggerDealCards(false);
-              } else if (val === 'NIGHT_FALL') {
-                werewolfAudio.playBell();
-              } else if (val === 'NIGHT_WEREWOLF') {
-                werewolfAudio.playWolfHowl();
-              } else if (val === 'DAY_ANNOUNCE') {
-                werewolfAudio.playBell();
-              } else if (val === 'EXECUTION_PHASE') {
-                handleFinalizeVoteVerdict();
-              }
-            }}
-            className="bg-black/70 text-amber-300 font-mono text-[10px] px-2 py-0.5 rounded border border-white/10 outline-none cursor-pointer"
-            title="Chuyển pha thử nghiệm 10 pha chuẩn FSM"
-          >
-            <option value="DEALING_CARDS">1. Phát Bài (ASSIGN)</option>
-            <option value="NIGHT_FALL">2. Cả Làng Ngủ (NIGHT_FALL)</option>
-            <option value="NIGHT_BODYGUARD">3. Bảo Vệ Thức Dậy</option>
-            <option value="NIGHT_WEREWOLF">4. Ma Sói Thức Dậy</option>
-            <option value="NIGHT_SEER">5. Tiên Tri Thức Dậy</option>
-            <option value="DAY_ANNOUNCE">6. Trời Sáng & Công Bố</option>
-            <option value="DAY_DISCUSSION">7. Thảo Luận 60s</option>
-            <option value="DAY_VOTING">8. Bỏ Phiếu Treo Cổ</option>
-            <option value="EXECUTION_PHASE">9. Xử Tử Treo Cổ</option>
-          </select>
-
-          <button
-            type="button"
-            onClick={() => triggerDealCards(true)}
-            className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold text-amber-300 hover:bg-amber-500/20 transition cursor-pointer"
-            title="Phát & lật bài Tarot đầu ván (DEALING_CARDS)"
-          >
-            Phát Bài
-          </button>
-
-          <button
-            type="button"
-            onClick={() => handleFinalizeVoteVerdict()}
-            disabled={isExecutionPhase}
-            className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold text-rose-300 hover:bg-rose-500/20 disabled:opacity-40 transition cursor-pointer"
-            title="Chốt kết quả bỏ phiếu: Hòa -> Ngày bình yên | Cao nhất duy nhất -> Treo cổ"
-          >
-            Chốt Phiếu
-          </button>
-
-          <button
-            type="button"
-            onClick={handleSimulateTieVote}
-            disabled={isExecutionPhase}
-            className="hidden sm:inline-block px-1.5 py-0.5 rounded-full text-[10px] font-mono text-emerald-300/90 hover:bg-emerald-500/20 disabled:opacity-40 transition cursor-pointer"
-            title="Thử trường hợp Hòa phiếu cao nhất -> Hòa phiếu - Ngày bình yên"
-          >
-            Hòa Phiếu
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              if (isNight) {
-                setLocalPhase('DAY_VOTING');
-                werewolfAudio.playBell();
-              } else {
-                setLocalPhase('NIGHT_FALL');
-                werewolfAudio.playWolfHowl();
-              }
-            }}
-            disabled={isExecutionPhase}
-            className="px-2 py-0.5 rounded-full text-[10px] font-mono text-stone-300 hover:bg-white/10 disabled:opacity-40 transition cursor-pointer"
-            title="Chuyển Ngày / Đêm"
-          >
-            {isNight ? '☀️ Ngày' : '🌙 Đêm'}
-          </button>
+      {/* ====================================================================
+          TOP-CENTER: SERVER-AUTHORITATIVE PHASE & COUNTDOWN BADGE
+          (Không còn bất kỳ dropdown menu thủ công nào)
+         ==================================================================== */}
+      <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 pointer-events-auto">
+        <div
+          className={`flex items-center gap-2.5 px-4 py-1.5 rounded-full backdrop-blur-md border shadow-2xl transition-colors ${
+            isExecutionPhase
+              ? 'bg-red-950/85 border-red-500/50 text-red-200'
+              : isNight
+              ? 'bg-slate-950/85 border-indigo-400/40 text-indigo-200'
+              : 'bg-black/75 border-amber-500/45 text-amber-200'
+          }`}
+        >
+          <span
+            className={`w-2 h-2 rounded-full animate-pulse ${
+              isExecutionPhase ? 'bg-red-400' : isNight ? 'bg-indigo-400' : 'bg-amber-400'
+            }`}
+          />
+          <span className="text-xs font-extrabold tracking-widest uppercase">
+            {diegeticPhaseTitle}:
+          </span>
+          <span className="font-mono text-xs font-black text-yellow-300">
+            {timerStr}s
+          </span>
         </div>
 
-        {/* 1ST / 2ND DUAL PERSPECTIVE SWITCHER ([V]) */}
+        {isReadingPhase && isCardInspecting && (
+          <button
+            type="button"
+            onClick={handleConfirmCardRead}
+            className="px-3 py-1.5 rounded-full bg-amber-400 hover:bg-amber-300 text-black font-extrabold text-[11px] uppercase tracking-wider shadow-lg transition cursor-pointer"
+          >
+            ✓ Đã hiểu
+          </button>
+        )}
+      </div>
+
+      {/* ====================================================================
+          TOP-RIGHT: 1ST / 2ND DUAL PERSPECTIVE SWITCHER ([V])
+         ==================================================================== */}
+      <div className="absolute top-3 right-3 z-20 flex items-center gap-1.5 pointer-events-auto">
+        <button
+          type="button"
+          onClick={() => {
+            setIsCardInspecting((prev) => !prev);
+            werewolfAudio.playCardDeal();
+          }}
+          className={`h-8 px-3 rounded-full backdrop-blur-sm border text-[11px] font-mono font-bold transition cursor-pointer flex items-center gap-1 ${
+            isCardInspecting
+              ? 'bg-amber-500/25 border-amber-400/60 text-amber-200'
+              : 'bg-black/55 border-white/15 text-stone-300 hover:text-amber-200'
+          }`}
+          title="Xem / Cất thẻ bài vai trò [Phím C]"
+        >
+          <span>🃏</span>
+          <span className="hidden sm:inline">{isCardInspecting ? 'Cất Bài' : 'Xem Bài'}</span>
+        </button>
+
         <div
           className="flex items-center bg-black/60 backdrop-blur-sm p-0.5 rounded-full border border-amber-500/30 shadow-lg"
           title="Đổi góc nhìn Camera [Phím V]"
@@ -706,14 +858,14 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
         </div>
       </div>
 
-      {/* Subtle Diegetic Center Verdict Toast (Peaceful Tie or Execution Verdict — pointer-events-none, auto-fades) */}
+      {/* Subtle Diegetic Center Verdict Toast */}
       {verdictBanner && (
-        <div className="absolute top-14 left-1/2 -translate-x-1/2 z-20 pointer-events-none px-4 py-1.5 rounded-full bg-black/70 backdrop-blur-sm border border-amber-400/35 text-xs font-serif tracking-wide text-amber-100 shadow-xl">
+        <div className="absolute top-14 left-1/2 -translate-x-1/2 z-20 pointer-events-none px-4 py-1.5 rounded-full bg-black/75 backdrop-blur-sm border border-amber-400/35 text-xs font-serif tracking-wide text-amber-100 shadow-xl">
           {verdictBanner}
         </div>
       )}
 
-      {/* Optional Slide-out Whisper Popover (Hidden by default so zero UI blocks the 3D scene) */}
+      {/* Optional Slide-out Whisper Popover */}
       {isChatDrawerOpen && (
         <div className="absolute top-13 left-3 z-30 w-64 bg-black/80 backdrop-blur-md p-2.5 rounded-xl border border-white/10 shadow-2xl pointer-events-auto">
           <div className="flex items-center justify-between gap-1 pb-1.5 mb-1.5 border-b border-white/10">
@@ -766,7 +918,7 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
         </div>
       )}
 
-      {/* Game Over Victory / Defeat Overlay (only when match concludes) */}
+      {/* Game Over Victory / Defeat Overlay */}
       {(effectivePhase === 'GAME_OVER' || Boolean(state.room?.winner)) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4">
           <div className="bg-[#0d0c10] border border-amber-500/40 rounded-2xl p-7 max-w-md w-full text-center shadow-2xl">

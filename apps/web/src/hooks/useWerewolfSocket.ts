@@ -3,9 +3,9 @@
  *
  * Tự động:
  * 1. Khởi tạo socket connection với JWT token.
- * 2. Lắng nghe và đồng bộ toàn bộ sự kiện S2C vào GameStateManager (Zustand).
- * 3. Chạy vòng lặp NTP Ping định kỳ 10 giây để giữ đồng hồ luôn đồng bộ chuẩn xác.
- * 4. Cung cấp các helper methods để UI gọi action chỉ với 1 dòng code.
+ * 2. Lắng nghe gói tin `ASSIGN_ROLE` ({ role: DBRoleData }) từ Database và cập nhật `myRole`.
+ * 3. Lắng nghe `PHASE_CHANGE` / `phase:changed` để đồng bộ vòng lặp Quản Trò tự động.
+ * 4. Chạy vòng lặp NTP Ping định kỳ 10 giây để giữ đồng hồ luôn đồng bộ chuẩn xác.
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
@@ -14,12 +14,12 @@ import {
   Ack,
   ChatChannel,
   ClientRoomView,
+  DBRoleData,
   PongPayload,
-  Role,
   ServerPacket,
+  Team,
 } from '@werewolf/shared';
 import { GameStateManager } from '../stores/game.store';
-
 import { AuthClient } from '../services/auth.client';
 
 export interface UseWerewolfSocketOptions {
@@ -55,9 +55,7 @@ export function useWerewolfSocket({
 
     socket.on('connect', () => {
       setIsConnected(true);
-      // Gửi ping đầu tiên ngay khi kết nối
       socket.emit('time:ping', { t0: Date.now() });
-      // Yêu cầu đồng bộ snapshot nếu đang ở trong phòng
       socket.emit('sync:request', {});
     });
 
@@ -70,12 +68,25 @@ export function useWerewolfSocket({
       store.setRoomSnapshot(p.data);
     });
 
+    // Chuẩn sự kiện nhận DBRoleData từ Database
+    socket.on(
+      'ASSIGN_ROLE',
+      (payload: { role: DBRoleData; team?: Team; teammates?: Array<{ id: string; nickname: string }> }) => {
+        store.setAssignedRole(payload);
+      }
+    );
+
     socket.on('role:assigned', (p: ServerPacket<any>) => {
       store.setAssignedRole(p.data);
     });
 
     socket.on('room:deal_started', (p?: { duration?: number }) => {
-      store.triggerDealingAnimation(p?.duration || 5000);
+      store.triggerDealingAnimation(p?.duration || 30000);
+    });
+
+    // Chuẩn sự kiện chuyển pha tự động từ Quản Trò (Server-Authoritative FSM)
+    socket.on('PHASE_CHANGE', (payload: { phase: any; round?: number; phaseEndsAt: number | null }) => {
+      store.updatePhase(payload.phase, payload.phaseEndsAt);
     });
 
     socket.on('phase:changed', (p: ServerPacket<{ phase: any; phaseEndsAt: number | null }>) => {
@@ -98,13 +109,12 @@ export function useWerewolfSocket({
       store.handleTimePong(pong);
     });
 
-    socket.on('game:over', (p: ServerPacket<any>) => {
+    socket.on('game:over', () => {
       if (store.getState().room) {
         store.updatePhase('GAME_OVER', null);
       }
     });
 
-    // Định kỳ gửi time:ping mỗi 10 giây để duy trì NTP clock sync
     const pingInterval = setInterval(() => {
       if (socket.connected) {
         socket.emit('time:ping', { t0: Date.now() });

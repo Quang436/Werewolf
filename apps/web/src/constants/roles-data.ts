@@ -117,7 +117,7 @@ export const ALL_40_ROLES: RoleCatalogItem[] = [
     time: 'Bị Động',
     badge: 'Khóa Sói 1 Đêm',
     desc: 'Nếu bị Ma Sói cắn, bầy Sói bị lây bệnh hiểm nghèo và mất lượt cắn ở đêm kế tiếp.',
-    image: '/assets/cards/card_7.png',
+    image: '/images/roles/diseased.png',
   },
   {
     role: 'AURA_SEER',
@@ -443,7 +443,7 @@ export const ALL_40_ROLES: RoleCatalogItem[] = [
     time: 'Mỗi Đêm',
     badge: 'Cắn Đêm',
     desc: 'Cùng đàn sói thức dậy mỗi đêm đồng thuận bỏ phiếu cắn 1 người dân làng.',
-    image: '/assets/cards/card_30.png',
+    image: '/images/roles/werewolf.png',
   },
   {
     role: 'SORCERESS',

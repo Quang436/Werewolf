@@ -1,27 +1,23 @@
 /**
- * GameLoopService — Bộ điều phối chuyển pha (State Transition Handler).
+ * GameLoopService — Bộ điều phối chuyển pha tự động (Server-Authoritative FSM).
  *
  * Chịu trách nhiệm:
- * 1. Phân chia vai trò ngẫu nhiên bằng crypto.randomInt (Fisher-Yates shuffle) và xáo ghế khi bắt đầu game.
- * 2. Điều phối chuyển đổi pha (State Transitions) theo đúng Finite State Machine (RULEBOOK / FSM).
- * 3. Chạy các engine tính toán nghiệp vụ tại các pha chuyển giao (NightResolver, WinChecker).
- * 4. Kiểm soát phân tán (Distributed Concurrency):
- *    - Sử dụng Redis Lock ngăn chặn race condition khi nhiều timer / request cùng kích hoạt.
- *    - Kiểm tra `stateVersion` trước khi cập nhật.
- * 5. Lập lịch Timer chuyển pha chính xác bằng Timestamp tuyệt đối `phaseEndsAt`.
+ * 1. Phân chia vai trò ngẫu nhiên bằng crypto.randomInt (Fisher-Yates shuffle) và truy vấn DBRoleData từ Database.
+ * 2. Gửi gói tin bảo mật `ASSIGN_ROLE` ({ role: DBRoleData }) riêng cho từng Socket client.
+ * 3. Điều phối vòng lặp Quản Trò tự động hoàn toàn:
+ *    READING_CARDS (30s) -> NIGHT_FALL (3s) -> CALL_ROLES_QUEUE -> DAY_ANNOUNCE -> DAY_DISCUSSION -> DAY_VOTING -> DAY_EXECUTION.
+ * 4. Kiểm soát phân tán (Distributed Concurrency) qua Redis Lock và `stateVersion`.
  */
 
 import crypto from 'node:crypto';
 import {
-  FIRST_NIGHT_TURNS,
+  getDBRoleData,
   NightResolver,
-  NIGHT_TURNS,
   Phase,
   Role,
   ROLE_TEAM,
   RoomProjector,
   RoomState,
-  TimerSchedulerHelper,
   WinChecker,
 } from '@werewolf/shared';
 import { RedisStoreAdapter } from './game-room.manager';
@@ -39,6 +35,17 @@ export interface TimerScheduler {
   scheduleTimer(roomId: string, stateVersion: number, phase: Phase, phaseEndsAt: number): Promise<void>;
 }
 
+const COUNCIL_BOT_PROFILES = [
+  { idSuffix: 'p1', nickname: 'Bác Sĩ' },
+  { idSuffix: 'p2', nickname: 'LordVader' },
+  { idSuffix: 'p3', nickname: 'Xemesis' },
+  { idSuffix: 'p4', nickname: 'Quản Trò' },
+  { idSuffix: 'p5', nickname: 'PewPew' },
+  { idSuffix: 'p6', nickname: 'Độ Mixi' },
+  { idSuffix: 'p7', nickname: 'Mặt Nạ' },
+  { idSuffix: 'p8', nickname: 'Kẻ Lạ Mặt' },
+];
+
 export class GameLoopService {
   private timerScheduler: TimerScheduler | null = null;
 
@@ -52,7 +59,7 @@ export class GameLoopService {
   }
 
   /**
-   * Bắt đầu ván đấu (Start Game)
+   * Bắt đầu ván đấu chuẩn (Start Game)
    */
   public async startGame(roomId: string, hostUserId: string): Promise<RoomState> {
     const lockToken = await this.redis.acquireLock(roomId, 3000);
@@ -69,67 +76,12 @@ export class GameLoopService {
         throw new Error(`PLAYER_COUNT_MUST_BE_BETWEEN_${room.settings.minPlayers}_AND_${room.settings.maxPlayers}`);
       }
 
-      // Kiểm tra tổng số lượng role cấu hình
-      let totalAssignedRoles = 0;
-      const rolePool: Role[] = [];
-      for (const [r, count] of Object.entries(room.settings.roleConfig || {})) {
-        totalAssignedRoles += count;
-        for (let i = 0; i < count; i++) {
-          rolePool.push(r as Role);
-        }
-      }
-
-      // Nếu phòng chưa cấu hình thủ công -> Tự động sinh bộ bài cân bằng chuẩn
-      if (totalAssignedRoles === 0) {
-        const autoRoles = this.generateAutoBalancedRoles(playerCount);
-        rolePool.push(...autoRoles);
-        totalAssignedRoles = rolePool.length;
-      }
-
-      if (totalAssignedRoles !== playerCount) {
-        throw new Error(`TOTAL_ROLES_CONFIGURED_(${totalAssignedRoles})_MUST_MATCH_PLAYER_COUNT_(${playerCount})`);
-      }
-
-      // Fisher-Yates Shuffle bằng crypto.randomInt an toàn
-      for (let i = rolePool.length - 1; i > 0; i--) {
-        const j = crypto.randomInt(0, i + 1);
-        [rolePool[i], rolePool[j]] = [rolePool[j], rolePool[i]];
-      }
-
-      // Xáo trộn số ghế ngồi (Seats) để ngăn chặn suy đoán qua thứ tự vào phòng
-      const seats = Array.from({ length: playerCount }, (_, i) => i + 1);
-      for (let i = seats.length - 1; i > 0; i--) {
-        const j = crypto.randomInt(0, i + 1);
-        [seats[i], seats[j]] = [seats[j], seats[i]];
-      }
-
-      // Gán vai và ghế cho từng người chơi
-      room.players.forEach((player, idx) => {
-        const role = rolePool[idx];
-        player.seat = seats[idx];
-        player.role = role;
-        player.team = ROLE_TEAM[role];
-        player.isAlive = true;
-        player.roleState = {
-          lastProtectedId: null,
-          hasHealPotion: true,
-          hasPoisonPotion: true,
-          seerResults: [],
-          hasShot: false,
-        };
-      });
-
-      // Chuyển sang pha ASSIGN_ROLES (cho người chơi xem vai 8 giây)
-      room.phase = 'ASSIGN_ROLES';
-      room.round = 1;
-      room.stateVersion++;
-      room.phaseStartedAt = Date.now();
-      room.phaseEndsAt = Date.now() + room.settings.durations.assignRoles * 1000;
+      await this.assignRolesAndInitializeMatch(room, 'ASSIGN_ROLES', room.settings.durations.assignRoles);
 
       await this.redis.setRoom(room);
 
-      // Gửi role bí mật riêng cho từng client
-      this.dispatchRoleAssignedEvents(room);
+      await this.dispatchRoleAssignedEvents(room);
+      this.emitPhaseChangeEvents(room);
       this.broadcastRoomSnapshot(room);
 
       if (room.phaseEndsAt && this.timerScheduler) {
@@ -140,6 +92,163 @@ export class GameLoopService {
     } finally {
       await this.redis.releaseLock(roomId, lockToken);
     }
+  }
+
+  /**
+   * Tự động khởi chạy bàn chơi 3D (Server-Authoritative):
+   * Lấp đầy các ghế trống bằng NPC nếu chưa đủ người, truy vấn Role từ Database,
+   * gửi ASSIGN_ROLE cho từng client và bắt đầu pha READING_CARDS (30s).
+   */
+  public async startAutoTableGame(roomId: string): Promise<RoomState> {
+    const lockToken = await this.redis.acquireLock(roomId, 3000);
+    if (!lockToken) throw new Error('ROOM_LOCKED');
+
+    try {
+      const room = await this.redis.getRoom(roomId);
+      if (!room) throw new Error('ROOM_NOT_FOUND');
+
+      // Nếu ván đấu đã đang diễn ra -> chỉ gửi lại ASSIGN_ROLE và snapshot cho các người chơi
+      if (room.phase !== 'LOBBY' && room.phase !== 'GAME_OVER') {
+        await this.dispatchRoleAssignedEvents(room);
+        this.emitPhaseChangeEvents(room);
+        this.broadcastRoomSnapshot(room);
+        return room;
+      }
+
+      // Giữ lại người chơi thật và điền thêm NPC vào bàn tròn cho đủ 8 ghế
+      const realPlayers = room.players.filter((p) => !p.id.startsWith('bot_'));
+      const targetSeats = Math.max(8, realPlayers.length);
+      const usedSeats = new Set<number>();
+
+      realPlayers.forEach((p, idx) => {
+        if (!p.seat || usedSeats.has(p.seat)) {
+          p.seat = idx + 1;
+        }
+        usedSeats.add(p.seat);
+      });
+
+      const mergedPlayers = [...realPlayers];
+      let botIdx = 0;
+      for (let seatNum = 1; seatNum <= targetSeats; seatNum++) {
+        if (mergedPlayers.length >= targetSeats) break;
+        if (usedSeats.has(seatNum)) continue;
+        const profile = COUNCIL_BOT_PROFILES[botIdx % COUNCIL_BOT_PROFILES.length];
+        botIdx++;
+        mergedPlayers.push({
+          id: `bot_${seatNum}_${profile.idSuffix}`,
+          seat: seatNum,
+          nickname: profile.nickname,
+          avatarUrl: null,
+          isAlive: true,
+          connection: 'ONLINE',
+          disconnectedAt: null,
+          ready: true,
+          role: null,
+          team: null,
+          loverId: null,
+          deathInfo: null,
+          roleState: {
+            lastProtectedId: null,
+            hasHealPotion: true,
+            hasPoisonPotion: true,
+            seerResults: [],
+            hasShot: false,
+          },
+        });
+        usedSeats.add(seatNum);
+      }
+
+      room.players = mergedPlayers.sort((a, b) => a.seat - b.seat);
+
+      const readingDurationSec = room.settings.durations.readingCards || 20;
+      await this.assignRolesAndInitializeMatch(room, 'READING_CARDS', readingDurationSec);
+
+      await this.redis.setRoom(room);
+
+      await this.dispatchRoleAssignedEvents(room);
+      this.emitPhaseChangeEvents(room);
+      this.broadcastRoomSnapshot(room);
+
+      if (room.phaseEndsAt && this.timerScheduler) {
+        await this.timerScheduler.scheduleTimer(room.id, room.stateVersion, room.phase, room.phaseEndsAt);
+      }
+
+      return room;
+    } finally {
+      await this.redis.releaseLock(roomId, lockToken);
+    }
+  }
+
+  /**
+   * Khi người chơi bấm "Đã hiểu" trên thẻ bài trong pha READING_CARDS -> chuyển ngay sang NIGHT_FALL
+   */
+  public async confirmCardRead(roomId: string): Promise<RoomState | null> {
+    const room = await this.redis.getRoom(roomId);
+    if (!room) return null;
+    if (room.phase === 'READING_CARDS' || room.phase === 'ASSIGN_ROLES') {
+      return this.transition(roomId, 'NIGHT_FALL');
+    }
+    return room;
+  }
+
+  /**
+   * Chia vai trò ngẫu nhiên và thiết lập thông số đầu ván
+   */
+  private async assignRolesAndInitializeMatch(
+    room: RoomState,
+    initialPhase: Phase,
+    durationSec: number
+  ): Promise<void> {
+    const playerCount = room.players.length;
+    let totalAssignedRoles = 0;
+    const rolePool: Role[] = [];
+
+    for (const [r, count] of Object.entries(room.settings.roleConfig || {})) {
+      totalAssignedRoles += count;
+      for (let i = 0; i < count; i++) {
+        rolePool.push(r as Role);
+      }
+    }
+
+    if (totalAssignedRoles !== playerCount) {
+      rolePool.length = 0;
+      const autoRoles = this.generateAutoBalancedRoles(playerCount);
+      rolePool.push(...autoRoles);
+    }
+
+    // Fisher-Yates Shuffle bằng crypto.randomInt
+    for (let i = rolePool.length - 1; i > 0; i--) {
+      const j = crypto.randomInt(0, i + 1);
+      [rolePool[i], rolePool[j]] = [rolePool[j], rolePool[i]];
+    }
+
+    // Gán vai cho từng người chơi
+    room.players.forEach((player, idx) => {
+      const role = rolePool[idx];
+      player.seat = idx + 1;
+      player.role = role;
+      player.team = ROLE_TEAM[role];
+      player.isAlive = true;
+      player.deathInfo = null;
+      player.loverId = null;
+      player.roleState = {
+        lastProtectedId: null,
+        hasHealPotion: true,
+        hasPoisonPotion: true,
+        seerResults: [],
+        hasShot: false,
+      };
+    });
+
+    room.phase = initialPhase;
+    room.round = 1;
+    room.winner = null;
+    room.lovers = null;
+    room.pendingTriggers = [];
+    room.history = [];
+    room.stateVersion++;
+    room.phaseStartedAt = Date.now();
+    room.phaseEndsAt = Date.now() + durationSec * 1000;
   }
 
   /**
@@ -162,6 +271,7 @@ export class GameLoopService {
       await this.handlePhaseEntry(room, prevPhase, targetPhase);
 
       await this.redis.setRoom(room);
+      this.emitPhaseChangeEvents(room);
       this.broadcastRoomSnapshot(room);
 
       if (room.phaseEndsAt && this.timerScheduler) {
@@ -175,17 +285,40 @@ export class GameLoopService {
   }
 
   /**
+   * Phát sự kiện đồng bộ chuyển pha cho toàn bộ client
+   */
+  private emitPhaseChangeEvents(room: RoomState): void {
+    const payload = {
+      phase: room.phase,
+      round: room.round,
+      phaseEndsAt: room.phaseEndsAt,
+      durationMs: room.phaseEndsAt ? Math.max(0, room.phaseEndsAt - Date.now()) : 0,
+    };
+    this.broadcaster.emitToRoom(room.id, 'PHASE_CHANGE', payload);
+    this.broadcaster.emitToRoom(room.id, 'phase:changed', {
+      v: room.stateVersion,
+      ts: Date.now(),
+      data: payload,
+    });
+  }
+
+  /**
    * Xử lý Side-Effects và thời lượng khi bước vào pha mới
    */
   private async handlePhaseEntry(room: RoomState, from: Phase, to: Phase): Promise<void> {
     const d = room.settings.durations;
 
     switch (to) {
+      case 'READING_CARDS': {
+        const dur = d.readingCards || 30;
+        room.phaseEndsAt = Date.now() + dur * 1000;
+        break;
+      }
+
       case 'NIGHT_FALL':
       case 'NIGHT_START': {
         const durationSec = to === 'NIGHT_FALL' ? (d.nightFall || 3) : d.nightStart;
         room.phaseEndsAt = Date.now() + durationSec * 1000;
-        // Reset bảng hành động đêm
         room.night = {
           bodyguardTarget: null,
           wolfVotes: {},
@@ -204,7 +337,7 @@ export class GameLoopService {
 
       case 'CUPID_TURN': {
         const aliveCupid = room.players.find((p) => p.role === 'CUPID' && p.isAlive);
-        if (aliveCupid) {
+        if (aliveCupid && !aliveCupid.id.startsWith('bot_')) {
           room.phaseEndsAt = Date.now() + d.cupid * 1000;
           this.broadcaster.emitToUser(aliveCupid.id, 'YOUR_TURN_ACTION', {
             phase: to,
@@ -236,12 +369,11 @@ export class GameLoopService {
       case 'CULT_LEADER_TURN':
       case 'VAMPIRE_TURN':
       case 'DRUNK_TURN': {
-        // Tìm vai trò tương ứng với pha
         const step = [...NightQueueManager.FIRST_NIGHT_STEPS, ...NightQueueManager.RECURRING_STEPS].find(
           (s) => s.phase === to
         );
         const alivePlayer = step ? room.players.find((p) => p.role === step.role && p.isAlive) : null;
-        if (alivePlayer && step) {
+        if (alivePlayer && step && !alivePlayer.id.startsWith('bot_')) {
           const duration = step.defaultDurationSec;
           room.phaseEndsAt = Date.now() + duration * 1000;
           const validTargets = room.players
@@ -256,7 +388,6 @@ export class GameLoopService {
             timeoutMs: duration * 1000,
           });
         } else {
-          // Fake delay 4-7s để đối phương không đoán được
           room.phaseEndsAt = Date.now() + NightQueueManager.getRandomFakeDelaySec() * 1000;
         }
         break;
@@ -265,7 +396,7 @@ export class GameLoopService {
       case 'NIGHT_BODYGUARD':
       case 'BODYGUARD_TURN': {
         const aliveBodyguard = room.players.find((p) => p.role === 'BODYGUARD' && p.isAlive);
-        if (aliveBodyguard) {
+        if (aliveBodyguard && !aliveBodyguard.id.startsWith('bot_')) {
           room.phaseEndsAt = Date.now() + d.bodyguard * 1000;
           const validTargets = room.players
             .filter((p) => p.isAlive && p.id !== aliveBodyguard.roleState?.lastProtectedId)
@@ -279,7 +410,6 @@ export class GameLoopService {
             timeoutMs: d.bodyguard * 1000,
           });
         } else {
-          // Fake delay ngẫu nhiên 4-7s nếu Bảo Vệ đã chết/không có để đối phương không đoán được
           room.phaseEndsAt = Date.now() + NightQueueManager.getRandomFakeDelaySec() * 1000;
         }
         break;
@@ -287,13 +417,14 @@ export class GameLoopService {
 
       case 'NIGHT_WEREWOLF':
       case 'WEREWOLF_TURN': {
-        room.phaseEndsAt = Date.now() + d.werewolf * 1000;
         const aliveWolves = room.players.filter((p) => p.team === 'WEREWOLF' && p.isAlive);
+        const hasHumanWolf = aliveWolves.some((w) => !w.id.startsWith('bot_'));
         const validVictims = room.players
           .filter((p) => p.isAlive && p.team !== 'WEREWOLF')
           .map((p) => ({ id: p.id, nickname: p.nickname, seat: p.seat }));
 
-        if (aliveWolves.length > 0) {
+        if (aliveWolves.length > 0 && hasHumanWolf) {
+          room.phaseEndsAt = Date.now() + d.werewolf * 1000;
           for (const wolf of aliveWolves) {
             this.broadcaster.emitToUser(wolf.id, 'YOUR_TURN_ACTION', {
               phase: to,
@@ -312,7 +443,7 @@ export class GameLoopService {
 
       case 'WITCH_TURN': {
         const aliveWitch = room.players.find((p) => p.role === 'WITCH' && p.isAlive);
-        if (aliveWitch) {
+        if (aliveWitch && !aliveWitch.id.startsWith('bot_')) {
           room.phaseEndsAt = Date.now() + d.witch * 1000;
           this.broadcaster.emitToUser(aliveWitch.id, 'YOUR_TURN_ACTION', {
             phase: to,
@@ -331,7 +462,7 @@ export class GameLoopService {
       case 'NIGHT_SEER':
       case 'SEER_TURN': {
         const aliveSeer = room.players.find((p) => (p.role === 'SEER' || p.role === 'AURA_SEER') && p.isAlive);
-        if (aliveSeer) {
+        if (aliveSeer && !aliveSeer.id.startsWith('bot_')) {
           room.phaseEndsAt = Date.now() + d.seer * 1000;
           const validTargets = room.players
             .filter((p) => p.isAlive && p.id !== aliveSeer.id)
@@ -345,17 +476,14 @@ export class GameLoopService {
             timeoutMs: d.seer * 1000,
           });
         } else {
-          // Fake delay 4-7s nếu Tiên Tri đã chết/không có
           room.phaseEndsAt = Date.now() + NightQueueManager.getRandomFakeDelaySec() * 1000;
         }
         break;
       }
 
       case 'NIGHT_RESOLVE': {
-        // Pha tính toán nội bộ tức thì của Server
         room.phaseEndsAt = null;
 
-        // Xử lý wolfTarget từ wolfVotes nếu chưa chọn
         if (!room.night.wolfTarget && Object.keys(room.night.wolfVotes).length > 0) {
           const tally: Record<string, number> = {};
           for (const targetId of Object.values(room.night.wolfVotes)) {
@@ -382,7 +510,6 @@ export class GameLoopService {
           lovers: room.lovers,
         });
 
-        // Áp dụng cái chết cho người chơi
         const deadIds = new Set(resolution.deaths.map((d) => d.playerId));
         for (const p of room.players) {
           if (deadIds.has(p.id)) {
@@ -395,10 +522,8 @@ export class GameLoopService {
           }
         }
 
-        // Cập nhật pending triggers (Thợ Săn)
         room.pendingTriggers.push(...resolution.pendingTriggers);
 
-        // Ghi lịch sử ván đấu
         room.history.push({
           round: room.round,
           type: 'NIGHT_RESULT',
@@ -406,7 +531,6 @@ export class GameLoopService {
           deaths: resolution.deaths.map((d) => ({ playerId: d.playerId, cause: d.cause })),
         });
 
-        // Chuyển tiếp ngay sang DAY_ANNOUNCE / DAY_ANNOUNCEMENT
         const nextDayPhase: Phase = from === 'NIGHT_SEER' ? 'DAY_ANNOUNCE' : 'DAY_ANNOUNCEMENT';
         room.phase = nextDayPhase;
         const announceDuration = nextDayPhase === 'DAY_ANNOUNCE' ? (d.dayAnnounce || 7) : d.announcement;
@@ -428,7 +552,6 @@ export class GameLoopService {
 
       case 'CHECK_WIN_CONDITION':
       case 'CHECK_WIN': {
-        // Kiểm tra điều kiện thắng tức thì
         room.phaseEndsAt = null;
         const winResult = WinChecker.check({
           players: room.players,
@@ -443,11 +566,9 @@ export class GameLoopService {
             console.error('[Database Error] Failed to persist match history:', err)
           );
         } else {
-          // Chưa có phe thắng -> đi tiếp theo ngữ cảnh
           if (room.afterCheckWin === 'DAY') {
             room.phase = 'DAY_DISCUSSION';
             room.phaseEndsAt = Date.now() + d.discussion * 1000;
-            // Reset state biểu quyết ngày
             room.day = {
               votes: {},
               revoteCandidates: null,
@@ -457,7 +578,6 @@ export class GameLoopService {
               judgment: {},
             };
           } else {
-            // Vừa xong phiên treo cổ ban ngày -> Chuyển sang đêm tiếp theo
             room.round++;
             const nextNightPhase: Phase = to === 'CHECK_WIN_CONDITION' ? 'NIGHT_FALL' : 'NIGHT_START';
             room.phase = nextNightPhase;
@@ -483,9 +603,12 @@ export class GameLoopService {
         break;
       }
 
-      case 'DAY_DISCUSSION':
-        room.phaseEndsAt = Date.now() + d.discussion * 1000;
+      case 'DAY_DISCUSSION': {
+        const hasBots = room.players.some((p) => p.id.startsWith('bot_'));
+        const discDur = hasBots ? Math.min(d.discussion, 20) : d.discussion;
+        room.phaseEndsAt = Date.now() + discDur * 1000;
         break;
+      }
 
       case 'DAY_VOTING':
         room.phaseEndsAt = Date.now() + d.voting * 1000;
@@ -520,26 +643,22 @@ export class GameLoopService {
 
         if (maxVotes > 0 && maxVotes > skipCount) {
           if (candidatesWithMaxVotes.length === 1) {
-            // Duy nhất 1 người có phiếu cao nhất -> Đưa lên bục biện hộ
             room.day.accusedId = candidatesWithMaxVotes[0];
             room.phase = 'DAY_DEFENSE';
             room.phaseEndsAt = Date.now() + d.defense * 1000;
           } else if (room.day.revoteCount === 0) {
-            // Hòa lần 1 -> Bỏ phiếu lại (Revote) giữa các ứng viên hòa
             room.day.revoteCandidates = candidatesWithMaxVotes;
             room.day.revoteCount = 1;
             room.day.votes = {};
             room.phase = 'DAY_REVOTE';
             room.phaseEndsAt = Date.now() + d.revote * 1000;
           } else {
-            // Hòa lần 2 -> Không ai bị treo cổ, chuyển sang đêm tiếp theo
             room.day.accusedId = null;
             room.afterCheckWin = 'NIGHT';
             room.phase = 'CHECK_WIN';
             await this.handlePhaseEntry(room, 'VOTE_RESOLVE', 'CHECK_WIN');
           }
         } else {
-          // Bỏ qua nhiều hơn hoặc không ai bị vote -> Không ai bị treo cổ
           room.day.accusedId = null;
           room.afterCheckWin = 'NIGHT';
           room.phase = 'CHECK_WIN';
@@ -560,7 +679,6 @@ export class GameLoopService {
         room.phaseEndsAt = Date.now() + d.execution * 1000;
         room.afterCheckWin = 'NIGHT';
 
-        // Nếu chưa có accusedId (chuyển thẳng từ DAY_VOTING), tự kiểm tra tally phiếu
         if (!room.day.accusedId && Object.keys(room.day.votes).length > 0) {
           const tally: Record<string, number> = {};
           for (const targetId of Object.values(room.day.votes)) {
@@ -582,7 +700,6 @@ export class GameLoopService {
           if (topCandidates.length === 1 && maxVotes > 0) {
             room.day.accusedId = topCandidates[0];
           } else {
-            // Hòa phiếu hoặc không ai bị vote -> không ai bị treo cổ
             room.day.accusedId = null;
           }
         }
@@ -590,13 +707,17 @@ export class GameLoopService {
         if (room.day.accusedId) {
           const accused = room.players.find((p) => p.id === room.day.accusedId);
           if (accused && accused.isAlive) {
+            // Hoàng tử (PRINCE) lật bài thoát chết
+            if (accused.role === 'PRINCE') {
+              break;
+            }
+
             accused.isAlive = false;
             accused.deathInfo = {
               round: room.round,
               cause: 'EXECUTION',
             };
 
-            // Chuỗi chết cặp đôi tình nhân Cupid
             if (room.lovers && (room.lovers[0] === accused.id || room.lovers[1] === accused.id)) {
               const otherId = room.lovers[0] === accused.id ? room.lovers[1] : room.lovers[0];
               const lover = room.players.find((p) => p.id === otherId);
@@ -609,7 +730,6 @@ export class GameLoopService {
               }
             }
 
-            // Kích hoạt Thợ Săn bắn báo thù khi bị treo cổ
             if (accused.role === 'HUNTER' && !accused.roleState.hasShot) {
               room.pendingTriggers.push({
                 kind: 'HUNTER_SHOT',
@@ -632,6 +752,7 @@ export class GameLoopService {
    */
   public broadcastRoomSnapshot(room: RoomState): void {
     for (const player of room.players) {
+      if (player.id.startsWith('bot_')) continue;
       try {
         const maskedView = RoomProjector.projectFor(player.id, room);
         this.broadcaster.emitToUser(player.id, 'state:snapshot', {
@@ -646,21 +767,34 @@ export class GameLoopService {
   }
 
   /**
-   * Phát vai bí mật riêng từng socket khi bắt đầu
+   * Truy vấn Database và gửi gói tin bảo mật `ASSIGN_ROLE` ({ role: DBRoleData }) riêng cho từng client
    */
-  private dispatchRoleAssignedEvents(room: RoomState): void {
+  public async dispatchRoleAssignedEvents(room: RoomState): Promise<void> {
+    const db = DatabaseService.getInstance();
     const wolves = room.players
       .filter((p) => p.team === 'WEREWOLF')
       .map((p) => ({ id: p.id, nickname: p.nickname }));
 
     for (const player of room.players) {
-      if (!player.role || !player.team) continue;
+      if (player.id.startsWith('bot_') || !player.role || !player.team) continue;
+
+      const dbRoleData = (await db.getRoleById(player.role)) || getDBRoleData(player.role);
+
+      // 1. Emit gói tin chuẩn `ASSIGN_ROLE` với chi tiết DBRoleData từ Database
+      this.broadcaster.emitToUser(player.id, 'ASSIGN_ROLE', {
+        role: dbRoleData,
+        team: player.team,
+        ...(player.team === 'WEREWOLF' ? { teammates: wolves } : {}),
+      });
+
+      // 2. Emit `role:assigned` tương thích ngược
       this.broadcaster.emitToUser(player.id, 'role:assigned', {
         v: room.stateVersion,
         ts: Date.now(),
         data: {
           role: player.role,
           team: player.team,
+          roleData: dbRoleData,
           ...(player.team === 'WEREWOLF' ? { teammates: wolves } : {}),
         },
       });
@@ -719,7 +853,6 @@ export class GameLoopService {
       playerStats,
     });
 
-    // Phát sự kiện thông báo game kết thúc kèm bảng điểm vinh danh
     this.broadcaster.emitToRoom(room.id, 'game:over', {
       winner: room.winner,
       players: playerReveals,
@@ -734,7 +867,7 @@ export class GameLoopService {
     const count = Math.max(4, Math.min(18, playerCount));
     if (count === 4) return ['WEREWOLF', 'SEER', 'BODYGUARD', 'VILLAGER'];
     if (count === 6) return ['WEREWOLF', 'MINION', 'SEER', 'BODYGUARD', 'HUNTER', 'VILLAGER'];
-    if (count === 8) return ['WEREWOLF', 'WEREWOLF', 'SEER', 'BODYGUARD', 'WITCH', 'HUNTER', 'VILLAGER', 'VILLAGER'];
+    if (count === 8) return ['WEREWOLF', 'WEREWOLF', 'SEER', 'BODYGUARD', 'WITCH', 'HUNTER', 'CUPID', 'VILLAGER'];
     if (count === 10) return ['WEREWOLF', 'WEREWOLF', 'WOLF_CUB', 'SEER', 'BODYGUARD', 'WITCH', 'HUNTER', 'CUPID', 'VILLAGER', 'VILLAGER'];
     if (count === 12) return ['WEREWOLF', 'WEREWOLF', 'BIG_BAD_WOLF', 'SEER', 'BODYGUARD', 'WITCH', 'HUNTER', 'CUPID', 'MAYOR', 'TANNER', 'VILLAGER', 'VILLAGER'];
 
@@ -759,4 +892,3 @@ export class GameLoopService {
     return deck.slice(0, count);
   }
 }
-

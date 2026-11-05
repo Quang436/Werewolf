@@ -3,10 +3,9 @@
  *
  * Tính năng:
  * 1. Lưu trữ ClientRoomView (đã mask an toàn từ server).
- * 2. Tích hợp ClockSync (NTP) để tính chính xác countdown timer từng mili-giây.
- * 3. Quản lý tin nhắn chat theo 4 tab kênh: 'public', 'wolves', 'lovers', 'dead'.
- * 4. Quản lý trạng thái tương tác của người chơi (Pending Action dialog).
- * 5. Quản lý hiển thị lá bài vai trò cá nhân (Player Role Card, lật bài, chi tiết kỹ năng).
+ * 2. Lưu trữ `myRole: DBRoleData | null` nhận trực tiếp từ sự kiện `ASSIGN_ROLE` của Database.
+ * 3. Tích hợp ClockSync (NTP) để tính chính xác countdown timer từng mili-giây.
+ * 4. Quản lý tin nhắn chat theo 4 tab kênh: 'public', 'wolves', 'lovers', 'dead'.
  */
 
 import {
@@ -14,9 +13,10 @@ import {
   ChatChannel,
   ClientRoomView,
   ClockSync,
+  DBRoleData,
+  getDBRoleData,
   PongPayload,
   Role,
-  ServerPacket,
   Team,
 } from '@werewolf/shared';
 
@@ -30,8 +30,9 @@ export interface ChatMessage {
 }
 
 export interface AssignedRolePayload {
-  role: Role;
-  team: Team;
+  role: Role | DBRoleData;
+  team?: Team;
+  roleData?: DBRoleData;
   teammates?: Array<{ id: string; nickname: string }>;
 }
 
@@ -46,7 +47,8 @@ export interface GameState {
   seerResultModal: { targetId: string; result: string } | null;
   winnerAnnouncement: Team | null;
 
-  // Role Card Display State
+  // Role Card Display State (Bound directly to DB payload)
+  myRole: DBRoleData | null;
   assignedRole: Role | null;
   assignedTeam: Team | null;
   wolfTeammates: Array<{ id: string; nickname: string }>;
@@ -103,6 +105,7 @@ export function createInitialGameState(): Omit<
     pendingAction: null,
     seerResultModal: null,
     winnerAnnouncement: null,
+    myRole: null,
     assignedRole: null,
     assignedTeam: null,
     wolfTeammates: [],
@@ -158,8 +161,20 @@ export class GameStateManager {
   }
 
   public setAssignedRole(payload: AssignedRolePayload): void {
-    this.state.assignedRole = payload.role;
-    this.state.assignedTeam = payload.team;
+    if (typeof payload.role === 'object' && payload.role !== null && 'roleId' in payload.role) {
+      const dbRole = payload.role as DBRoleData;
+      this.state.myRole = dbRole;
+      this.state.assignedRole = dbRole.roleId as Role;
+      this.state.assignedTeam =
+        payload.team || (dbRole.faction === 'WEREWOLF' ? 'WEREWOLF' : 'VILLAGE');
+    } else if (typeof payload.role === 'string') {
+      this.state.assignedRole = payload.role;
+      this.state.myRole = payload.roleData || getDBRoleData(payload.role);
+      if (payload.team) {
+        this.state.assignedTeam = payload.team;
+      }
+    }
+
     if (payload.teammates) {
       this.state.wolfTeammates = payload.teammates;
     }
@@ -187,9 +202,14 @@ export class GameStateManager {
     if (snapshot.winner) {
       this.state.winnerAnnouncement = snapshot.winner;
     }
-    if (snapshot.me?.role && !this.state.assignedRole) {
+    if (snapshot.me?.roleData) {
+      this.state.myRole = snapshot.me.roleData;
       this.state.assignedRole = snapshot.me.role;
       this.state.assignedTeam = snapshot.me.team;
+    } else if (snapshot.me?.role) {
+      this.state.assignedRole = snapshot.me.role;
+      this.state.assignedTeam = snapshot.me.team;
+      this.state.myRole = getDBRoleData(snapshot.me.role);
     }
     this.updateRemainingTime();
     this.notify();

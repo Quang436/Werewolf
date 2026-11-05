@@ -4,7 +4,7 @@ import React, { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { Billboard, Sparkles } from '@react-three/drei';
-import { PublicPlayerView, Role } from '@werewolf/shared';
+import { DBRoleData, PublicPlayerView, Role } from '@werewolf/shared';
 import {
   CameraPerspective,
   ComputedSeat,
@@ -28,6 +28,8 @@ import { HangingNooseEffect } from './HangingNooseEffect';
 export interface GameScene3DProps {
   players: PublicPlayerView[];
   localPlayerId: string | null | undefined;
+  /** Dữ liệu vai trò lấy trực tiếp từ Database qua sự kiện ASSIGN_ROLE */
+  myRole?: DBRoleData | null;
   localRole: Role | string;
   perspective: CameraPerspective;
   phase: string;
@@ -36,11 +38,13 @@ export interface GameScene3DProps {
   voteTally: Record<string, number>;
   myVotedTargetId: string | null;
   selectedTargetId: string | null;
-  /** Incrementing trigger whenever DEALING_CARDS / Phát Bài starts */
+  /** Incrementing trigger whenever DEALING_CARDS / READING_CARDS starts */
   dealTrigger: number;
   hasDealtCards: boolean;
   isCardInspecting: boolean;
+  isReadingPhase?: boolean;
   onToggleCardInspect: (next?: boolean) => void;
+  onConfirmRead?: () => void;
   onDealComplete?: () => void;
   /** Execution state when unique highest vote condemns a player */
   isExecutionPhase: boolean;
@@ -142,7 +146,6 @@ const PubNoirLightingRig: React.FC<{
     let targetAmbient = 0.05;
 
     if (moodLighting === 'pitch_dark') {
-      // PHA 1: CẢ LÀNG ĐI NGỦ (ambientLight = 0.02, room pitch black)
       targetSpotIntensity = 0.3;
       targetSpotColor = '#1e1b4b';
       targetCyanIntensity = 0.2;
@@ -150,7 +153,6 @@ const PubNoirLightingRig: React.FC<{
       targetConeOpacity = 0.005;
       targetAmbient = 0.02;
     } else if (moodLighting === 'bodyguard_cyan') {
-      // PHA 2: BẢO VỆ THỨC DẬY - emerald / cyan ambient & rim glow
       targetSpotIntensity = 4.5;
       targetSpotColor = '#06b6d4';
       targetCyanIntensity = 8.5;
@@ -158,7 +160,6 @@ const PubNoirLightingRig: React.FC<{
       targetConeOpacity = 0.025;
       targetAmbient = 0.035;
     } else if (moodLighting === 'wolf_crimson') {
-      // PHA 3: MA SÓI THỨC DẬY - blood-red eerie ambient & wine rim
       targetSpotIntensity = 5.5;
       targetSpotColor = '#e11d48';
       targetCyanIntensity = 0.6;
@@ -166,7 +167,6 @@ const PubNoirLightingRig: React.FC<{
       targetConeOpacity = 0.03;
       targetAmbient = 0.04;
     } else if (moodLighting === 'seer_gold') {
-      // PHA 4: TIÊN TRI THỨC DẬY - golden mystic lighting
       targetSpotIntensity = 8.5;
       targetSpotColor = '#f59e0b';
       targetCyanIntensity = 2.5;
@@ -174,7 +174,6 @@ const PubNoirLightingRig: React.FC<{
       targetConeOpacity = 0.035;
       targetAmbient = 0.045;
     } else if (isExecutionPhase || moodLighting === 'execution_red') {
-      // PHA 9: XỬ TỬ TREO CỔ - room dims sharply so gallows spotlight dominates
       targetSpotIntensity = 2.2;
       targetSpotColor = '#7f1d1d';
       targetCyanIntensity = 0.8;
@@ -230,10 +229,8 @@ const PubNoirLightingRig: React.FC<{
 
   return (
     <group>
-      {/* Dynamic Dark Noir Ambient Base */}
       <ambientLight ref={ambientRef} color="#050508" intensity={0.05} />
 
-      {/* Center Overhead Narrow-Cone Spotlight at [0, 4.5, 0] -> Table Center */}
       <object3D ref={spotTargetRef} position={[0, 0.8, 0]} />
       <spotLight
         ref={mainSpotRef}
@@ -250,7 +247,6 @@ const PubNoirLightingRig: React.FC<{
         shadow-bias={-0.0003}
       />
 
-      {/* Industrial Noir Hanging Pub Lamp Shade & Volumetric Haze Cone */}
       <group position={[0, 4.52, 0]}>
         <mesh position={[0, 0.45, 0]}>
           <cylinderGeometry args={[0.014, 0.014, 0.9, 8]} />
@@ -279,7 +275,6 @@ const PubNoirLightingRig: React.FC<{
         />
       </mesh>
 
-      {/* Cinematic Rim Lighting: Cyan (#00e5ff) behind-left, Wine-Red (#ff1744) behind-right */}
       <pointLight
         ref={cyanRimRef}
         position={[-3.7, 2.35, -3.45]}
@@ -346,7 +341,6 @@ const SmokedGlassAshtrayProp: React.FC = () => {
 
   return (
     <group position={[-0.64, TABLE_SURFACE_Y, 1.36]} rotation={[0, 0.35, 0]}>
-      {/* Heavy Faceted Smoked-Glass Ashtray Body */}
       <mesh position={[0, 0.015, 0]} castShadow receiveShadow>
         <cylinderGeometry args={[0.082, 0.072, 0.03, 10]} />
         <meshStandardMaterial
@@ -358,7 +352,6 @@ const SmokedGlassAshtrayProp: React.FC = () => {
         />
       </mesh>
 
-      {/* Dark Smoked Inner Basin & Ash */}
       <mesh position={[0, 0.029, 0]}>
         <cylinderGeometry args={[0.058, 0.052, 0.005, 12]} />
         <meshStandardMaterial color="#0b0b0d" roughness={0.94} />
@@ -368,24 +361,19 @@ const SmokedGlassAshtrayProp: React.FC = () => {
         <meshStandardMaterial color="#3c3a38" roughness={0.98} />
       </mesh>
 
-      {/* Hand-Rolled Noir Cigar Resting on Rim */}
       <group position={[0.012, 0.034, 0.006]} rotation={[0.06, -0.18, Math.PI / 2 - 0.05]}>
-        {/* Dark Maduro Tobacco Wrapper */}
         <mesh castShadow>
           <cylinderGeometry args={[0.0105, 0.011, 0.115, 14]} />
           <meshStandardMaterial color="#3b2112" roughness={0.84} metalness={0.04} />
         </mesh>
-        {/* Metallic Gold Cigar Band */}
         <mesh position={[0, 0.026, 0]}>
           <cylinderGeometry args={[0.0113, 0.0113, 0.014, 14]} />
           <meshStandardMaterial color="#d4a84b" roughness={0.32} metalness={0.82} />
         </mesh>
-        {/* Charred Grey Ash Tip */}
         <mesh position={[0, -0.062, 0]}>
           <cylinderGeometry args={[0.0102, 0.0095, 0.014, 12]} />
           <meshStandardMaterial color="#6e6b68" roughness={0.96} />
         </mesh>
-        {/* Smoldering Orange-Red Ember */}
         <mesh position={[0, -0.069, 0]}>
           <cylinderGeometry args={[0.0094, 0.007, 0.005, 12]} />
           <meshStandardMaterial
@@ -398,7 +386,6 @@ const SmokedGlassAshtrayProp: React.FC = () => {
         </mesh>
       </group>
 
-      {/* Wispy Rising Cigar Smoke Plume */}
       {smokeTex &&
         smokeSeeds.map((_, idx) => (
           <Billboard key={idx} follow>
@@ -425,13 +412,11 @@ const SmokedGlassAshtrayProp: React.FC = () => {
 const WhiskeyRocksGlassProp: React.FC = () => {
   return (
     <group position={[0.52, TABLE_SURFACE_Y, 1.42]}>
-      {/* Leather Coaster Under Glass */}
       <mesh position={[0, 0.002, 0]} receiveShadow>
         <cylinderGeometry args={[0.056, 0.058, 0.004, 24]} />
         <meshStandardMaterial color="#1c110c" roughness={0.85} metalness={0.08} />
       </mesh>
 
-      {/* Heavy Cut-Crystal Glass Base */}
       <mesh position={[0, 0.012, 0]} castShadow receiveShadow>
         <cylinderGeometry args={[0.043, 0.041, 0.016, 22]} />
         <meshStandardMaterial
@@ -443,7 +428,6 @@ const WhiskeyRocksGlassProp: React.FC = () => {
         />
       </mesh>
 
-      {/* Amber Bourbon / Whiskey Liquid */}
       <mesh position={[0, 0.042, 0]}>
         <cylinderGeometry args={[0.041, 0.039, 0.046, 22]} />
         <meshStandardMaterial
@@ -457,7 +441,6 @@ const WhiskeyRocksGlassProp: React.FC = () => {
         />
       </mesh>
 
-      {/* 3 Chilled Crystalline Ice Cubes Floating in Whiskey */}
       <mesh position={[-0.011, 0.052, 0.008]} rotation={[0.25, 0.42, 0.18]}>
         <boxGeometry args={[0.021, 0.021, 0.021]} />
         <meshStandardMaterial
@@ -489,7 +472,6 @@ const WhiskeyRocksGlassProp: React.FC = () => {
         />
       </mesh>
 
-      {/* Outer Crystal Lowball Glass Wall */}
       <mesh position={[0, 0.056, 0]} castShadow>
         <cylinderGeometry args={[0.047, 0.043, 0.092, 24, 1, true]} />
         <meshStandardMaterial
@@ -502,7 +484,6 @@ const WhiskeyRocksGlassProp: React.FC = () => {
         />
       </mesh>
 
-      {/* Subtle Rim Specular Ring */}
       <mesh position={[0, 0.102, 0]} rotation={[Math.PI / 2, 0, 0]}>
         <torusGeometry args={[0.047, 0.0016, 8, 24]} />
         <meshStandardMaterial color="#f8fafc" roughness={0.12} metalness={0.3} transparent opacity={0.55} />
@@ -547,7 +528,6 @@ const PubNoirEnvironmentAndTable: React.FC<{
         }
       }}
     >
-      {/* HIGH-ROUGHNESS DARK HARDWOOD PUB FLOOR */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
         <circleGeometry args={[12, 48]} />
         <meshStandardMaterial
@@ -558,9 +538,7 @@ const PubNoirEnvironmentAndTable: React.FC<{
         />
       </mesh>
 
-      {/* ROUND MATTE FELT POKER TABLE + DARK LEATHER ARMREST PADDING */}
       <group>
-        {/* Heavy Carved Mahogany Central Pedestal & Foot Base */}
         <mesh position={[0, 0.045, 0]} castShadow receiveShadow>
           <cylinderGeometry args={[0.88, 0.96, 0.09, 28]} />
           <meshStandardMaterial color="#180e09" roughness={0.8} metalness={0.08} />
@@ -570,13 +548,11 @@ const PubNoirEnvironmentAndTable: React.FC<{
           <meshStandardMaterial color="#1c100a" roughness={0.78} metalness={0.09} />
         </mesh>
 
-        {/* Sub-table Hardwood Apron */}
         <mesh position={[0, TABLE_SURFACE_Y - 0.065, 0]} castShadow receiveShadow>
           <cylinderGeometry args={[1.98, 1.92, 0.11, 48]} />
           <meshStandardMaterial color="#1a0f0a" roughness={0.76} metalness={0.1} />
         </mesh>
 
-        {/* Matte Moss-Green Poker Felt Top Surface (roughness: 0.85, metalness: 0.05, zero plastic shine) */}
         <mesh position={[0, TABLE_SURFACE_Y - 0.015, 0]} receiveShadow>
           <cylinderGeometry args={[TABLE_FELT_RADIUS, TABLE_FELT_RADIUS, 0.03, 64]} />
           <meshStandardMaterial
@@ -589,13 +565,11 @@ const PubNoirEnvironmentAndTable: React.FC<{
           />
         </mesh>
 
-        {/* Recessed Brass Inlay Groove Between Felt and Leather Armrest */}
         <mesh position={[0, TABLE_SURFACE_Y + 0.002, 0]} rotation={[Math.PI / 2, 0, 0]}>
           <torusGeometry args={[TABLE_FELT_RADIUS + 0.01, 0.012, 10, 64]} />
           <meshStandardMaterial color="#7d5e28" roughness={0.46} metalness={0.68} />
         </mesh>
 
-        {/* Dark Padded Leather Armrest Rim (Leather Armrest Padding) */}
         <mesh
           position={[0, TABLE_SURFACE_Y + 0.018, 0]}
           rotation={[Math.PI / 2, 0, 0]}
@@ -612,7 +586,6 @@ const PubNoirEnvironmentAndTable: React.FC<{
         </mesh>
       </group>
 
-      {/* DIEGETIC 3D TABLE STATUS & TIMER PLAQUE EMBEDDED ON FELT */}
       {plaqueTex && (
         <group position={[0, TABLE_SURFACE_Y + 0.014, -0.34]} rotation={[-1.32, 0, 0]}>
           <mesh castShadow receiveShadow>
@@ -632,9 +605,7 @@ const PubNoirEnvironmentAndTable: React.FC<{
         </group>
       )}
 
-      {/* SHADOWY UNDERGROUND SPEAKEASY PUB SILHOUETTE WALLS & BAR COUNTER */}
       <group>
-        {/* Back Speakeasy Bar Counter & Bottle Rack Silhouette (kissed by Cyan & Wine-Red rim lights) */}
         <mesh position={[0, 0.58, -5.4]} receiveShadow>
           <boxGeometry args={[5.8, 1.16, 0.7]} />
           <meshStandardMaterial color="#120c09" roughness={0.86} metalness={0.08} />
@@ -643,7 +614,6 @@ const PubNoirEnvironmentAndTable: React.FC<{
           <boxGeometry args={[5.4, 2.2, 0.28]} />
           <meshStandardMaterial color="#0e0a08" roughness={0.88} metalness={0.06} />
         </mesh>
-        {/* Subtle Glass Liquor Bottle Silhouettes on Back Shelf */}
         {[-1.8, -1.35, -0.9, -0.3, 0.25, 0.85, 1.3, 1.75].map((bx, idx) => (
           <mesh key={idx} position={[bx, 1.38 + (idx % 2) * 0.52, -5.68]}>
             <cylinderGeometry args={[0.045, 0.055, 0.3, 10]} />
@@ -657,7 +627,6 @@ const PubNoirEnvironmentAndTable: React.FC<{
           </mesh>
         ))}
 
-        {/* Dark Brick & Timber Speakeasy Pillars */}
         {[
           [-4.8, 2.2, -4.4],
           [4.8, 2.2, -4.4],
@@ -681,6 +650,7 @@ const PubNoirEnvironmentAndTable: React.FC<{
 export const GameScene3D: React.FC<GameScene3DProps> = ({
   players,
   localPlayerId,
+  myRole,
   localRole,
   perspective,
   isNight,
@@ -691,7 +661,9 @@ export const GameScene3D: React.FC<GameScene3DProps> = ({
   dealTrigger,
   hasDealtCards,
   isCardInspecting,
+  isReadingPhase = false,
   onToggleCardInspect,
+  onConfirmRead,
   onDealComplete,
   isExecutionPhase,
   condemnedPlayerId,
@@ -751,7 +723,11 @@ export const GameScene3D: React.FC<GameScene3DProps> = ({
   const handleDismissCardInspect = () => {
     if (isCardInspecting) {
       werewolfAudio.playCardDeal();
-      onToggleCardInspect(false);
+      if (isReadingPhase && onConfirmRead) {
+        onConfirmRead();
+      } else {
+        onToggleCardInspect(false);
+      }
     }
   };
 
@@ -833,16 +809,19 @@ export const GameScene3D: React.FC<GameScene3DProps> = ({
           />
         ))}
 
-        {/* 6. Wooden Personal Card Tray & Identity Plaque (~ [0, 0.77, 1.6]) + Tarot Rest & Inspect */}
+        {/* 6. Wooden Personal Card Tray & Identity Plaque (~ [0, 0.77, 1.6]) + RoleCard3D Bound to myRole (DBRoleData) */}
         <PersonalCardTray
           seatNumber={localSeat?.player.seat ?? 8}
           playerName={localSeat?.player.nickname ?? 'Bạn'}
           isAlive={localSeat?.player.isAlive ?? true}
+          roleData={myRole}
           role={localRole}
           perspective={perspective}
           dealTrigger={dealTrigger}
           isInspecting={isCardInspecting}
+          isReadingPhase={isReadingPhase}
           onToggleInspect={onToggleCardInspect}
+          onConfirmRead={onConfirmRead}
           onDealComplete={onDealComplete}
           opponentCardPositions={opponentCardPositions}
         />

@@ -4,6 +4,7 @@
  */
 import { z } from 'zod';
 export * from './types/roles';
+import { DBRoleData } from './types/roles';
 
 /* ============================== ENUMS ============================== */
 
@@ -210,7 +211,7 @@ export const RoomSettings = z.object({
   hideVoteTargetsUntilResolved: z.boolean().default(false),
   durations: z.object({
     assignRoles: z.number().int().default(8),
-    readingCards: z.number().int().default(30),
+    readingCards: z.number().int().default(20),
     nightStart: z.number().int().default(3),
     nightFall: z.number().int().default(3),
     cupid: z.number().int().default(20),
@@ -220,10 +221,10 @@ export const RoomSettings = z.object({
     witch: z.number().int().default(20),
     seer: z.number().int().default(15),
     nightResolve: z.number().int().default(2),
-    announcement: z.number().int().default(7),
-    dayAnnounce: z.number().int().default(7),
+    announcement: z.number().int().default(5),
+    dayAnnounce: z.number().int().default(5),
     deathTriggers: z.number().int().default(20),
-    discussion: z.number().int().min(15).max(600).default(60),
+    discussion: z.number().int().min(15).max(600).default(45),
     voting: z.number().int().default(20),
     revote: z.number().int().default(20),
     defense: z.number().int().default(30),
@@ -348,11 +349,23 @@ export const ActionRequest = z
   .strict();
 export type ActionRequest = z.infer<typeof ActionRequest>;
 
+export const DBRoleDataSchema = z
+  .object({
+    roleId: z.string(),
+    roleName: z.string(),
+    faction: z.enum(['VILLAGER', 'WEREWOLF', 'SOLO', 'THIRD_PARTY']),
+    description: z.string(),
+    actionTime: z.string(),
+    avatarUrl: z.string().optional(),
+  })
+  .strict();
+
 export const SelfView = z
   .object({
     id: z.string(),
     role: Role.nullable(),
     team: Team.nullable(),
+    roleData: DBRoleDataSchema.optional(),
     roleState: z
       .object({
         lastProtectedId: z.string().nullable().optional(),
@@ -411,6 +424,7 @@ export const C2S = {
   'room:ready': z.object({ ready: z.boolean() }),
   'game:start': z.object({}),
   'game:rematch': z.object({}),
+  'card:confirmRead': z.object({}).optional(),
   'night:cupidPair': z.object({ firstId: z.string(), secondId: z.string() }),
   'night:bodyguardProtect': z.object({ targetId: z.string() }),
   'night:wolfVote': z.object({ targetId: z.string() }), // player id hoặc 'SKIP'
@@ -435,8 +449,10 @@ export interface ServerPacket<T> {
 export interface S2CEvents {
   'state:snapshot': (p: ServerPacket<ClientRoomView>) => void;
   'phase:changed': (p: ServerPacket<{ phase: Phase; round: number; phaseEndsAt: number | null }>) => void;
+  'PHASE_CHANGE': (p: { phase: Phase; round: number; phaseEndsAt: number | null; durationMs?: number }) => void;
   'room:playersUpdated': (p: ServerPacket<PublicPlayerView[]>) => void;
-  'role:assigned': (p: ServerPacket<{ role: Role; team: Team; teammates?: { id: string; nickname: string }[] }>) => void;
+  'role:assigned': (p: ServerPacket<{ role: Role; team: Team; roleData?: DBRoleData; teammates?: { id: string; nickname: string }[] }>) => void;
+  'ASSIGN_ROLE': (p: { role: DBRoleData; team?: Team; teammates?: { id: string; nickname: string }[] }) => void;
   'lovers:paired': (p: ServerPacket<{ partnerId: string; partnerNickname: string; partnerRole: Role }>) => void;
   'action:request': (p: ServerPacket<ActionRequest>) => void;
   'YOUR_TURN_ACTION': (p: ServerPacket<ActionRequest>) => void;
@@ -472,5 +488,3 @@ export * from './engine/timer-sync';
 export * from './engine/disconnect-handler';
 export * from './engine/room-projector';
 export * from './engine/role-registry';
-
-

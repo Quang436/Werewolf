@@ -4,7 +4,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
 import { RoundedBox, useCursor } from '@react-three/drei';
-import { Role } from '@werewolf/shared';
+import { DBRoleData, Role } from '@werewolf/shared';
 import {
   CameraPerspective,
   TABLE_SURFACE_Y,
@@ -12,32 +12,35 @@ import {
   getDarkOakTrayTexture,
   getGoldenGlowTexture,
   getGothicTarotBackTexture,
-  getGothicTarotFrontTexture,
   werewolfAudio,
 } from './scene3d.helpers';
-import { RoleCard } from './RoleCard';
+import { RoleCard3D } from './RoleCard3D';
 
 export interface PersonalCardTrayProps {
   seatNumber: number;
   playerName: string;
   isAlive: boolean;
+  roleData?: DBRoleData | null;
   role: Role | string;
   perspective: CameraPerspective;
-  /** Incrementing trigger whenever DEALING_CARDS starts */
+  /** Incrementing trigger whenever card dealing starts */
   dealTrigger: number;
   /** Whether the Tarot card is currently raised & flipped face-up at [0, 1.05, 1.8] */
   isInspecting: boolean;
+  /** Whether the room is currently in the 30s READING_CARDS phase */
+  isReadingPhase?: boolean;
   onToggleInspect: (next?: boolean) => void;
+  onConfirmRead?: () => void;
   onDealComplete?: () => void;
   /** Opponent card positions on felt for fan-out dealing effect */
   opponentCardPositions?: Array<[number, number, number]>;
 }
 
-type TrayCardStage = 'HIDDEN' | 'SLIDE_IN' | 'FLOAT_FLIP' | 'HOLD_REVEAL' | 'REST_OR_INSPECT';
+type TrayCardStage = 'HIDDEN' | 'SLIDE_IN' | 'FLOAT_FLIP' | 'REST_OR_INSPECT';
 
-// Exact world positions per specification:
-// - Wooden tray near player's table edge: ~ [0, 0.77, 1.6]
-// - Recessed groove rest position (tilted 18 degrees leaning against back rim): [0, 0.818, 1.575]
+// World positions:
+// - Wooden tray near player's table edge: [0, 0.768, 1.58]
+// - Recessed groove rest position (tilted ~20 degrees leaning in wooden slot): [0, 0.795, 1.575]
 // - Eye-level inspect position facing camera: [0, 1.05, 1.8]
 const TRAY_WORLD_POS: [number, number, number] = [0, 0.768, 1.58];
 const POS_CENTER_DECK = new THREE.Vector3(0, TABLE_SURFACE_Y + 0.016, 0);
@@ -45,7 +48,7 @@ const POS_SLIDE_APPROACH = new THREE.Vector3(0, TABLE_SURFACE_Y + 0.05, 1.56);
 const POS_EYE_INSPECT = new THREE.Vector3(0, 1.05, 1.8);
 const POS_TRAY_GROOVE = new THREE.Vector3(0, 0.795, 1.575);
 
-// 20-25 degree natural resting pitch (-0.4 rad) leaning comfortably inside the dark oak tray groove
+// ~20-23 degree natural resting pitch (-0.4 rad) leaning comfortably inside the dark oak tray groove
 const GROOVE_TILT_PITCH = -0.4;
 
 function easeOutCubic(x: number): number {
@@ -62,18 +65,21 @@ export const PersonalCardTray: React.FC<PersonalCardTrayProps> = ({
   seatNumber,
   playerName,
   isAlive,
+  roleData,
   role,
   perspective,
   dealTrigger,
   isInspecting,
+  isReadingPhase = false,
   onToggleInspect,
+  onConfirmRead,
   onDealComplete,
   opponentCardPositions = [],
 }) => {
   const [hovered, setHovered] = useState(false);
   const [isDealingOpponents, setIsDealingOpponents] = useState(false);
 
-  const stageRef = useRef<TrayCardStage>(dealTrigger > 0 ? 'SLIDE_IN' : 'HIDDEN');
+  const stageRef = useRef<TrayCardStage>('SLIDE_IN');
   const elapsedRef = useRef(0);
   const playedFlipSoundRef = useRef(false);
   const notifiedCompleteRef = useRef(false);
@@ -81,7 +87,7 @@ export const PersonalCardTray: React.FC<PersonalCardTrayProps> = ({
   const cardHolderRef = useRef<THREE.Group>(null);
   const cardFlipRef = useRef<THREE.Group>(null);
   const glowMatRef = useRef<THREE.MeshBasicMaterial>(null);
-  const frontReadLightRef = useRef<THREE.PointLight>(null);
+  const inspectSpotLightRef = useRef<THREE.PointLight>(null);
   const lifeGemMatRef = useRef<THREE.MeshStandardMaterial>(null);
   const lifeGemLightRef = useRef<THREE.PointLight>(null);
   const opponentCardsRef = useRef<Array<THREE.Mesh | null>>([]);
@@ -93,14 +99,11 @@ export const PersonalCardTray: React.FC<PersonalCardTrayProps> = ({
     () => getBrassIdentityPlaqueTexture(seatNumber, playerName, isAlive),
     [seatNumber, playerName, isAlive]
   );
-  const frontTex = useMemo(() => getGothicTarotFrontTexture(role), [role]);
   const backTex = useMemo(() => getGothicTarotBackTexture(), []);
   const glowTex = useMemo(() => getGoldenGlowTexture(), []);
 
   // Trigger initial deal-and-flip sequence whenever dealTrigger increments
   useEffect(() => {
-    if (dealTrigger <= 0) return;
-
     stageRef.current = 'SLIDE_IN';
     elapsedRef.current = 0;
     playedFlipSoundRef.current = false;
@@ -138,15 +141,11 @@ export const PersonalCardTray: React.FC<PersonalCardTrayProps> = ({
       lifeGemLightRef.current.intensity = isAlive ? 0.34 + Math.sin(clockT * 2.8) * 0.08 : 0;
     }
 
-    // 2. Animate Tarot Card Lifecycle (Deal -> 180° Reveal -> Settle into 18° Groove -> Inspect at [0, 1.05, 1.8])
+    // 2. Animate Tarot Card Lifecycle (Deal -> 180° Reveal at [0, 1.05, 1.8] -> 20° Groove Rest <-> Inspect)
     const holder = cardHolderRef.current;
     const flipGroup = cardFlipRef.current;
     if (!holder || !flipGroup) return;
 
-    if (stageRef.current === 'HIDDEN') {
-      holder.visible = false;
-      return;
-    }
     holder.visible = true;
 
     elapsedRef.current += dt;
@@ -171,54 +170,39 @@ export const PersonalCardTray: React.FC<PersonalCardTrayProps> = ({
     }
 
     // Camera-facing pitch when inspecting at [0, 1.05, 1.8]
-    const inspectPitch = perspective === '2ND' ? -0.58 : -0.42;
+    const inspectPitch = perspective === '2ND' ? -0.58 : -0.35;
 
-    if (t < 0.72 && stageRef.current !== 'REST_OR_INSPECT') {
+    if (t < 0.68 && stageRef.current !== 'REST_OR_INSPECT') {
       // Stage A: Slide from center deck toward the player's wooden tray
       stageRef.current = 'SLIDE_IN';
-      const u = easeOutCubic(t / 0.72);
+      const u = easeOutCubic(t / 0.68);
       holder.position.lerpVectors(POS_CENTER_DECK, POS_SLIDE_APPROACH, u);
       holder.rotation.set(-Math.PI / 2, 0, (1 - u) * 0.2);
       flipGroup.rotation.y = Math.PI;
       if (glowMatRef.current) glowMatRef.current.opacity = 0;
-      if (frontReadLightRef.current) frontReadLightRef.current.intensity = 0;
+      if (inspectSpotLightRef.current) inspectSpotLightRef.current.intensity = 0;
       return;
     }
 
-    if (t < 1.62 && stageRef.current !== 'REST_OR_INSPECT') {
-      // Stage B: Float up to [0, 1.05, 1.8] & Flip 180 degrees face-up with Front Reading PointLight
+    if (t < 1.5 && stageRef.current !== 'REST_OR_INSPECT') {
+      // Stage B: Float up to [0, 1.05, 1.8] & Flip 180 degrees face-up
       stageRef.current = 'FLOAT_FLIP';
-      if (!playedFlipSoundRef.current && t > 0.95) {
+      if (!playedFlipSoundRef.current && t > 0.85) {
         playedFlipSoundRef.current = true;
         werewolfAudio.playCardDeal();
       }
-      const u = easeInOutCubic((t - 0.72) / 0.9);
+      const u = easeInOutCubic((t - 0.68) / 0.82);
       holder.position.lerpVectors(POS_SLIDE_APPROACH, POS_EYE_INSPECT, u);
       holder.rotation.set(THREE.MathUtils.lerp(-Math.PI / 2, inspectPitch, u), 0, 0);
-      flipGroup.rotation.y = THREE.MathUtils.lerp(Math.PI, 0, easeInOutCubic((t - 0.82) / 0.78));
+      flipGroup.rotation.y = THREE.MathUtils.lerp(Math.PI, 0, easeInOutCubic((t - 0.75) / 0.72));
 
-      const lightRamp = easeOutCubic((t - 0.9) / 0.7);
-      if (glowMatRef.current) glowMatRef.current.opacity = lightRamp * 0.72;
-      if (frontReadLightRef.current) frontReadLightRef.current.intensity = lightRamp * 2.4;
+      const lightRamp = easeOutCubic((t - 0.8) / 0.65);
+      if (glowMatRef.current) glowMatRef.current.opacity = lightRamp * 0.75;
+      if (inspectSpotLightRef.current) inspectSpotLightRef.current.intensity = lightRamp * 4.0;
       return;
     }
 
-    if (t < 5.3 && stageRef.current !== 'REST_OR_INSPECT') {
-      // Stage C: Hold face-up for ~3.7s so player reads Role Name, Faction & Skill on deal
-      stageRef.current = 'HOLD_REVEAL';
-      holder.position.set(
-        POS_EYE_INSPECT.x,
-        POS_EYE_INSPECT.y + Math.sin(clockT * 2.1) * 0.005,
-        POS_EYE_INSPECT.z
-      );
-      holder.rotation.set(inspectPitch, Math.sin(clockT * 1.2) * 0.03, 0);
-      flipGroup.rotation.y = 0;
-      if (glowMatRef.current) glowMatRef.current.opacity = 0.72 + Math.sin(clockT * 2.6) * 0.08;
-      if (frontReadLightRef.current) frontReadLightRef.current.intensity = 2.4;
-      return;
-    }
-
-    // Stage D: Settled inside the 18-degree wooden tray groove OR raised to [0, 1.05, 1.8] on Inspect
+    // Stage C: Controlled by Server READING_CARDS (30s) or Player Inspect toggle at any time
     if (stageRef.current !== 'REST_OR_INSPECT') {
       stageRef.current = 'REST_OR_INSPECT';
       if (!notifiedCompleteRef.current) {
@@ -230,7 +214,7 @@ export const PersonalCardTray: React.FC<PersonalCardTrayProps> = ({
     const alpha = 1 - Math.exp(-6.8 * dt);
 
     if (isInspecting) {
-      // Smoothly lift to [0, 1.05, 1.8], flip 180 deg face-up facing camera, and illuminate front face
+      // Smoothly lift to [0, 1.05, 1.8], flip 180 deg face-up facing camera, and illuminate with intensity=4 pointLight
       holder.position.x = THREE.MathUtils.lerp(holder.position.x, POS_EYE_INSPECT.x, alpha);
       holder.position.y = THREE.MathUtils.lerp(
         holder.position.y,
@@ -240,25 +224,25 @@ export const PersonalCardTray: React.FC<PersonalCardTrayProps> = ({
       holder.position.z = THREE.MathUtils.lerp(holder.position.z, POS_EYE_INSPECT.z, alpha);
 
       holder.rotation.x = THREE.MathUtils.lerp(holder.rotation.x, inspectPitch, alpha);
-      holder.rotation.y = THREE.MathUtils.lerp(holder.rotation.y, Math.sin(clockT * 1.2) * 0.025, alpha);
+      holder.rotation.y = THREE.MathUtils.lerp(holder.rotation.y, Math.sin(clockT * 1.2) * 0.02, alpha);
       holder.rotation.z = THREE.MathUtils.lerp(holder.rotation.z, 0, alpha);
 
       // 180° face-up toward camera (0 rad)
       flipGroup.rotation.y = THREE.MathUtils.lerp(flipGroup.rotation.y, 0, alpha);
 
       if (glowMatRef.current) {
-        glowMatRef.current.opacity = THREE.MathUtils.lerp(glowMatRef.current.opacity, 0.74, alpha);
+        glowMatRef.current.opacity = THREE.MathUtils.lerp(glowMatRef.current.opacity, 0.76, alpha);
       }
-      if (frontReadLightRef.current) {
-        frontReadLightRef.current.intensity = THREE.MathUtils.lerp(
-          frontReadLightRef.current.intensity,
-          2.45,
+      if (inspectSpotLightRef.current) {
+        inspectSpotLightRef.current.intensity = THREE.MathUtils.lerp(
+          inspectSpotLightRef.current.intensity,
+          4.0,
           alpha
         );
       }
     } else {
-      // Nestled neatly inside the recessed dark oak tray groove at 18° lean angle (face-down / subtle hover peek)
-      const hoverLift = hovered ? 0.01 : 0;
+      // Nestled neatly inside the recessed dark oak tray groove at ~20° lean angle (rotation={[-0.4, 0, 0]})
+      const hoverLift = hovered ? 0.012 : 0;
       const hoverPitch = hovered ? GROOVE_TILT_PITCH + 0.08 : GROOVE_TILT_PITCH;
 
       holder.position.x = THREE.MathUtils.lerp(holder.position.x, POS_TRAY_GROOVE.x, alpha);
@@ -275,13 +259,13 @@ export const PersonalCardTray: React.FC<PersonalCardTrayProps> = ({
       if (glowMatRef.current) {
         glowMatRef.current.opacity = THREE.MathUtils.lerp(
           glowMatRef.current.opacity,
-          hovered ? 0.24 : 0.04,
+          hovered ? 0.28 : 0.05,
           alpha
         );
       }
-      if (frontReadLightRef.current) {
-        frontReadLightRef.current.intensity = THREE.MathUtils.lerp(
-          frontReadLightRef.current.intensity,
+      if (inspectSpotLightRef.current) {
+        inspectSpotLightRef.current.intensity = THREE.MathUtils.lerp(
+          inspectSpotLightRef.current.intensity,
           0,
           alpha
         );
@@ -291,19 +275,10 @@ export const PersonalCardTray: React.FC<PersonalCardTrayProps> = ({
 
   const handleTrayOrCardClick = (e: { stopPropagation: () => void }) => {
     e.stopPropagation();
-    if (stageRef.current === 'HIDDEN') return;
-
     werewolfAudio.playCardDeal();
 
-    // If clicked while still in initial 3.7s deal reveal, settle into the wooden tray immediately
-    if (stageRef.current === 'HOLD_REVEAL') {
-      stageRef.current = 'REST_OR_INSPECT';
-      elapsedRef.current = 6.0;
-      onToggleInspect(false);
-      if (!notifiedCompleteRef.current) {
-        notifiedCompleteRef.current = true;
-        onDealComplete?.();
-      }
+    if (isReadingPhase && isInspecting && onConfirmRead) {
+      onConfirmRead();
       return;
     }
 
@@ -312,6 +287,16 @@ export const PersonalCardTray: React.FC<PersonalCardTrayProps> = ({
 
   return (
     <group>
+      {/* ĐÈN PHỤ RỌI RIÊNG KHI NGƯỜI CHƠI GIƠ BÀI LÊN XEM:
+          <pointLight position={[0, 1.2, 1.9]} intensity={4} color="#ffe8cc" distance={1.2} /> */}
+      <pointLight
+        ref={inspectSpotLightRef}
+        position={[0, 1.2, 1.9]}
+        intensity={isInspecting ? 4 : 0}
+        color="#ffe8cc"
+        distance={1.2}
+      />
+
       {/* CENTER TAROT DECK ON FELT */}
       <group position={[0, TABLE_SURFACE_Y + 0.009, -0.06]}>
         <mesh castShadow receiveShadow>
@@ -405,7 +390,7 @@ export const PersonalCardTray: React.FC<PersonalCardTrayProps> = ({
           />
         </RoundedBox>
 
-        {/* Raised Back Oak Rest Wall (Supports the Tarot Card at an 18° Lean Angle) */}
+        {/* Raised Back Oak Rest Wall (Supports the Tarot Card at a 20° Lean Angle) */}
         <RoundedBox
           args={[0.254, 0.048, 0.028]}
           radius={0.006}
@@ -429,7 +414,7 @@ export const PersonalCardTray: React.FC<PersonalCardTrayProps> = ({
           <meshStandardMaterial color="#1b1009" roughness={0.82} />
         </mesh>
 
-        {/* Front Sloped Dark Oak Identity Rail (Gờ trước của khay gỗ) */}
+        {/* Front Sloped Dark Oak Identity Rail */}
         <RoundedBox
           args={[0.254, 0.03, 0.044]}
           radius={0.007}
@@ -472,15 +457,13 @@ export const PersonalCardTray: React.FC<PersonalCardTrayProps> = ({
           )}
         </group>
 
-        {/* Corner Life-Status Gemstone Lamp (Warm Glowing Amber when Alive, Dead Ash-Grey when Eliminated) */}
+        {/* Corner Life-Status Gemstone Lamp */}
         <group position={[0.104, 0.032, 0.142]}>
-          {/* Antique Brass Jewel Socket Bezel */}
           <mesh castShadow>
             <cylinderGeometry args={[0.016, 0.0185, 0.007, 18]} />
             <meshStandardMaterial color="#8c682b" roughness={0.38} metalness={0.78} />
           </mesh>
 
-          {/* Faceted Life Gemstone */}
           <mesh position={[0, 0.007, 0]} castShadow>
             <octahedronGeometry args={[0.0115, 1]} />
             <meshStandardMaterial
@@ -493,7 +476,6 @@ export const PersonalCardTray: React.FC<PersonalCardTrayProps> = ({
             />
           </mesh>
 
-          {/* Warm Micro PointLight Casting Golden Gleam on Corner when Alive */}
           <pointLight
             ref={lifeGemLightRef}
             position={[0, 0.025, 0]}
@@ -506,7 +488,7 @@ export const PersonalCardTray: React.FC<PersonalCardTrayProps> = ({
       </group>
 
       {/* ====================================================================
-          2. LOCAL PLAYER'S TAROT CARD (18° GROOVE REST <-> [0, 1.05, 1.8] INSPECT)
+          2. LOCAL PLAYER'S TAROT CARD (20° GROOVE REST <-> [0, 1.05, 1.8] INSPECT)
          ==================================================================== */}
       <group
         ref={cardHolderRef}
@@ -518,16 +500,6 @@ export const PersonalCardTray: React.FC<PersonalCardTrayProps> = ({
         onPointerOut={() => setHovered(false)}
         onClick={handleTrayOrCardClick}
       >
-        {/* Dedicated Local Point Light Illuminating the Front Face When Open (Prevents Any Dark Shadow on Text) */}
-        <pointLight
-          ref={frontReadLightRef}
-          position={[0, 0.02, 0.28]}
-          color="#fff4d6"
-          intensity={0}
-          distance={1.15}
-          decay={1.35}
-        />
-
         {/* Soft Golden Glow Behind Card */}
         {glowTex && (
           <mesh position={[0, 0, -0.014]}>
@@ -543,12 +515,21 @@ export const PersonalCardTray: React.FC<PersonalCardTrayProps> = ({
           </mesh>
         )}
 
-        {/* 180-Degree Flip Group with Drei Html RoleCard */}
+        {/* 180-Degree Flip Group with RoleCard3D bound to Database DBRoleData */}
         <group ref={cardFlipRef}>
-          <RoleCard
+          <RoleCard3D
+            roleData={roleData}
             role={role}
             isInspecting={isInspecting}
-            onToggleInspect={onToggleInspect}
+            showConfirmButton={isReadingPhase}
+            onConfirmRead={onConfirmRead}
+            onToggleInspect={(next) => {
+              if (isReadingPhase && isInspecting && onConfirmRead) {
+                onConfirmRead();
+              } else {
+                onToggleInspect(next);
+              }
+            }}
             isAlive={isAlive}
           />
         </group>

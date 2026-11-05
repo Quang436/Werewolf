@@ -5,6 +5,7 @@
  */
 
 import { PrismaClient } from '@prisma/client';
+import { DB_ROLES_CATALOG, DBRoleData, getDBRoleData } from '@werewolf/shared';
 
 export interface UserRecord {
   id: string;
@@ -44,10 +45,12 @@ export class DatabaseService {
 
   // In-memory fallback cache
   private memoryUsers = new Map<string, UserRecord>();
+  private memoryRoles = new Map<string, DBRoleData>();
   private memoryMatches: any[] = [];
 
   private constructor() {
     this.initDemoUsers();
+    this.initRolesCatalog();
   }
 
   public static getInstance(): DatabaseService {
@@ -55,6 +58,23 @@ export class DatabaseService {
       DatabaseService.instance = new DatabaseService();
     }
     return DatabaseService.instance;
+  }
+
+  private initRolesCatalog() {
+    for (const [key, roleData] of Object.entries(DB_ROLES_CATALOG)) {
+      this.memoryRoles.set(key.toUpperCase(), roleData);
+    }
+  }
+
+  /* ==================== ROLE DATABASE QUERIES ==================== */
+
+  public async getRoleById(roleId: string): Promise<DBRoleData> {
+    const normalized = (roleId || 'SEER').toUpperCase();
+    return this.memoryRoles.get(normalized) || getDBRoleData(normalized);
+  }
+
+  public async getAllRoles(): Promise<DBRoleData[]> {
+    return Array.from(this.memoryRoles.values());
   }
 
   private initDemoUsers() {
@@ -220,7 +240,6 @@ export class DatabaseService {
     user.silverCoins += delta.silverReward;
     user.exp += delta.expReward;
 
-    // Check level up (100 exp per level)
     const newLevel = Math.floor(user.exp / 100) + 1;
     if (newLevel > user.level) {
       user.level = newLevel;
@@ -309,7 +328,6 @@ export class DatabaseService {
 
     this.memoryMatches.push(record);
 
-    // Update stats for all users in the match
     for (const p of match.playerStats) {
       if (p.userId) {
         await this.updateUserStats(p.userId, {

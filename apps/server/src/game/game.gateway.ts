@@ -18,6 +18,7 @@ import {
   C2S,
   ChatChannel,
   ErrorCode,
+  getDBRoleData,
   Phase,
   Role,
   RoomProjector,
@@ -83,7 +84,6 @@ export class GameGateway {
       room.stateVersion++;
       await this.redis.setRoom(room);
 
-      // Thông báo cập nhật danh sách người chơi
       this.broadcastRoomSnapshot(room);
     }
   }
@@ -123,7 +123,6 @@ export class GameGateway {
       socket.data.roomId = room.id;
       socket.join(`room:${room.id}`);
 
-      // Nếu là Sói, join vào kênh wolves
       const player = room.players.find((p) => p.id === socket.data.userId);
       if (player?.team === 'WEREWOLF') {
         socket.join(`room:${room.id}:wolves`);
@@ -166,17 +165,47 @@ export class GameGateway {
     }
   }
 
+  /**
+   * Khi vào bàn 3D hoặc bắt đầu ván tự động:
+   * Server tự động chia bài từ Database, emit ASSIGN_ROLE và bắt đầu READING_CARDS (30s) -> NIGHT_FALL (3s) -> CALL_ROLES_QUEUE
+   */
   public async onRoomDeal(socket: ClientSocket): Promise<Ack> {
     const { roomId } = socket.data;
     if (!roomId) return { ok: false, error: { code: 'ROOM_NOT_FOUND', message: 'Chưa vào phòng' } };
 
-    // Phát sóng hoạt ảnh phát bài 5.0 giây đồng bộ cho mọi người chơi trong phòng
-    this.io.to(`room:${roomId}`).emit('room:deal_started', {
-      startedAt: Date.now(),
-      duration: 5000,
-    });
+    try {
+      const room = await this.gameLoop.startAutoTableGame(roomId);
 
-    return { ok: true };
+      // Nếu người chơi là Sói thì join kênh wolves
+      const me = room.players.find((p) => p.id === socket.data.userId);
+      if (me?.team === 'WEREWOLF') {
+        socket.join(`room:${room.id}:wolves`);
+      }
+
+      this.io.to(`room:${roomId}`).emit('room:deal_started', {
+        startedAt: Date.now(),
+        duration: 30000,
+      });
+
+      return { ok: true };
+    } catch (err: any) {
+      return { ok: false, error: { code: 'NOT_ALLOWED', message: err.message } };
+    }
+  }
+
+  /**
+   * Khi người chơi bấm "Đã hiểu" trên thẻ bài -> chuyển ngay từ READING_CARDS sang NIGHT_FALL
+   */
+  public async onConfirmCardRead(socket: ClientSocket): Promise<Ack> {
+    const { roomId } = socket.data;
+    if (!roomId) return { ok: false, error: { code: 'ROOM_NOT_FOUND', message: 'Chưa vào phòng' } };
+
+    try {
+      await this.gameLoop.confirmCardRead(roomId);
+      return { ok: true };
+    } catch (err: any) {
+      return { ok: false, error: { code: 'NOT_ALLOWED', message: err.message } };
+    }
   }
 
   public async onGameStart(socket: ClientSocket): Promise<Ack> {
@@ -186,20 +215,17 @@ export class GameGateway {
     try {
       const room = await this.gameLoop.startGame(roomId, userId);
 
-      // Phát sóng hoạt ảnh phát bài đồng bộ cho mọi người chơi trong phòng
       this.io.to(`room:${roomId}`).emit('room:deal_started', {
         startedAt: Date.now(),
         duration: 5000,
       });
 
-      // Tham gia các room con tương ứng
       for (const p of room.players) {
         if (p.team === 'WEREWOLF') {
           this.io.to(`user:${p.id}`).emit('wolf:joined', {});
         }
       }
 
-      // Đăng ký Timer hết pha xem vai
       if (room.phaseEndsAt) {
         await this.timerWorker.scheduleTimer(room.id, room.stateVersion, room.phase, room.phaseEndsAt);
       }
@@ -226,7 +252,6 @@ export class GameGateway {
       return { ok: false, error: { code: 'NOT_ALLOWED', message: 'Hành động không hợp lệ' } };
     }
 
-    // Không được chọn 1 người 2 đêm liên tiếp
     if (player.roleState.lastProtectedId === parsed.data.targetId) {
       return { ok: false, error: { code: 'NOT_ALLOWED', message: 'Không thể bảo vệ 1 người 2 đêm liên tiếp' } };
     }
@@ -236,6 +261,11 @@ export class GameGateway {
     await this.redis.setRoom(room);
 
     socket.emit('action:accepted', { v: room.stateVersion, ts: Date.now(), data: { kind: 'BODYGUARD_PROTECT' } });
+
+    if (room.players.some((p) => p.id.startsWith('bot_'))) {
+      await this.timerWorker.scheduleTimer(room.id, room.stateVersion, room.phase, Date.now() + 1200);
+    }
+
     return { ok: true };
   }
 
@@ -253,11 +283,9 @@ export class GameGateway {
       return { ok: false, error: { code: 'NOT_ALLOWED', message: 'Hành động không hợp lệ' } };
     }
 
-    // Cập nhật phiếu bầu của Sói
     room.night.wolfVotes[player.id] = parsed.data.targetId;
     await this.redis.setRoom(room);
 
-    // Broadcast phiếu cho bầy sói (kênh wolves và từng socket cá nhân bầy sói)
     const wolfVotePayload = {
       v: room.stateVersion,
       ts: Date.now(),
@@ -267,6 +295,10 @@ export class GameGateway {
     const aliveWolves = room.players.filter((p) => p.team === 'WEREWOLF' && p.isAlive);
     for (const w of aliveWolves) {
       this.io.to(`user:${w.id}`).emit('wolf:votesUpdated', wolfVotePayload);
+    }
+
+    if (room.players.some((p) => p.id.startsWith('bot_'))) {
+      await this.timerWorker.scheduleTimer(room.id, room.stateVersion, room.phase, Date.now() + 1400);
     }
 
     return { ok: true };
@@ -288,7 +320,6 @@ export class GameGateway {
 
     const { save, poisonTargetId } = parsed.data;
 
-    // Bình cứu
     if (save) {
       if (!player.roleState.hasHealPotion) {
         return { ok: false, error: { code: 'NOT_ALLOWED', message: 'Đã hết bình cứu' } };
@@ -297,7 +328,6 @@ export class GameGateway {
       player.roleState.hasHealPotion = false;
     }
 
-    // Bình độc
     if (poisonTargetId) {
       if (!player.roleState.hasPoisonPotion) {
         return { ok: false, error: { code: 'NOT_ALLOWED', message: 'Đã hết bình độc' } };
@@ -308,6 +338,11 @@ export class GameGateway {
 
     await this.redis.setRoom(room);
     socket.emit('action:accepted', { v: room.stateVersion, ts: Date.now(), data: { kind: 'WITCH_ACT' } });
+
+    if (room.players.some((p) => p.id.startsWith('bot_'))) {
+      await this.timerWorker.scheduleTimer(room.id, room.stateVersion, room.phase, Date.now() + 1200);
+    }
+
     return { ok: true };
   }
 
@@ -321,23 +356,21 @@ export class GameGateway {
     }
 
     const player = room.players.find((p) => p.id === socket.data.userId);
-    if (!player || player.role !== 'SEER' || !player.isAlive) {
+    if (!player || (player.role !== 'SEER' && player.role !== 'AURA_SEER') || !player.isAlive) {
       return { ok: false, error: { code: 'NOT_ALLOWED', message: 'Hành động không hợp lệ' } };
     }
 
     const target = room.players.find((p) => p.id === parsed.data.targetId);
     if (!target) return { ok: false, error: { code: 'INVALID_PAYLOAD', message: 'Mục tiêu không tồn tại' } };
 
-    // Tính toán kết quả soi
     let inspectResult: SeerAppearance | Role;
-    const isWerewolf = target.team === 'WEREWOLF';
+    const isWerewolf = target.team === 'WEREWOLF' || target.role === 'LYCAN';
     if (room.settings.seerRevealMode === 'EXACT_ROLE') {
       inspectResult = target.role || 'VILLAGER';
     } else {
       inspectResult = isWerewolf ? 'WEREWOLF' : 'NOT_WEREWOLF';
     }
 
-    // Lưu vào lịch sử soi của Tiên Tri
     player.roleState.seerResults.push({
       round: room.round,
       targetId: target.id,
@@ -351,6 +384,10 @@ export class GameGateway {
       ts: Date.now(),
       data: { targetId: target.id, isWerewolf, result: inspectResult },
     });
+
+    if (room.players.some((p) => p.id.startsWith('bot_'))) {
+      await this.timerWorker.scheduleTimer(room.id, room.stateVersion, room.phase, Date.now() + 2200);
+    }
 
     return { ok: true, data: { result: inspectResult } };
   }
@@ -372,9 +409,25 @@ export class GameGateway {
     }
 
     room.day.votes[voter.id] = parsed.data.targetId;
+
+    // Nếu trong phòng có bot, các bot còn sống cũng tự động bỏ phiếu để hoàn tất phiên vote
+    if (room.players.some((p) => p.id.startsWith('bot_')) && parsed.data.targetId !== 'SKIP') {
+      for (const bot of room.players) {
+        if (bot.isAlive && bot.id.startsWith('bot_') && !room.day.votes[bot.id]) {
+          if (Math.random() < 0.6) {
+            room.day.votes[bot.id] = parsed.data.targetId;
+          } else {
+            const others = room.players.filter((pl) => pl.isAlive && pl.id !== bot.id);
+            if (others.length > 0) {
+              room.day.votes[bot.id] = others[Math.floor(Math.random() * others.length)].id;
+            }
+          }
+        }
+      }
+    }
+
     await this.redis.setRoom(room);
 
-    // Tính tally hiện tại
     const tally: Record<string, number> = {};
     for (const t of Object.values(room.day.votes)) {
       if (t) tally[t] = (tally[t] || 0) + 1;
@@ -389,10 +442,15 @@ export class GameGateway {
       },
     });
 
-    // Nếu tất cả người sống đã vote -> Fast-forward sang VOTE_RESOLVE
+    const hasBots = room.players.some((p) => p.id.startsWith('bot_'));
     const aliveCount = room.players.filter((p) => p.isAlive).length;
     if (Object.keys(room.day.votes).length >= aliveCount) {
-      await this.gameLoop.transition(room.id, 'VOTE_RESOLVE');
+      if (hasBots) {
+        // Trên bàn 3D tự động: chuyển sang DAY_EXECUTION sau 1.5s để hiện phán quyết treo cổ
+        await this.timerWorker.scheduleTimer(room.id, room.stateVersion, room.phase, Date.now() + 1500);
+      } else {
+        await this.gameLoop.transition(room.id, 'VOTE_RESOLVE');
+      }
     }
 
     return { ok: true };
@@ -415,7 +473,6 @@ export class GameGateway {
     room.day.judgment[voter.id] = parsed.data.verdict;
     await this.redis.setRoom(room);
 
-    // Fast-forward nếu tất cả người chơi đủ tư cách (trừ bị cáo) đã bỏ phiếu phán quyết
     const eligibleJudges = room.players.filter((p) => p.isAlive && p.id !== room.day.accusedId);
     if (Object.keys(room.day.judgment).length >= eligibleJudges.length) {
       let guilty = 0;
@@ -445,7 +502,6 @@ export class GameGateway {
 
     const { channel, text } = parsed.data;
 
-    // Kiểm tra quyền theo kênh
     if (channel === 'wolves' && (sender.team !== 'WEREWOLF' || !sender.isAlive)) {
       return { ok: false, error: { code: 'NOT_ALLOWED', message: 'Không có quyền chat kênh Sói' } };
     }
@@ -509,6 +565,15 @@ export class GameGateway {
         ts: Date.now(),
         data: view,
       });
+
+      const player = room.players.find((p) => p.id === userId);
+      if (player?.role) {
+        const dbRole = getDBRoleData(player.role);
+        socket.emit('ASSIGN_ROLE', {
+          role: dbRole,
+          team: player.team,
+        });
+      }
     } catch (err) {
       console.error(`Sync failed for ${userId}:`, err);
     }

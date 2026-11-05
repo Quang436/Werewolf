@@ -181,9 +181,35 @@ export class TimerWorker {
   }
 
   /**
-   * Áp dụng fallback tự động khi hết giờ
+   * Áp dụng fallback tự động khi hết giờ (và AI bot tự hành động nếu là ghế bot)
    */
   private applyTimeoutFallbacks(room: RoomState): void {
+    // Nếu đang ở lượt Sói mà có bot Sói chưa vote -> bot Sói tự chọn 1 người dân còn sống
+    if (room.phase === 'NIGHT_WEREWOLF' || room.phase === 'WEREWOLF_TURN') {
+      const nonWolfAlive = room.players.filter((p) => p.isAlive && p.team !== 'WEREWOLF');
+      for (const wolf of room.players) {
+        if (wolf.isAlive && wolf.team === 'WEREWOLF' && wolf.id.startsWith('bot_') && !room.night.wolfVotes[wolf.id]) {
+          if (nonWolfAlive.length > 0) {
+            const victim = nonWolfAlive[Math.floor(Math.random() * nonWolfAlive.length)];
+            room.night.wolfVotes[wolf.id] = victim.id;
+          }
+        }
+      }
+    }
+
+    // Nếu đang ở lượt Bảo Vệ mà Bảo Vệ là bot -> tự chọn bảo vệ 1 người hợp lệ
+    if ((room.phase === 'NIGHT_BODYGUARD' || room.phase === 'BODYGUARD_TURN') && !room.night.bodyguardTarget) {
+      const botBg = room.players.find((p) => p.isAlive && p.role === 'BODYGUARD' && p.id.startsWith('bot_'));
+      if (botBg) {
+        const candidates = room.players.filter((p) => p.isAlive && p.id !== botBg.roleState.lastProtectedId);
+        if (candidates.length > 0) {
+          const picked = candidates[Math.floor(Math.random() * candidates.length)];
+          room.night.bodyguardTarget = picked.id;
+          botBg.roleState.lastProtectedId = picked.id;
+        }
+      }
+    }
+
     for (const player of room.players) {
       if (!player.isAlive) continue;
 
@@ -191,7 +217,22 @@ export class TimerWorker {
       if (fallback.actionType === 'DAY_VOTE') {
         const p = fallback.payload as { targetId: string };
         if (!room.day.votes[player.id]) {
-          room.day.votes[player.id] = p.targetId;
+          // Nếu là bot và đang ở pha DAY_VOTING -> bot bỏ phiếu cho 1 nghi phạm ngẫu nhiên hoặc theo người chơi
+          if (player.id.startsWith('bot_')) {
+            const existingTargets = Object.values(room.day.votes).filter((v) => v && v !== 'SKIP');
+            if (existingTargets.length > 0 && Math.random() < 0.65) {
+              room.day.votes[player.id] = existingTargets[0];
+            } else {
+              const aliveOthers = room.players.filter((pl) => pl.isAlive && pl.id !== player.id);
+              if (aliveOthers.length > 0) {
+                room.day.votes[player.id] = aliveOthers[Math.floor(Math.random() * aliveOthers.length)].id;
+              } else {
+                room.day.votes[player.id] = p.targetId;
+              }
+            }
+          } else {
+            room.day.votes[player.id] = p.targetId;
+          }
         }
       } else if (fallback.actionType === 'DAY_JUDGE') {
         const p = fallback.payload as { verdict: 'GUILTY' | 'INNOCENT' };
@@ -208,6 +249,7 @@ export class TimerWorker {
   private determineNextPhase(room: RoomState): Phase | null {
     switch (room.phase) {
       case 'ASSIGN_ROLES':
+      case 'READING_CARDS':
         return 'NIGHT_FALL';
 
       case 'NIGHT_FALL':
@@ -270,7 +312,6 @@ export class TimerWorker {
 
       case 'DAY_ANNOUNCE':
       case 'DAY_ANNOUNCEMENT':
-        // Nếu có người chết cần trigger (ví dụ Thợ Săn) -> DEATH_TRIGGERS; nếu không -> DAY_DISCUSSION
         if (room.pendingTriggers.length > 0) {
           return 'DEATH_TRIGGERS';
         }
@@ -293,7 +334,6 @@ export class TimerWorker {
         return 'DAY_JUDGMENT';
 
       case 'DAY_JUDGMENT': {
-        // Tính phiếu phán quyết
         let guilty = 0;
         let innocent = 0;
         for (const verdict of Object.values(room.day.judgment)) {

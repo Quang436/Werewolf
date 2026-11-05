@@ -48,9 +48,28 @@ async function bootstrap() {
     });
   });
 
+  /* ==================== ROLES DATABASE REST ENDPOINTS ==================== */
+
+  app.get('/api/roles', async (_req, res) => {
+    try {
+      const roles = await db.getAllRoles();
+      res.json({ success: true, data: roles });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
+  app.get('/api/roles/:roleId', async (req, res) => {
+    try {
+      const roleData = await db.getRoleById(req.params.roleId);
+      res.json({ success: true, data: roleData });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  });
+
   /* ==================== AUTH REST ENDPOINTS ==================== */
 
-  // Đăng ký tài khoản
   app.post('/api/auth/register', async (req, res) => {
     try {
       const response = await authService.register(req.body);
@@ -60,7 +79,6 @@ async function bootstrap() {
     }
   });
 
-  // Đăng nhập tài khoản
   app.post('/api/auth/login', async (req, res) => {
     try {
       const response = await authService.login(req.body);
@@ -70,7 +88,6 @@ async function bootstrap() {
     }
   });
 
-  // Đăng nhập Khách (Guest) tức thì
   app.post('/api/auth/guest', async (req, res) => {
     try {
       const response = await authService.createGuestSession(req.body?.nickname);
@@ -80,7 +97,6 @@ async function bootstrap() {
     }
   });
 
-  // Lấy thông tin user hiện tại qua Bearer Token
   app.get('/api/auth/me', async (req, res) => {
     const authHeader = req.headers.authorization;
     if (!authHeader?.startsWith('Bearer ')) {
@@ -96,7 +112,6 @@ async function bootstrap() {
     }
   });
 
-  // Bảng xếp hạng cao thủ
   app.get('/api/leaderboard', async (_req, res) => {
     try {
       const top = await db.getLeaderboard(10);
@@ -106,9 +121,7 @@ async function bootstrap() {
     }
   });
 
-  // Danh sách phòng đang hoạt động (cho Lobby Browser)
   app.get('/api/rooms', async (_req, res) => {
-    // Trả về danh sách phòng sống động
     res.json({
       success: true,
       data: [
@@ -166,7 +179,6 @@ async function bootstrap() {
     transports: ['websocket', 'polling'],
   });
 
-  // Socket Broadcaster Adapter cho GameLoopService
   const broadcaster = {
     emitToRoom: (roomId: string, event: string, payload: unknown) => {
       io.of('/game').to(`room:${roomId}`).emit(event, payload);
@@ -186,7 +198,6 @@ async function bootstrap() {
   const timerWorker = new TimerWorker(redisStore, gameLoop);
   gameLoop.setTimerScheduler(timerWorker);
 
-  // Khởi động Background Timer Worker
   timerWorker.start(500);
 
   const gameNamespace = io.of('/game');
@@ -214,6 +225,7 @@ async function bootstrap() {
     socket.on('room:join', (payload, ack) => gateway.onRoomJoin(socket as any, payload).then(ack));
     socket.on('room:leave', (_payload, ack) => gateway.onRoomLeave(socket as any).then(ack));
     socket.on('room:deal', (_payload, ack) => gateway.onRoomDeal(socket as any).then(ack));
+    socket.on('card:confirmRead', (_payload, ack) => gateway.onConfirmCardRead(socket as any).then(ack));
     socket.on('game:start', (_payload, ack) => gateway.onGameStart(socket as any).then(ack));
 
     // Night Actions

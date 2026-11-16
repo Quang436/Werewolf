@@ -1,5 +1,11 @@
 import * as THREE from 'three';
-import { PublicPlayerView, Role } from '@werewolf/shared';
+import {
+  DBRoleData,
+  getRoleAssetImage,
+  PublicPlayerView,
+  Role,
+  ROLE_DISPLAY_NAMES_EN,
+} from '@werewolf/shared';
 import { getRoleDetailExtra, getRoleInfo } from '../constants/roles-data';
 
 // ============================================================================
@@ -975,16 +981,46 @@ function drawTarotRoleEmblem(
   ctx.restore();
 }
 
+const tarotImageCache = new Map<string, HTMLImageElement>();
+
+function getOrLoadTarotImage(src: string, onLoaded?: () => void): HTMLImageElement | null {
+  if (typeof window === 'undefined' || typeof Image === 'undefined') return null;
+  let img = tarotImageCache.get(src);
+  if (!img) {
+    img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.src = src;
+    tarotImageCache.set(src, img);
+  }
+  if (img.complete && img.naturalWidth > 0) {
+    return img;
+  }
+  if (onLoaded) {
+    img.addEventListener('load', onLoaded, { once: true });
+  }
+  return img;
+}
+
 /**
  * Mặt trước lá bài phong cách Gothic Tarot:
- * - Tên vai trò (chữ Vàng kim nổi bật)
- * - Phe phái ("Phe Dân Làng" hoặc "Phe Bóng Đêm")
- * - Mô tả tóm tắt kỹ năng vai trò ngắn gọn
+ * - Ảnh minh họa chân dung vai trò chuẩn nét từ asset library
+ * - Tên vai trò (chữ Vàng kim nổi bật) & tên tiếng Anh
+ * - Phe phái ("Phe Dân Làng", "Phe Ma Sói" hoặc "Phe Thứ Ba")
+ * - Mô tả tóm tắt kỹ năng vai trò ngắn gọn & thời điểm hành động
  */
-export function getGothicTarotFrontTexture(roleCode: Role | string): THREE.CanvasTexture | null {
+export function getGothicTarotFrontTexture(
+  roleCode: Role | string,
+  roleData?: DBRoleData | null
+): THREE.CanvasTexture | null {
   if (typeof document === 'undefined') return null;
-  const safeCode = roleCode || 'VILLAGER';
-  const key = `tarot-front:${safeCode}`;
+  const safeCode = (typeof roleCode === 'string' && roleCode ? roleCode : roleData?.roleId || 'VILLAGER').toUpperCase();
+  const avatarUrl =
+    roleData?.avatarUrl ||
+    getRoleAssetImage(safeCode) ||
+    `/images/roles/${safeCode.toLowerCase()}.png` ||
+    '/images/roles/villager.png';
+
+  const key = `tarot-front:${safeCode}:${avatarUrl}`;
   if (textureCache.has(key)) return textureCache.get(key)!;
 
   const info = getRoleInfo(safeCode);
@@ -997,119 +1033,219 @@ export function getGothicTarotFrontTexture(roleCode: Role | string): THREE.Canva
   canvas.height = h;
   const ctx = canvas.getContext('2d')!;
 
-  // Obsidian parchment background
-  const bg = ctx.createLinearGradient(0, 0, 0, h);
-  if (info.category === 'werewolf') {
-    bg.addColorStop(0, '#1c0b10');
-    bg.addColorStop(0.5, '#12090d');
-    bg.addColorStop(1, '#0a0608');
-  } else if (info.category === 'third') {
-    bg.addColorStop(0, '#180d22');
-    bg.addColorStop(0.5, '#100a17');
-    bg.addColorStop(1, '#08060c');
-  } else {
-    bg.addColorStop(0, '#0f1620');
-    bg.addColorStop(0.5, '#0c1017');
-    bg.addColorStop(1, '#080a0e');
-  }
-  ctx.fillStyle = bg;
-  ctx.fillRect(0, 0, w, h);
+  let texRef: THREE.CanvasTexture | null = null;
 
-  // Double Gothic gold border
-  ctx.strokeStyle = '#e5be67';
-  ctx.lineWidth = 8;
-  drawRoundedRect(ctx, 18, 18, w - 36, h - 36, 22);
-  ctx.stroke();
+  const renderCard = () => {
+    ctx.clearRect(0, 0, w, h);
 
-  ctx.strokeStyle = 'rgba(229, 190, 103, 0.45)';
-  ctx.lineWidth = 2;
-  drawRoundedRect(ctx, 32, 32, w - 64, h - 64, 15);
-  ctx.stroke();
+    // 1. Obsidian parchment background
+    const bg = ctx.createLinearGradient(0, 0, 0, h);
+    if (info.category === 'werewolf') {
+      bg.addColorStop(0, '#1c0b10');
+      bg.addColorStop(0.45, '#12090d');
+      bg.addColorStop(1, '#0a0608');
+    } else if (info.category === 'third') {
+      bg.addColorStop(0, '#180d22');
+      bg.addColorStop(0.45, '#100a17');
+      bg.addColorStop(1, '#08060c');
+    } else {
+      bg.addColorStop(0, '#0f1620');
+      bg.addColorStop(0.45, '#0c1017');
+      bg.addColorStop(1, '#080a0e');
+    }
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, w, h);
 
-  // Top Roman Arch Header
-  ctx.fillStyle = 'rgba(229, 190, 103, 0.85)';
-  ctx.font = '700 18px Georgia, "Times New Roman", serif';
-  ctx.textAlign = 'center';
-  ctx.fillText('✦  ARCANA ĐỊNH MỆNH  ✦', w / 2, 72);
+    // 2. Double Gothic gold border
+    ctx.strokeStyle = '#e5be67';
+    ctx.lineWidth = 7;
+    drawRoundedRect(ctx, 16, 16, w - 32, h - 32, 22);
+    ctx.stroke();
 
-  // Tarot Centerpiece Illustration
-  drawTarotRoleEmblem(ctx, safeCode, info.category, w / 2, 230);
+    ctx.strokeStyle = 'rgba(229, 190, 103, 0.4)';
+    ctx.lineWidth = 2;
+    drawRoundedRect(ctx, 28, 28, w - 56, h - 56, 16);
+    ctx.stroke();
 
-  // Prominent Metallic Gold Role Name
-  ctx.save();
-  ctx.shadowColor = 'rgba(255, 196, 64, 0.65)';
-  ctx.shadowBlur = 18;
-  const goldText = ctx.createLinearGradient(0, 365, 0, 420);
-  goldText.addColorStop(0, '#fff1b8');
-  goldText.addColorStop(0.5, '#f6c85f');
-  goldText.addColorStop(1, '#b98324');
-  ctx.fillStyle = goldText;
-  ctx.font = '900 42px Georgia, "Times New Roman", serif';
-  ctx.textAlign = 'center';
-  ctx.fillText(info.nameVN.toUpperCase(), w / 2, 405);
-  ctx.restore();
+    // 3. Top Roman Arch Header
+    ctx.fillStyle = 'rgba(229, 190, 103, 0.9)';
+    ctx.font = '700 17px Georgia, "Times New Roman", serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('✦  ARCANA ĐỊNH MỆNH  ✦', w / 2, 60);
 
-  // Faction Ribbon ("Phe Dân Làng" hoặc "Phe Bóng Đêm")
-  const factionLabel =
-    info.category === 'villager'
-      ? 'Phe Dân Làng'
-      : info.category === 'werewolf'
-      ? 'Phe Bóng Đêm'
-      : 'Phe Bóng Đêm • Độc Lập';
+    // 4. Center Role Artwork Frame & Illustration
+    const imgW = 236;
+    const imgH = 236;
+    const imgX = (w - imgW) / 2;
+    const imgY = 74;
+    const imgR = 18;
 
-  const pillW = 290;
-  const pillH = 42;
-  const pillX = (w - pillW) / 2;
-  const pillY = 432;
+    // Outer glow halo behind image
+    ctx.save();
+    ctx.shadowColor =
+      info.category === 'werewolf'
+        ? 'rgba(239, 68, 68, 0.55)'
+        : info.category === 'third'
+        ? 'rgba(168, 85, 247, 0.5)'
+        : 'rgba(229, 190, 103, 0.45)';
+    ctx.shadowBlur = 24;
+    ctx.fillStyle = '#080507';
+    drawRoundedRect(ctx, imgX, imgY, imgW, imgH, imgR);
+    ctx.fill();
+    ctx.restore();
 
-  ctx.fillStyle =
-    info.category === 'villager'
-      ? 'rgba(24, 58, 74, 0.85)'
-      : info.category === 'werewolf'
-      ? 'rgba(110, 18, 28, 0.88)'
-      : 'rgba(78, 28, 110, 0.85)';
-  drawRoundedRect(ctx, pillX, pillY, pillW, pillH, 21);
-  ctx.fill();
+    // Draw the real role image
+    const img = getOrLoadTarotImage(avatarUrl, () => {
+      renderCard();
+      if (texRef) texRef.needsUpdate = true;
+    });
 
-  ctx.strokeStyle = info.category === 'villager' ? '#7dd3fc' : '#fca5a5';
-  ctx.lineWidth = 2;
-  ctx.stroke();
+    if (img && img.complete && img.naturalWidth > 0) {
+      ctx.save();
+      drawRoundedRect(ctx, imgX, imgY, imgW, imgH, imgR);
+      ctx.clip();
+      ctx.drawImage(img, imgX, imgY, imgW, imgH);
+      // Subtle inner dark vignette over image
+      const vig = ctx.createRadialGradient(
+        w / 2,
+        imgY + imgH / 2,
+        imgW * 0.35,
+        w / 2,
+        imgY + imgH / 2,
+        imgW * 0.72
+      );
+      vig.addColorStop(0, 'rgba(0,0,0,0)');
+      vig.addColorStop(1, 'rgba(0,0,0,0.38)');
+      ctx.fillStyle = vig;
+      ctx.fillRect(imgX, imgY, imgW, imgH);
+      ctx.restore();
+    } else {
+      // Fallback while loading
+      ctx.fillStyle = '#140c10';
+      drawRoundedRect(ctx, imgX, imgY, imgW, imgH, imgR);
+      ctx.fill();
+      drawTarotRoleEmblem(ctx, safeCode, info.category, w / 2, imgY + imgH / 2);
+    }
 
-  ctx.fillStyle = info.category === 'villager' ? '#e0f2fe' : '#ffe4e6';
-  ctx.font = '700 22px Georgia, "Times New Roman", serif';
-  ctx.textAlign = 'center';
-  ctx.fillText(factionLabel, w / 2, pillY + 28);
+    // Gold frame border around image
+    ctx.strokeStyle = '#e5be67';
+    ctx.lineWidth = 3.5;
+    drawRoundedRect(ctx, imgX, imgY, imgW, imgH, imgR);
+    ctx.stroke();
 
-  // Ornamental divider
-  ctx.strokeStyle = 'rgba(229, 190, 103, 0.45)';
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.moveTo(64, 504);
-  ctx.lineTo(w - 64, 504);
-  ctx.stroke();
+    ctx.strokeStyle = 'rgba(255, 240, 180, 0.35)';
+    ctx.lineWidth = 1.2;
+    drawRoundedRect(ctx, imgX + 3, imgY + 3, imgW - 6, imgH - 6, imgR - 3);
+    ctx.stroke();
 
-  // Ability Title
-  ctx.fillStyle = '#f2c96b';
-  ctx.font = '700 21px "Segoe UI", system-ui, sans-serif';
-  ctx.fillText(detail.abilityTitle.toUpperCase(), w / 2, 540);
+    // 5. Prominent Metallic Gold Role Name
+    const displayName = (roleData?.roleName || info.nameVN).toUpperCase();
+    ctx.save();
+    ctx.shadowColor = 'rgba(255, 196, 64, 0.7)';
+    ctx.shadowBlur = 16;
+    const goldText = ctx.createLinearGradient(0, 336, 0, 376);
+    goldText.addColorStop(0, '#fff4c2');
+    goldText.addColorStop(0.5, '#f6c85f');
+    goldText.addColorStop(1, '#b98324');
+    ctx.fillStyle = goldText;
+    ctx.font = '900 36px Georgia, "Times New Roman", serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(displayName, w / 2, 356);
+    ctx.restore();
 
-  // Concise Skill Description Box
-  ctx.fillStyle = '#e7e2d8';
-  ctx.font = '500 22px "Segoe UI", system-ui, sans-serif';
-  const summaryText = info.desc || detail.abilityInstruction;
-  const lines = wrapCanvasText(ctx, summaryText, w - 116, 5);
-  lines.forEach((line, idx) => {
-    ctx.fillText(line, w / 2, 584 + idx * 32);
-  });
+    // English Name
+    const nameEn = ROLE_DISPLAY_NAMES_EN[safeCode] || info.nameEN;
+    ctx.fillStyle = 'rgba(254, 240, 138, 0.75)';
+    ctx.font = '700 12px "Space Grotesk", sans-serif';
+    ctx.letterSpacing = '0.15em';
+    ctx.fillText(nameEn.toUpperCase(), w / 2, 378);
 
-  // Bottom Tarot Footer Hint
-  ctx.fillStyle = 'rgba(212, 175, 95, 0.65)';
-  ctx.font = '600 15px monospace';
-  ctx.fillText('NHẤN LÁ BÀI HOẶC [C] ĐỂ XEM / CẤT', w / 2, h - 46);
+    // 6. Faction Ribbon
+    const factionLabel =
+      roleData?.faction === 'WEREWOLF' || info.category === 'werewolf'
+        ? 'PHE MA SÓI'
+        : roleData?.faction === 'SOLO' || roleData?.faction === 'THIRD_PARTY' || info.category === 'third'
+        ? 'PHE ĐỘC LẬP / THỨ 3'
+        : 'PHE DÂN LÀNG';
+
+    const pillW = 270;
+    const pillH = 34;
+    const pillX = (w - pillW) / 2;
+    const pillY = 394;
+
+    ctx.fillStyle =
+      factionLabel === 'PHE MA SÓI'
+        ? 'rgba(127, 29, 29, 0.92)'
+        : factionLabel.includes('THỨ 3')
+        ? 'rgba(88, 28, 135, 0.92)'
+        : 'rgba(12, 74, 110, 0.92)';
+    drawRoundedRect(ctx, pillX, pillY, pillW, pillH, 17);
+    ctx.fill();
+
+    ctx.strokeStyle =
+      factionLabel === 'PHE MA SÓI'
+        ? '#f87171'
+        : factionLabel.includes('THỨ 3')
+        ? '#c084fc'
+        : '#38bdf8';
+    ctx.lineWidth = 1.8;
+    ctx.stroke();
+
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '800 16px "Space Grotesk", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(factionLabel, w / 2, pillY + 23);
+
+    // 7. Ornamental divider
+    ctx.strokeStyle = 'rgba(229, 190, 103, 0.38)';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(70, 448);
+    ctx.lineTo(w - 70, 448);
+    ctx.stroke();
+
+    // 8. Ability Title
+    ctx.fillStyle = '#f2c96b';
+    ctx.font = '700 19px "Space Grotesk", sans-serif';
+    ctx.fillText((detail.abilityTitle || 'KỸ NĂNG VAI TRÒ').toUpperCase(), w / 2, 480);
+
+    // 9. Skill Description Box
+    ctx.fillStyle = '#e2e8f0';
+    ctx.font = '500 20px "Geist", system-ui, sans-serif';
+    const summaryText = roleData?.description || info.desc || detail.abilityInstruction;
+    const lines = wrapCanvasText(ctx, summaryText, w - 100, 5);
+    lines.forEach((line, idx) => {
+      ctx.fillText(line, w / 2, 516 + idx * 30);
+    });
+
+    // 10. Action Time Badge
+    const actionTime = roleData?.actionTime || info.time || 'Mỗi đêm';
+    const timePillW = 150;
+    const timePillH = 26;
+    const timePillX = (w - timePillW) / 2;
+    const timePillY = 684;
+    ctx.fillStyle = 'rgba(250, 204, 21, 0.14)';
+    drawRoundedRect(ctx, timePillX, timePillY, timePillW, timePillH, 13);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(250, 204, 21, 0.4)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.fillStyle = '#fef08a';
+    ctx.font = '700 12px "Space Grotesk", sans-serif';
+    ctx.fillText(`⏱ ${actionTime}`, w / 2, timePillY + 17);
+
+    // 11. Bottom Tarot Footer Hint
+    ctx.fillStyle = 'rgba(212, 175, 95, 0.7)';
+    ctx.font = '600 14px monospace';
+    ctx.fillText('NHẤN LÁ BÀI HOẶC [C] ĐỂ XEM / CẤT', w / 2, h - 36);
+  };
+
+  renderCard();
 
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 8;
+  texRef = tex;
   return rememberTexture(key, tex);
 }
 

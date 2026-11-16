@@ -74,7 +74,7 @@ export default function HomePage() {
   });
 
   return (
-    <div className="bg-[#0f131d] text-[#dfe2f1] font-geist antialiased selection:bg-red-900 selection:text-white min-h-screen">
+    <div className="bg-[#0f131d] text-[#dfe2f1] font-geist antialiased selection:bg-red-900 selection:text-white min-h-screen" suppressHydrationWarning>
       {/* 1. FIXED TOP COCKPIT HEADER */}
       <header className="fixed top-0 w-full z-50 bg-[#060910]/85 backdrop-blur-xl border-b border-[#334155]/40 shadow-[0_4px_24px_rgba(0,0,0,0.6)]">
         <div className="h-16 w-full px-6 flex items-center justify-between gap-4">
@@ -99,32 +99,42 @@ export default function HomePage() {
           </div>
 
           {/* Center Nav Links */}
-          <nav className="hidden lg:flex items-center gap-1 px-1.5 py-1 rounded bg-[#171b26]/90 border border-[#334155]/30">
+          <nav className="hidden lg:flex items-center gap-1 px-1.5 py-1 rounded bg-[#171b26]/90 border border-[#334155]/30" suppressHydrationWarning>
             <button
+              type="button"
+              suppressHydrationWarning
               onClick={() => router.push('/')}
               className="px-4 py-1.5 uppercase tracking-wider transition-all bg-[#262a35] text-primary font-space font-bold text-xs rounded shadow-[inset_0_1px_0_rgba(255,255,255,0.15)]"
             >
               Sảnh Chờ
             </button>
             <button
+              type="button"
+              suppressHydrationWarning
               onClick={() => router.push('/cards')}
               className="px-4 py-1.5 rounded font-space text-xs uppercase tracking-wider text-slate-300 hover:text-white hover:bg-[#1c1f2a] transition-all"
             >
               Bách Khoa Thẻ Bài (40 Lá)
             </button>
             <button
+              type="button"
+              suppressHydrationWarning
               onClick={() => router.push('/auth')}
               className="px-4 py-1.5 rounded font-space text-xs uppercase tracking-wider text-slate-300 hover:text-white hover:bg-[#1c1f2a] transition-all"
             >
               Quán Rượu (Đăng Nhập)
             </button>
             <button
+              type="button"
+              suppressHydrationWarning
               onClick={() => router.push('/game/ROOM-1')}
               className="px-4 py-1.5 rounded font-space text-xs uppercase tracking-wider text-slate-300 hover:text-white hover:bg-[#1c1f2a] transition-all"
             >
               Bàn Chơi 3D POV
             </button>
             <button
+              type="button"
+              suppressHydrationWarning
               onClick={() => setShowCreateModal(true)}
               className="px-3.5 py-1.5 rounded font-space text-xs uppercase tracking-wider text-amber-300 bg-amber-950/60 border border-amber-500/40 hover:bg-amber-900/80 transition-all flex items-center gap-1.5 font-bold shadow-[0_0_12px_rgba(245,158,11,0.3)]"
             >

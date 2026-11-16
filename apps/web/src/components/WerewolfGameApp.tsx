@@ -569,8 +569,12 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
         setPerspective((prev) => (prev === '1ST' ? '2ND' : '1ST'));
         werewolfAudio.playVoteStamp();
       } else if (e.code === 'KeyC') {
-        setIsCardInspecting((prev) => !prev);
-        werewolfAudio.playCardDeal();
+        if ((effectivePhase === 'READING_CARDS' || effectivePhase === 'ASSIGN_ROLES') && isCardInspecting) {
+          handleConfirmCardRead();
+        } else {
+          setIsCardInspecting((prev) => !prev);
+          werewolfAudio.playCardDeal();
+        }
       } else if (e.code === 'Space') {
         e.preventDefault();
         handleCastVote('SKIP');
@@ -862,6 +866,30 @@ export const WerewolfGameApp: React.FC<WerewolfGameAppProps> = ({
       {verdictBanner && (
         <div className="absolute top-14 left-1/2 -translate-x-1/2 z-20 pointer-events-none px-4 py-1.5 rounded-full bg-black/75 backdrop-blur-sm border border-amber-400/35 text-xs font-serif tracking-wide text-amber-100 shadow-xl">
           {verdictBanner}
+        </div>
+      )}
+
+      {/* Floating Action Bar when Card is being Inspected */}
+      {isCardInspecting && (
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 pointer-events-auto">
+          <button
+            type="button"
+            onClick={() => {
+              werewolfAudio.playCardDeal();
+              if (
+                (effectivePhase === 'READING_CARDS' || effectivePhase === 'ASSIGN_ROLES') &&
+                handleConfirmCardRead
+              ) {
+                handleConfirmCardRead();
+              } else {
+                setIsCardInspecting(false);
+              }
+            }}
+            className="px-5 py-2.5 rounded-full bg-gradient-to-r from-amber-600 via-amber-500 to-amber-600 hover:from-amber-500 hover:to-amber-400 text-black font-mono font-black text-xs uppercase tracking-wider shadow-[0_0_25px_rgba(245,158,11,0.45)] border border-amber-300 transition-all transform hover:scale-105 cursor-pointer flex items-center gap-2"
+          >
+            <span>✕ CẤT BÀI VÀO KHAY GỖ</span>
+            <span className="opacity-70 text-[10px] font-mono">[Phím C]</span>
+          </button>
         </div>
       )}
 
